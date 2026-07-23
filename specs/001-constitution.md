@@ -20,14 +20,14 @@
 
 These rules bind this spec, specs 002/003, and all future work. Copy this section verbatim into `AGENTS.md` (see section 10).
 
-1. **Zero runtime dependencies.** The npm package `virtualme` must have an empty `dependencies` in `package.json`, forever. Only Node.js built-ins (`node:*`) may be imported by runtime code. devDependencies are allowed for tooling only (lint, typecheck) and must be exact-pinned.
-2. **Pure modern ESM.** `"type": "module"`, no transpilers, no bundlers, no build step for CLI runtime code. Target Node >= 22 (current LTS lines: 22, 24).
+1. **Zero runtime dependencies.** The npm package `virtualme` must have an empty `dependencies` in `package.json`, forever. Only Node.js built-ins (`node:*`) may be imported by runtime code. devDependencies are allowed for tooling only (lint, typecheck, web asset minification) and must be exact-pinned.
+2. **Pure modern ESM.** `"type": "module"`, no transpilers, no bundlers, no build step for CLI runtime code. Target Node >= 22 (current LTS lines: 22, 24). The controller's embedded SPA is the one exception: it is minified (with sourcemaps) by exact-pinned devDependency tooling into a gitignored output directory (spec 003 §8); its hand-written sources remain plain ESM.
 3. **Distribution:** source lives only on GitHub (`github.com/mayanklahiri/virtualme`, public). Binaries are distributed as a Docker image on Docker Hub (`mayanklahiri/virtualme`) and a CLI on npm (`virtualme`). GitHub Actions builds everything; no artifacts are committed to git.
 4. **Spec-driven workflow.** All non-trivial work is described first in a numbered spec under `specs/` (`NNN-slug.md`). Later specs must comply with this constitution. Amendments to executed specs are appended to the spec file under an `## Amendments` heading, never silently rewritten.
 5. **Deterministic quality gates.** One canonical gate script (`scripts/check.sh`) is run identically by the pre-commit hook and by CI. Gates use no network and no wall-clock-dependent logic: same tree in, same verdict out.
 6. **Docker image layering.** The image is built from numbered, append-only install scripts in `docker/layers/` (`001-*.sh`, `002-*.sh`, ...), slowest-moving at the bottom. New capability = new higher-numbered layer. Editing an existing layer requires a spec amendment.
 7. **Pinned artifacts.** Every downloaded artifact (model, runtime, tarball, font) is pinned by exact URL + sha256 in the script that fetches it.
-8. **Trust model (prototype).** Virtual Me runs on a trusted computer on a private network. There is no authentication or TLS in v1. All internal services bind to `127.0.0.1` inside the container; only port 8080 is exposed. Do not add auth/TLS speculatively; that is a future spec.
+8. **Trust model (prototype).** Virtual Me runs on a trusted computer on a private network. There is no authentication or TLS in v1. All internal services bind to `127.0.0.1` inside the container; only port 8080 is exposed — anyone who can reach it can view state and use the chat. The container itself runs unprivileged (host-matched uid/gid) on a read-only root filesystem with a single rw data mount (spec 002). Do not add auth/TLS speculatively; that is a future spec.
 9. **Docs never drift.** `README.md`, `AGENTS.md`, and the AI skills are kept in sync with the repo by the `/master-update` skill (section 9). Every executed spec ends by running its procedure.
 
 ## 2. Final repository layout
@@ -67,7 +67,8 @@ virtualme/
 │   ├── smoke.sh                   # (002) container smoke test
 │   └── e2e.sh                     # (003) full E2E test
 ├── scripts/
-│   └── check.sh                   # THE canonical quality gate
+│   ├── check.sh                   # THE canonical quality gate
+│   └── build-web.sh               # (003) SPA minify → controller/web/dist
 ├── specs/
 │   ├── 001-constitution.md        # this file
 │   ├── 002-container.md
@@ -89,7 +90,8 @@ virtualme/
     ├── go.mod
     ├── cmd/controller/main.go
     ├── internal/...               # (003)
-    ├── web/static/...             # (003)
+    ├── web/static/...             # (003) hand-written SPA sources
+    ├── web/dist/...               # (003) gitignored minified build output
     └── tools/fetch-assets.sh      # (003)
 ```
 
@@ -105,6 +107,7 @@ Initialize git if needed (`git init -b main`). Create:
 node_modules/
 *.tgz
 controller/web/static/fonts/
+controller/web/dist/
 controller/controller
 /.DS_Store
 ```
@@ -141,7 +144,7 @@ Verify: `bash -n cli.sh` exits 0.
 
 ## 4. npm package
 
-**`package.json`** — exact contents, except: replace the four devDependency versions with the exact latest versions at execution time (`npm view <pkg> version`), keeping them **exact** (no `^`/`~`). Do not add a `dependencies` key at all.
+**`package.json`** — exact contents, except: replace the devDependency versions with the exact latest versions at execution time (`npm view <pkg> version`), keeping them **exact** (no `^`/`~`). Do not add a `dependencies` key at all. (`@types/punycode` is required because current `@types/node` references it transitively under `strict` checkJs; `esbuild` minifies the SPA per spec 003 §8.)
 
 ```json
 {
@@ -154,9 +157,10 @@ Verify: `bash -n cli.sh` exits 0.
   "files": ["bin", "src", "README.md", "LICENSE"],
   "scripts": {
     "check": "bash scripts/check.sh",
-    "test": "node --test test/",
+    "test": "node --test test/*.test.js",
     "lint": "eslint .",
-    "typecheck": "tsc -p jsconfig.json"
+    "typecheck": "tsc -p jsconfig.json",
+    "build:web": "bash scripts/build-web.sh"
   },
   "repository": { "type": "git", "url": "git+https://github.com/mayanklahiri/virtualme.git" },
   "homepage": "https://github.com/mayanklahiri/virtualme#readme",
@@ -166,6 +170,8 @@ Verify: `bash -n cli.sh` exits 0.
   "devDependencies": {
     "@eslint/js": "<pin>",
     "@types/node": "<pin>",
+    "@types/punycode": "<pin>",
+    "esbuild": "<pin>",
     "eslint": "<pin>",
     "typescript": "<pin>"
   }
@@ -188,7 +194,8 @@ Run `npm install` to produce `package-lock.json` (committed).
     "types": ["node"],
     "skipLibCheck": true
   },
-  "include": ["bin", "src", "test"]
+  "include": ["bin", "src", "test"],
+  "exclude": ["node_modules"]
 }
 ```
 
@@ -227,7 +234,7 @@ General contract:
   - unknown → print `error: unknown command '<x>'` in red to stderr, print help to stderr, exit **2**
 - Exit codes everywhere: `0` success, `1` operational failure (docker missing, container not running, command failed), `2` usage error.
 - Every module is ESM with JSDoc type annotations that pass `tsc -p jsconfig.json` under `strict`.
-- Use `node:util` `parseArgs` for per-command flags; only `logs` has a flag in v1.
+- Use `node:util` `parseArgs` for per-command flags; in v1 only `logs` (`-f`/`--follow`) and `start` (`--data <dir>`) take flags.
 
 **`src/ansi.js`** — exports:
 
@@ -246,8 +253,9 @@ export const bold, dim, red, green, yellow, cyan;  // codes 1, 2, 31, 32, 33, 36
 export const IMAGE = process.env.VIRTUALME_IMAGE ?? "mayanklahiri/virtualme";
 export const TAG = process.env.VIRTUALME_TAG ?? "latest";
 export const CONTAINER = "virtualme";
-export const VOLUME = "virtualme-data";
 export const PORT = 8080;
+export const DATA_MOUNT = "/home/virtualme/.virtualme";  // rw mountpoint inside the container
+// defaultDataDir() → process.env.VIRTUALME_DATA ?? path.join(os.homedir(), ".virtualme")
 ```
 
 **`src/docker.js`** — thin wrappers over `node:child_process`:
@@ -264,18 +272,18 @@ export const PORT = 8080;
 | `help` | Print usage: header `Virtual Me — private personal background agent`, `Usage: virtualme <command>`, then a two-column colorized list of all commands below. Must include the word `Usage`. |
 | `version` | Print the `version` field of the package's own `package.json` (read with `fs.readFileSync(new URL("../../package.json", import.meta.url))`). |
 | `doctor` | Run checks, print one line per check with green `ok` / red `FAIL`, exit 1 if any fail: (1) Node >= 22 (`process.versions.node`); (2) `docker` on PATH; (3) docker daemon reachable (`docker info`); (4) *when run from a git checkout containing `scripts/check.sh`*: `git config core.hooksPath` equals `.githooks` (print hint `run: git config core.hooksPath .githooks` on FAIL); (5) informational (never fails): CPU arch and total RAM, with warning if RAM < 8 GiB (`Gemma 4 E2B needs ~4 GiB free`). |
-| `start` | Fail (exit 1, red message) if docker/daemon missing or container already `running`. If container is `exited`, `docker rm virtualme` first. Then: `docker run -d --name virtualme --restart unless-stopped --shm-size=1g -p 8080:8080 -v virtualme-data:/data <IMAGE>:<TAG>`. On success print the UI URL `http://localhost:8080` and `virtualme logs -f` hint. |
+| `start` | Fail (exit 1, red message) if docker/daemon missing or container already `running`. If container is `exited`, `docker rm virtualme` first. Resolve the host data dir: `--data <dir>` flag > `VIRTUALME_DATA` env > `~/.virtualme` (`os.homedir()`); create it with `mkdir -p` if missing. Then: `docker run -d --name virtualme --restart unless-stopped --shm-size=1g --read-only --user <uid>:<gid> --tmpfs /run:exec,mode=755,uid=<uid>,gid=<gid> --tmpfs /tmp:mode=1777 -p 8080:8080 -v <DATA_DIR>:/home/virtualme/.virtualme <IMAGE>:<TAG>` where `<uid>`/`<gid>` come from `process.getuid()`/`process.getgid()` (fall back to `1000` where unavailable). The container root filesystem is read-only; the data dir is the only rw mount and all files it gains are owned by the invoking host user (see spec 002 §1). On success print the UI URL `http://localhost:8080`, the data dir in use, and the `virtualme logs -f` hint. |
 | `stop` | `docker stop virtualme` then `docker rm virtualme`. Exit 0 with note if container absent. |
 | `status` | Print container state from `containerState()`. If running, also GET `http://127.0.0.1:8080/healthz` using built-in `fetch` (2s timeout via `AbortSignal.timeout(2000)`); pretty-print each service as green/red. If the fetch fails, print `controller: unreachable` in yellow (not an error before spec 003 is deployed). |
 | `logs` | `docker logs virtualme`; flag `-f`/`--follow` appends `-f`. |
-| `build` | Requires `docker/Dockerfile` relative to CWD; if missing, exit 1 with `build must run from a source checkout (see spec 002)`. Run `docker build -f docker/Dockerfile -t <IMAGE>:dev .`. |
+| `build` | Requires `docker/Dockerfile` relative to CWD; if missing, exit 1 with `build must run from a source checkout (see spec 002)`. Run `docker build -f docker/Dockerfile -t <IMAGE>:dev -t <IMAGE>:<TAG> .`; omit the duplicate second tag when `TAG=dev`. This makes `virtualme build && virtualme start` run the image just built. |
 | `keygen` | Print one line: 32 random bytes as base64url — `crypto.randomBytes(32).toString("base64url")` (43 chars, `[A-Za-z0-9_-]`). Future auth primitive; no other side effects. |
 | `update` | `docker pull <IMAGE>:<TAG>`. |
 
 **Tests** (`node:test` + `node:assert/strict`):
 
 - `test/ansi.test.js` — spawn `node -e` printing `red("x")` with `NO_COLOR=1` and assert output is exactly `x` (no escape codes); assert escape codes present with `FORCE_COLOR`-free TTY simulation skipped (only NO_COLOR path is deterministic — test that path plus the pure `wrap` logic by importing `ansi.js` with `enabled` false).
-- `test/cli.test.js` — `spawnSync(process.execPath, ["bin/virtualme.js", ...])`: `help` → exit 0, stdout contains `Usage`; no args → same; `version` → stdout equals package.json version; `nope` → exit 2, stderr contains `unknown command`.
+- `test/cli.test.js` — `spawnSync(process.execPath, ["bin/virtualme.js", ...])`: `help` → exit 0, stdout contains `Usage`; no args → same; `version` → stdout equals package.json version; `nope` → exit 2, stderr contains `unknown command`. Additionally, unit-test the docker argv construction by injecting a fake docker runner: `build` produces both the `:dev` tag and the configured start tag; `start` (with a temp data dir) produces exactly the flag set from the table above (`--read-only`, `--user`, both `--tmpfs` mounts, the data-dir bind mount) and creates the data dir when missing.
 - `test/keygen.test.js` — run `keygen`, assert stdout trimmed matches `/^[A-Za-z0-9_-]{43}$/`; two runs differ.
 
 Verify section 5: `npm test` green; `node bin/virtualme.js help` exit 0; `./cli.sh version` prints `0.1.0`.
@@ -309,7 +317,7 @@ step "typecheck (tsc --checkJs)"
 node_modules/.bin/tsc -p jsconfig.json || fail typecheck
 
 step "unit tests (node --test)"
-node --test test/ || fail "node tests"
+node --test test/*.test.js || fail "node tests"
 
 step "CLI dry run"
 node bin/virtualme.js help >/dev/null || fail "cli help"
@@ -317,8 +325,14 @@ node bin/virtualme.js version >/dev/null || fail "cli version"
 
 if [[ -d controller && "${CHECK_SKIP_GO:-0}" != "1" ]]; then
   step "go gates"
-  if [[ -f controller/web/static/index.html && ! -f controller/web/static/fonts/InterVariable.woff2 ]]; then
+  if [[ -f controller/web/static/index.html ]] &&
+     { [[ ! -f controller/web/static/fonts/InterVariable.woff2 ]] ||
+       [[ ! -f controller/web/static/fonts/InterVariable-Italic.woff2 ]]; }; then
     fail "fonts missing; run: bash controller/tools/fetch-assets.sh (one-time, needs network)"
+  fi
+  if [[ -f scripts/build-web.sh ]]; then
+    step "web build (esbuild minify + sourcemaps)"
+    bash scripts/build-web.sh || fail "build-web"
   fi
   (cd controller && [[ -z "$(gofmt -l .)" ]]) || fail "gofmt -l"
   (cd controller && go vet ./...) || fail "go vet"
@@ -488,19 +502,19 @@ zero-dependency Node CLI (`npx virtualme`, or `./cli.sh` from a checkout).
 | Command | Effect |
 |---|---|
 | `npx virtualme doctor` | Verify node/docker/daemon (+ git hooks in a checkout) |
-| `npx virtualme start` | `docker run -d --name virtualme --restart unless-stopped --shm-size=1g -p 8080:8080 -v virtualme-data:/data mayanklahiri/virtualme:latest` |
+| `npx virtualme start [--data <dir>]` | Run the container unprivileged (host uid/gid) with a read-only root, tmpfs `/run`+`/tmp`, port 8080, and the host data dir (default `~/.virtualme`, created if missing) mounted rw at the container's `~/.virtualme` |
 | `npx virtualme status` | Container state + `/healthz` per-service report |
 | `npx virtualme logs -f` | Follow container logs |
 | `npx virtualme stop` | Stop and remove the container (volume survives) |
 | `npx virtualme update` | Pull the latest image |
-| `npx virtualme build` | Build `:dev` image from a source checkout |
+| `npx virtualme build` | Build `:dev` and the configured start tag from a source checkout |
 | `npx virtualme keygen` | Print a 256-bit base64url token |
 
-Env overrides: `VIRTUALME_IMAGE`, `VIRTUALME_TAG`.
+Env overrides: `VIRTUALME_IMAGE`, `VIRTUALME_TAG`, `VIRTUALME_DATA`.
 
 ## Endpoints (container running)
 
-- `http://localhost:8080/` — control-plane SPA (view-only)
+- `http://localhost:8080/` — control-plane SPA (live metrics charts + chat)
 - `http://localhost:8080/healthz` — aggregate JSON health
 - `http://localhost:8080/desktop/vnc.html?autoconnect=1&resize=scale&path=desktop/websockify` — noVNC remote desktop into the Xvfb display
 
@@ -639,6 +653,7 @@ Keep the existing Overview and modes list at top, unchanged. Then add, in this o
    - **Where everything lives**: npm package (`https://www.npmjs.com/package/virtualme`), Docker Hub image (`https://hub.docker.com/r/mayanklahiri/virtualme`), GitHub repo, GitHub Actions runs (`.../actions`), specs (`specs/`).
    - **CLI commands**: the full table from section 5.
    - **Ports**: 8080 exposed (SPA + `/healthz` + websocket + `/desktop/` noVNC); internal-only: 5900 x11vnc, 6080 noVNC/websockify, 6379 valkey, 8081 llama-server; Xvfb display `:99`.
+   - **Data directory**: host dir `~/.virtualme` by default (override with `--data <dir>` or `VIRTUALME_DATA`), created on first `start`, mounted rw at the container's `~/.virtualme`; the container root filesystem is read-only and runs as the invoking host uid/gid, so all data files are host-owned.
    - **AI skills**: `operate`, `develop`, `master-update` with one-liners and paths; note `.claude/skills` symlink and `AGENTS.md` for Codex; explicit sentence: *"After changing anything structural, run the `/master-update` skill — it re-syncs this README, AGENTS.md, and all skills against the repo."*
    - **CI/CD**: table of the two workflows, their triggers, and required secrets (`DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `NPM_TOKEN`).
    - **Development setup**: clone, `npm install`, `git config core.hooksPath .githooks`, `bash controller/tools/fetch-assets.sh`, `npm run check`.
