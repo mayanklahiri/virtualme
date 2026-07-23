@@ -759,3 +759,29 @@ Run the `/master-update` skill procedure (`.cursor/skills/master-update/SKILL.md
 | 15 | README/skills refreshed via `/master-update` | section 9 changes present |
 
 Commit as `spec 002: layered container, baked Gemma 4 E2B, s6 services, stub controller, smoke test`.
+
+## Amendments
+
+### 2026-07-23 — home directory must be traversable by host uid
+
+`useradd --create-home` creates `/home/virtualme` mode `0700`. The container
+runs as the host uid/gid (often not 1000 — GitHub Actions runners use 1001),
+so a non-matching uid cannot traverse into `$HOME` to reach the bind-mounted
+`$VM_DATA_DIR`. Cont-init then fails with
+`mkdir: cannot create directory '/home/virtualme': Permission denied` and s6
+aborts before any service starts.
+
+**Layer `009-user.sh` change** (constitution rule 6: editing an existing layer
+requires this amendment): after `useradd`, make the home and data mountpoint
+traversable and present in the image:
+
+```bash
+chmod 755 /home/virtualme
+mkdir -p /home/virtualme/.virtualme
+chown virtualme:virtualme /home/virtualme/.virtualme
+chmod 755 /home/virtualme/.virtualme
+```
+
+No change to the run-time contract: persistent writes still go only to the
+bind-mounted `$VM_DATA_DIR`; the home itself remains rootfs-owned and
+non-writable by a non-1000 runtime uid.
