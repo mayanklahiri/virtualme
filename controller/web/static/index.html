@@ -37,6 +37,22 @@
         <ul id="service-list" class="services" aria-live="polite"></ul>
       </section>
 
+      <section id="metrics" aria-labelledby="metrics-title">
+        <h2 id="metrics-title">Process metrics</h2>
+        <div class="charts">
+          <figure class="chart">
+            <figcaption>CPU (% of one core)</figcaption>
+            <canvas id="chart-cpu" tabindex="0" role="img" aria-label="Per-process CPU usage chart"></canvas>
+          </figure>
+          <figure class="chart">
+            <figcaption>Memory (MiB)</figcaption>
+            <canvas id="chart-mem" tabindex="0" role="img" aria-label="Per-process memory usage chart"></canvas>
+          </figure>
+        </div>
+        <ul id="chart-legend" class="legend" aria-hidden="true"></ul>
+        <div id="chart-tooltip" class="tooltip" role="status" hidden></div>
+      </section>
+
       <section id="system" aria-labelledby="system-title">
         <h2 id="system-title">System</h2>
         <div class="system-grid">
@@ -55,6 +71,18 @@
             </div>
           </article>
         </div>
+      </section>
+
+      <section id="chat" aria-labelledby="chat-title">
+        <h2 id="chat-title">Chat</h2>
+        <ul id="chat-log" class="chat-log" aria-live="polite"></ul>
+        <form id="chat-form" class="chat-form">
+          <textarea id="chat-input" rows="2" maxlength="4096" placeholder="Message Virtual Me… (Enter to send, Shift+Enter for a new line)" aria-label="Chat message" disabled></textarea>
+          <div class="chat-actions">
+            <span id="chat-count" class="chat-count">0 / 4096</span>
+            <button id="chat-send" type="submit" disabled>Send</button>
+          </div>
+        </form>
       </section>
 
       <section id="desktop" class="desktop" aria-labelledby="desktop-title">

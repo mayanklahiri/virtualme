@@ -35,6 +35,10 @@ if [[ -d controller && "${CHECK_SKIP_GO:-0}" != "1" ]]; then
        [[ ! -f controller/web/static/fonts/InterVariable-Italic.woff2 ]]; }; then
     fail "fonts missing; run: bash controller/tools/fetch-assets.sh (one-time, needs network)"
   fi
+  if [[ -f scripts/build-web.sh ]]; then
+    step "web build (esbuild minify + sourcemaps)"
+    bash scripts/build-web.sh || fail "build-web"
+  fi
   (cd controller && [[ -z "$(gofmt -l .)" ]]) || fail "gofmt -l"
   (cd controller && go vet ./...) || fail "go vet"
   (cd controller && go test ./...) || fail "go test"

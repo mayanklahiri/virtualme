@@ -1,6 +1,7 @@
 export function connect(onMessage, onStatus) {
   let delay = 1000;
   let retryTimer;
+  let socket = null;
 
   const schedule = () => {
     if (retryTimer !== undefined) {
@@ -17,7 +18,7 @@ export function connect(onMessage, onStatus) {
   const open = () => {
     onStatus(delay === 1000 ? "connecting" : "reconnecting");
     const scheme = location.protocol === "https:" ? "wss://" : "ws://";
-    const socket = new WebSocket(scheme + location.host + "/ws");
+    socket = new WebSocket(scheme + location.host + "/ws");
     socket.addEventListener("open", () => {
       delay = 1000;
       onStatus("live");
@@ -37,4 +38,14 @@ export function connect(onMessage, onStatus) {
   };
 
   open();
+
+  return {
+    send(value) {
+      if (socket === null || socket.readyState !== WebSocket.OPEN) {
+        return false;
+      }
+      socket.send(JSON.stringify(value));
+      return true;
+    },
+  };
 }

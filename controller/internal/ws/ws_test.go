@@ -69,6 +69,66 @@ func TestPingPong(t *testing.T) {
 	}
 }
 
+func TestOnConnect(t *testing.T) {
+	hub := NewHub()
+	hub.SetOnConnect(func(c *Conn) {
+		_ = c.WriteText([]byte("hello"))
+	})
+	server := httptest.NewServer(http.HandlerFunc(hub.HandleUpgrade))
+	defer server.Close()
+	conn, reader, _ := dialWebsocket(t, server.URL)
+	defer conn.Close()
+
+	frame := make([]byte, 7)
+	if _, err := io.ReadFull(reader, frame); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(frame); got != "\x81\x05hello" {
+		t.Fatalf("frame = %q", got)
+	}
+}
+
+func TestClientMessageDispatch(t *testing.T) {
+	hub := NewHub()
+	type received struct {
+		conn    *Conn
+		payload string
+	}
+	got := make(chan received, 1)
+	hub.SetHandler(func(c *Conn, payload []byte) {
+		got <- received{conn: c, payload: string(payload)}
+	})
+	var registered *Conn
+	hub.SetOnConnect(func(c *Conn) { registered = c })
+	server := httptest.NewServer(http.HandlerFunc(hub.HandleUpgrade))
+	defer server.Close()
+	conn, _, _ := dialWebsocket(t, server.URL)
+	defer conn.Close()
+	waitForCount(t, hub, 1)
+
+	message := `{"type":"chat","text":"x"}`
+	mask := [4]byte{5, 6, 7, 8}
+	frame := append([]byte{0x81, 0x80 | byte(len(message))}, mask[:]...)
+	for index := range len(message) {
+		frame = append(frame, message[index]^mask[index%4])
+	}
+	if _, err := conn.Write(frame); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case msg := <-got:
+		if msg.payload != message {
+			t.Fatalf("payload = %q, want %q", msg.payload, message)
+		}
+		if msg.conn != registered {
+			t.Fatal("handler received a different *Conn than the registered one")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("handler never invoked")
+	}
+}
+
 func TestBadHandshake(t *testing.T) {
 	hub := NewHub()
 	server := httptest.NewServer(http.HandlerFunc(hub.HandleUpgrade))

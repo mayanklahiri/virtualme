@@ -1,0 +1,265 @@
+package chat
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/mayanklahiri/virtualme/controller/internal/ws"
+)
+
+// sseServer streams the given deltas as OpenAI-style SSE, then [DONE].
+// If hold is non-nil the handler blocks on it before streaming.
+func sseServer(t *testing.T, deltas []string, hold chan struct{}) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if hold != nil {
+			<-hold
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		for _, delta := range deltas {
+			chunk, _ := json.Marshal(map[string]any{
+				"choices": []map[string]any{{"delta": map[string]string{"content": delta}}},
+			})
+			fmt.Fprintf(w, "data: %s\n\n", chunk)
+			flusher.Flush()
+		}
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func eventType(payload []byte) string {
+	var event struct {
+		Type string `json:"type"`
+	}
+	_ = json.Unmarshal(payload, &event)
+	return event.Type
+}
+
+func waitEvent(t *testing.T, events chan []byte, wantType string) []byte {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case payload := <-events:
+			if got := eventType(payload); got == wantType {
+				return payload
+			} else {
+				t.Fatalf("event %q arrived, want %q (payload %s)", got, wantType, payload)
+			}
+		case <-deadline:
+			t.Fatalf("timed out waiting for %q", wantType)
+		}
+	}
+}
+
+func TestStreamingRoundTrip(t *testing.T) {
+	llama := sseServer(t, []string{"po", "n", "g"}, nil)
+	events := make(chan []byte, 64)
+	service := New("127.0.0.1:1", llama.URL, func(p []byte) { events <- p })
+
+	service.HandleClientMessage(nil, []byte(`{"type":"chat","text":" hello "}`))
+
+	message := waitEvent(t, events, "chat-message")
+	if !strings.Contains(string(message), `"text":"hello"`) {
+		t.Fatalf("chat-message = %s, want trimmed text", message)
+	}
+	var streamed strings.Builder
+	for range 3 {
+		var delta struct {
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(waitEvent(t, events, "chat-delta"), &delta); err != nil {
+			t.Fatal(err)
+		}
+		streamed.WriteString(delta.Text)
+	}
+	done := waitEvent(t, events, "chat-done")
+	if streamed.String() != "pong" || !strings.Contains(string(done), `"text":"pong"`) {
+		t.Fatalf("streamed %q, done %s", streamed.String(), done)
+	}
+
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	if len(service.history) != 2 || service.history[0].Role != "user" || service.history[1].Role != "assistant" {
+		t.Fatalf("history = %+v, want [user, assistant]", service.history)
+	}
+	if service.busy {
+		t.Fatal("busy flag not cleared")
+	}
+}
+
+func TestInvalidInputPerConnectionError(t *testing.T) {
+	events := make(chan []byte, 64)
+	service := New("127.0.0.1:1", "http://127.0.0.1:1", func(p []byte) { events <- p })
+
+	hub := ws.NewHub()
+	hub.SetHandler(service.HandleClientMessage)
+	server := httptest.NewServer(http.HandlerFunc(hub.HandleUpgrade))
+	defer server.Close()
+	conn, reader := dialWS(t, server.URL)
+	defer conn.Close()
+
+	for _, bad := range []string{
+		"garbage",
+		`{"type":"other","text":"x"}`,
+		`{"type":"chat","text":""}`,
+		fmt.Sprintf(`{"type":"chat","text":%q}`, strings.Repeat("x", 5000)),
+	} {
+		writeMaskedText(t, conn, bad)
+		payload := readTextFrame(t, reader)
+		if eventType(payload) != "chat-error" {
+			t.Fatalf("input %q produced %s, want chat-error", bad, payload)
+		}
+	}
+	select {
+	case payload := <-events:
+		t.Fatalf("unexpected broadcast %s", payload)
+	default:
+	}
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	if len(service.history) != 0 {
+		t.Fatalf("history = %+v, want empty", service.history)
+	}
+}
+
+func TestBusyRejectsSecondChat(t *testing.T) {
+	hold := make(chan struct{})
+	llama := sseServer(t, []string{"ok"}, hold)
+	events := make(chan []byte, 64)
+	service := New("127.0.0.1:1", llama.URL, func(p []byte) { events <- p })
+
+	hub := ws.NewHub()
+	hub.SetHandler(service.HandleClientMessage)
+	server := httptest.NewServer(http.HandlerFunc(hub.HandleUpgrade))
+	defer server.Close()
+	conn, reader := dialWS(t, server.URL)
+	defer conn.Close()
+
+	service.HandleClientMessage(nil, []byte(`{"type":"chat","text":"first"}`))
+	waitEvent(t, events, "chat-message")
+
+	writeMaskedText(t, conn, `{"type":"chat","text":"second"}`)
+	payload := readTextFrame(t, reader)
+	if eventType(payload) != "chat-error" || !strings.Contains(string(payload), "busy") {
+		t.Fatalf("second chat produced %s, want busy chat-error", payload)
+	}
+
+	close(hold)
+	waitEvent(t, events, "chat-delta")
+	waitEvent(t, events, "chat-done")
+}
+
+func TestLlamaHTTPErrorBroadcastsAndClearsBusy(t *testing.T) {
+	llama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer llama.Close()
+	events := make(chan []byte, 64)
+	service := New("127.0.0.1:1", llama.URL, func(p []byte) { events <- p })
+
+	service.HandleClientMessage(nil, []byte(`{"type":"chat","text":"hi"}`))
+	waitEvent(t, events, "chat-message")
+	waitEvent(t, events, "chat-error")
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		service.mu.Lock()
+		busy := service.busy
+		service.mu.Unlock()
+		if !busy {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("busy flag never cleared after llama error")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// --- raw websocket client helpers (mirrors internal/ws tests) ---
+
+func dialWS(t *testing.T, serverURL string) (net.Conn, *bufio.Reader) {
+	t.Helper()
+	parsed, err := url.Parse(serverURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := net.Dial("tcp", parsed.Host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := fmt.Sprintf("GET /ws HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n", parsed.Host)
+	if _, err := io.WriteString(conn, request); err != nil {
+		t.Fatal(err)
+	}
+	reader := bufio.NewReader(conn)
+	response, err := http.ReadResponse(reader, &http.Request{Method: http.MethodGet})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("handshake status = %d", response.StatusCode)
+	}
+	return conn, reader
+}
+
+func writeMaskedText(t *testing.T, conn net.Conn, message string) {
+	t.Helper()
+	mask := [4]byte{1, 2, 3, 4}
+	frame := []byte{0x81}
+	switch {
+	case len(message) < 126:
+		frame = append(frame, 0x80|byte(len(message)))
+	case len(message) <= 65535:
+		frame = append(frame, 0x80|126, byte(len(message)>>8), byte(len(message)))
+	default:
+		t.Fatal("test message too large")
+	}
+	frame = append(frame, mask[:]...)
+	for index := range len(message) {
+		frame = append(frame, message[index]^mask[index%4])
+	}
+	if _, err := conn.Write(frame); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func readTextFrame(t *testing.T, reader *bufio.Reader) []byte {
+	t.Helper()
+	header := make([]byte, 2)
+	if _, err := io.ReadFull(reader, header); err != nil {
+		t.Fatal(err)
+	}
+	if header[0] != 0x81 {
+		t.Fatalf("frame byte0 = %#x, want 0x81", header[0])
+	}
+	length := uint64(header[1] & 0x7f)
+	switch header[1] & 0x7f {
+	case 126:
+		extended := make([]byte, 2)
+		if _, err := io.ReadFull(reader, extended); err != nil {
+			t.Fatal(err)
+		}
+		length = uint64(extended[0])<<8 | uint64(extended[1])
+	case 127:
+		t.Fatal("unexpected 64-bit length in test frame")
+	}
+	payload := make([]byte, length)
+	if _, err := io.ReadFull(reader, payload); err != nil {
+		t.Fatal(err)
+	}
+	return payload
+}

@@ -27,17 +27,34 @@ type Conn struct {
 	writer    *bufio.Writer
 	writeMu   sync.Mutex
 	closeOnce sync.Once
+	onText    func(payload []byte)
 }
 
 // Hub tracks connected browsers and broadcasts state snapshots.
 type Hub struct {
-	mu    sync.Mutex
-	conns map[*Conn]struct{}
+	mu        sync.Mutex
+	conns     map[*Conn]struct{}
+	handler   func(c *Conn, payload []byte)
+	onConnect func(c *Conn)
 }
 
 // NewHub returns an empty websocket hub.
 func NewHub() *Hub {
 	return &Hub{conns: make(map[*Conn]struct{})}
+}
+
+// SetHandler registers the receiver for client text frames.
+func (h *Hub) SetHandler(fn func(c *Conn, payload []byte)) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.handler = fn
+}
+
+// SetOnConnect registers a hook called after each connection registers.
+func (h *Hub) SetOnConnect(fn func(c *Conn)) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.onConnect = fn
 }
 
 func acceptKey(key string) string {
@@ -173,7 +190,8 @@ func (c *Conn) readLength(short byte) (uint64, error) {
 	}
 }
 
-// ReadLoop services client control frames and discards all data frames.
+// ReadLoop services client frames until close or error, delivering text
+// frames to the registered handler (if any) and discarding binary frames.
 func (c *Conn) ReadLoop() {
 	for {
 		header := make([]byte, 2)
@@ -221,7 +239,11 @@ func (c *Conn) ReadLoop() {
 				return
 			}
 		case 0xA:
-		case 0x1, 0x2:
+		case 0x1:
+			if c.onText != nil {
+				c.onText(payload)
+			}
+		case 0x2:
 		default:
 			c.closeWithCode(1002)
 			return
@@ -229,15 +251,28 @@ func (c *Conn) ReadLoop() {
 	}
 }
 
-// HandleUpgrade upgrades, registers, and services one websocket client.
+// HandleUpgrade upgrades, registers, runs the on-connect hook, and services
+// one websocket client.
 func (h *Hub) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 	conn, err := Upgrade(w, r)
 	if err != nil {
 		return
 	}
+	conn.onText = func(payload []byte) {
+		h.mu.Lock()
+		handler := h.handler
+		h.mu.Unlock()
+		if handler != nil {
+			handler(conn, payload)
+		}
+	}
 	h.mu.Lock()
 	h.conns[conn] = struct{}{}
+	onConnect := h.onConnect
 	h.mu.Unlock()
+	if onConnect != nil {
+		onConnect(conn)
+	}
 	go func() {
 		conn.ReadLoop()
 		h.mu.Lock()

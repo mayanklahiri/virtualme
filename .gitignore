@@ -1,5 +1,6 @@
 node_modules/
 *.tgz
 controller/web/static/fonts/
+controller/web/dist/
 controller/controller
 /.DS_Store
