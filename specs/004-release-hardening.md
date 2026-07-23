@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved for execution |
+| Status | Executed (2026-07-22) |
 | Depends on | `specs/001-constitution.md` executed (release workflow exists) |
 | Produces | Hardened `.github/workflows/release.yml`: registry immutability pre-checks, explicit workflow permissions, GitHub Release creation with generated notes; README release-runbook update |
 | Followed by | Independent of specs 005–008 (may execute in any order relative to them) |
@@ -191,3 +191,9 @@ Run the `/master-update` skill procedure. Expected changes:
 | 9 | `/master-update` run | §4 changes present |
 
 Commit as `spec 004: immutable release versions, registry pre-checks, GitHub Releases`.
+
+## Amendments
+
+### 2026-07-22 — Docker Hub rehearsal before the first published image
+
+Acceptance item 4 is conditional on `mayanklahiri/virtualme:latest` already existing. At execution time Docker Hub returned `no such manifest`; this does not affect the release pre-check because absence is its success path. Items 7 and 8 remain production observations for the next real release and an optional throwaway-version replay, respectively.

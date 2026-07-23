@@ -1,0 +1,9 @@
+#!/command/with-contenv bash
+# Give Chromium time to flush Preferences and Local State on shutdown.
+export DISPLAY="$VM_DISPLAY"
+pkill -TERM -f "chromium .*--user-data-dir=$VM_DATA_DIR/chromium" 2>/dev/null || true
+for _ in $(seq 1 20); do
+  pgrep -f "chromium .*--user-data-dir=$VM_DATA_DIR/chromium" >/dev/null 2>&1 || break
+  sleep 0.25
+done
+pkill -KILL -f "chromium .*--user-data-dir=$VM_DATA_DIR/chromium" 2>/dev/null || true

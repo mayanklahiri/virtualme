@@ -18,10 +18,12 @@ gates everything.
 
 ## Quality gates
 
-`npm run check` = shell syntax, eslint, tsc --checkJs, node --test, CLI dry
-run, web build (esbuild minify + sourcemaps into gitignored
+`npm run check` = shell syntax, deterministic LLM-locality/SPA-origin/
+persistence-map enforcement, eslint, tsc --checkJs, node --test, CLI dry run,
+web build (esbuild minify + sourcemaps into gitignored
 `controller/web/dist/`), gofmt/go vet/go test. The pre-commit hook and CI run
-the same script.
+the same script. New stateful components must be added to the canonical map in
+`specs/007-persistence-locality.md` §1.
 Container tests: `bash test/smoke.sh`, `bash test/e2e.sh` (need Docker; e2e
 drives the real CLI and includes a restart cycle plus a chat probe).
 
@@ -38,9 +40,15 @@ drives the real CLI and includes a restart cycle plus a chat probe).
 | `007-node-playwright.sh` | Node.js and Playwright Core `1.61.1` |
 | `008-s6-overlay.sh` | s6-overlay `v3.2.3.2` |
 | `009-user.sh` | Unprivileged `virtualme` user (uid/gid 1000) |
+| `010-vision-projector.sh` | Pinned Gemma 4 E2B multimodal projector |
+| `011-agent-tools.sh` | scrot and ImageMagick capture tooling |
+| `012-manifest.sh` | Image-baked agent system manifest |
 
 The s6 tree supervises `svc-xvfb`, `svc-openbox`, `svc-x11vnc`, `svc-novnc`,
-`svc-valkey`, `svc-llama`, `svc-chromium`, and `svc-controller`.
+`svc-valkey`, `svc-llama`, `svc-chromium`, `svc-chromium-watchdog`, and
+`svc-controller`. Chromium's run script sources
+`/usr/local/lib/virtualme/chromium-sandbox.sh`; its finish script gives the
+profile time to flush before watchdog or container restarts.
 
 ## Controller
 
@@ -48,13 +56,16 @@ The s6 tree supervises `svc-xvfb`, `svc-openbox`, `svc-x11vnc`, `svc-novnc`,
 |---|---|
 | `controller/cmd/controller` | Route and subsystem wiring |
 | `controller/internal/health` | Concurrent six-service health probes |
-| `controller/internal/procstat` | Per-service CPU/RSS sampling from `/proc` |
+| `controller/internal/procstat` | Per-core CPU and per-service CPU/RSS sampling from `/proc` |
 | `controller/internal/ws` | Minimal server-side RFC 6455, hub, client-frame dispatch |
-| `controller/internal/state` | Two-second snapshot collector + 150-entry ring buffer |
-| `controller/internal/chat` | Shared chat: llama SSE streaming + in-repo Valkey RESP client |
-| `controller/web/static` | Hand-written SPA sources (charts, chat, ws client) |
-| `controller/web/dist` | Gitignored minified build output (`scripts/build-web.sh`) |
-| `controller/tools/fetch-assets.sh` | Pinned Inter variable-font fetch |
+| `controller/internal/state` | Two-second live snapshot collector |
+| `controller/internal/metrics` | Persistent four-tier metrics aggregation and querying |
+| `controller/internal/chat` | Shared streaming chat, controls, stats, and LLM status |
+| `controller/internal/agent` | Tool-call loop, read-only CDP/DOM observations, OS-level actions, bash, and artifacts |
+| `controller/web/static` | Hand-written multi-page SPA, themes, charts, markdown, agent hooks |
+| `controller/web/dist` | Gitignored minified SPA + generated icon sprite |
+| `controller/tools/fetch-assets.sh` | Pinned fonts and selected Lucide SVG fetch |
+| `scripts/build-icons.mjs` | Deterministic Lucide SVG sprite generation |
 
 ## How to add things
 
@@ -63,6 +74,11 @@ The s6 tree supervises `svc-xvfb`, `svc-openbox`, `svc-x11vnc`, `svc-novnc`,
 - **Controller endpoint**: register it in `newMux` in
   `controller/cmd/controller/main.go`, keep behavior in an `internal` package,
   and cover routing plus package behavior with hermetic Go tests.
+- **Agent tool**: add its OpenAI schema and executor in
+  `controller/internal/agent/tools.go`, inject command execution through
+  `Runner`, and add hermetic tests. Browser action tools must use `xdotool`
+  OS input; CDP is observation-only and must never call `Input.*`,
+  `Page.navigate`, or another state-changing method.
 - **Docker layer**: new `docker/layers/NNN-<slug>.sh` with the next number;
   `set -euo pipefail`; pin URLs+sha256; add a `COPY`+`RUN` pair at the END of
   the layer sequence in `docker/Dockerfile`. Never edit old layers without a

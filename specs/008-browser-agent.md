@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved for execution |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/002-container.md`, `specs/003-controller.md` executed; `specs/005-console-ui.md` (agent-step UI hooks, chat stop) and `specs/006-desktop-reliability.md` (stable Chromium) executed; complies with `specs/007-persistence-locality.md` (adds `agent/` to the map) |
 | Produces | Controller agent loop with OS-level actuation (xdotool/XTEST) + screen capture + read-only CDP + rendered-DOM observation + bash + system-info tools; vision enablement (pinned mmproj + `--mmproj`); new capture/CDP docker layer; system manifest; CLI GPU passthrough; agent artifacts under the data mount; e2e coverage |
 | Followed by | Future specs (grounding-tuned VLM swap, richer tool policy, auth) |

@@ -1,0 +1,19 @@
+#!/command/with-contenv bash
+export DISPLAY="$VM_DISPLAY"
+until xdpyinfo >/dev/null 2>&1; do sleep 0.2; done
+
+MISS=0
+GRACE="${VM_CHROMIUM_WATCHDOG_GRACE:-3}"
+while sleep 2; do
+  if xdotool search --onlyvisible --class chromium >/dev/null 2>&1; then
+    MISS=0
+    continue
+  fi
+  MISS=$((MISS + 1))
+  if [ "$MISS" -ge "$GRACE" ]; then
+    echo "chromium-watchdog: no visible window for $((GRACE * 2))s; restarting svc-chromium" >&2
+    s6-svc -r /run/service/svc-chromium || true
+    MISS=0
+    sleep 5
+  fi
+done

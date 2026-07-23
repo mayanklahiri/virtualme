@@ -20,12 +20,19 @@ function resolveDataDir(flag) {
  * @param {{ haveDocker: () => boolean, daemonUp: () => boolean, containerState: () => string }} [probes]
  */
 export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, containerState }) {
-  /** @type {{ data?: string }} */
+  /** @type {{ data?: string, "no-browser-sandbox"?: boolean, gpus?: string }} */
   let flags;
   try {
-    flags = parseArgs({ args: argv, options: { data: { type: "string" } } }).values;
+    flags = parseArgs({
+      args: argv,
+      options: {
+        data: { type: "string" },
+        "no-browser-sandbox": { type: "boolean" },
+        gpus: { type: "string" },
+      },
+    }).values;
   } catch {
-    console.error(red("error: usage: start [--data <dir>]"));
+    console.error(red("error: usage: start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>]"));
     return 2;
   }
   if (!probes.haveDocker()) {
@@ -47,7 +54,7 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
   mkdirSync(dataDir, { recursive: true });
   const uid = process.getuid?.() ?? 1000;
   const gid = process.getgid?.() ?? 1000;
-  const code = docker([
+  const dockerArgs = [
     "run", "-d", "--name", CONTAINER, "--restart", "unless-stopped",
     "--shm-size=1g",
     "--user", `${uid}:${gid}`,
@@ -55,8 +62,15 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
     "--tmpfs", "/tmp:mode=1777",
     "-p", `${PORT}:${PORT}`,
     "-v", `${dataDir}:${DATA_MOUNT}`,
-    `${IMAGE}:${TAG}`,
-  ]);
+  ];
+  if (flags["no-browser-sandbox"]) {
+    dockerArgs.push("-e", "VM_CHROMIUM_NO_SANDBOX=1");
+  }
+  if (flags.gpus) {
+    dockerArgs.push("--gpus", flags.gpus, "-e", "VM_LLAMA_GPU=1");
+  }
+  dockerArgs.push(`${IMAGE}:${TAG}`);
+  const code = docker(dockerArgs);
   if (code === 0) {
     console.log(green(`Virtual Me is running at http://localhost:${PORT}`));
     console.log(`Data directory: ${dataDir}`);

@@ -140,3 +140,41 @@ func TestSampleMissingProcRoot(t *testing.T) {
 		}
 	}
 }
+
+func writeCPUStat(t *testing.T, root, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(root, "stat"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCoresDeltasAndFirstCall(t *testing.T) {
+	root := t.TempDir()
+	writeCPUStat(t, root, "cpu  0 0 0 0\ncpu0 100 0 50 850 0 0 0 0\ncpu1 200 0 0 800 0 0 0 0\n")
+	sampler := NewSampler(root)
+	first := sampler.Cores()
+	if len(first) != 2 || first[0] != 0 || first[1] != 0 {
+		t.Fatalf("first = %v", first)
+	}
+	writeCPUStat(t, root, "cpu  0 0 0 0\ncpu0 130 0 70 900 0 0 0 0\ncpu1 250 0 0 850 0 0 0 0\n")
+	second := sampler.Cores()
+	if second[0] != 50 || second[1] != 50 {
+		t.Fatalf("second = %v, want [50 50]", second)
+	}
+}
+
+func TestCoresClampAndCountReset(t *testing.T) {
+	root := t.TempDir()
+	writeCPUStat(t, root, "cpu0 10 0 0 90 10\n")
+	sampler := NewSampler(root)
+	_ = sampler.Cores()
+	// Idle counters decreasing is malformed but must clamp the computed value.
+	writeCPUStat(t, root, "cpu0 30 0 0 80 5\n")
+	if got := sampler.Cores(); len(got) != 1 || got[0] != 100 {
+		t.Fatalf("clamped = %v, want [100]", got)
+	}
+	writeCPUStat(t, root, "cpu0 40 0 0 90 5\ncpu1 1 0 0 9 0\n")
+	if got := sampler.Cores(); len(got) != 2 || got[0] != 0 || got[1] != 0 {
+		t.Fatalf("count reset = %v", got)
+	}
+}

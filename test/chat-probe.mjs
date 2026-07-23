@@ -5,11 +5,14 @@
 //     default 240 s).
 //   node test/chat-probe.mjs --history-only <ws-url>  exit 0 iff the
 //     chat-history received on connect contains at least one message.
+//   node test/chat-probe.mjs --stop <ws-url>          stop after the first
+//     delta and require chat-done with stopped:true.
 
 const historyOnly = process.argv[2] === "--history-only";
-const url = historyOnly ? process.argv[3] : process.argv[2];
+const stopMode = process.argv[2] === "--stop";
+const url = historyOnly || stopMode ? process.argv[3] : process.argv[2];
 if (!url) {
-  console.error("usage: chat-probe.mjs [--history-only] <ws-url>");
+  console.error("usage: chat-probe.mjs [--history-only|--stop] <ws-url>");
   process.exit(2);
 }
 const timeoutMs = Number(process.env.CHAT_PROBE_TIMEOUT ?? 240) * 1000;
@@ -22,6 +25,7 @@ function bail(reason) {
 
 const timer = setTimeout(() => bail(`timeout after ${timeoutMs / 1000}s`), timeoutMs);
 const socket = new WebSocket(url);
+let sawDelta = false;
 
 socket.addEventListener("error", () => bail("websocket error"));
 socket.addEventListener("close", () => bail("websocket closed early"));
@@ -43,8 +47,17 @@ socket.addEventListener("message", (event) => {
     }
     socket.send(JSON.stringify({ type: "chat", text: "Reply with the single word: pong" }));
     console.log("chat-probe: prompt sent, waiting for first delta");
-  } else if (!historyOnly && message.type === "chat-delta") {
+  } else if (stopMode && message.type === "chat-delta") {
+    socket.send(JSON.stringify({ type: "chat-stop" }));
+    console.log("chat-probe: stop sent");
+  } else if (stopMode && message.type === "chat-done" && message.stopped === true) {
+    console.log("chat-probe: received stopped chat-done");
+    clearTimeout(timer);
+    process.exit(0);
+  } else if (!historyOnly && !stopMode && message.type === "chat-delta") {
+    sawDelta = true;
     console.log("chat-probe: received chat-delta");
+  } else if (!historyOnly && !stopMode && message.type === "chat-done" && sawDelta) {
     clearTimeout(timer);
     process.exit(0);
   } else if (!historyOnly && message.type === "chat-error") {

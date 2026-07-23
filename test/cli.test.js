@@ -85,6 +85,50 @@ test("start runs as the host user with the data dir mounted", () => {
   }
 });
 
+test("start can force Chromium's sandbox fallback without adding privileges", () => {
+  const parent = mkdtempSync(join(tmpdir(), "virtualme-test-"));
+  const dataDir = join(parent, "data");
+  try {
+    /** @type {string[] | undefined} */
+    let invocation;
+    const probes = { haveDocker: () => true, daemonUp: () => true, containerState: () => "absent" };
+    const code = start(["--data", dataDir, "--no-browser-sandbox"], (args) => {
+      invocation = args;
+      return 0;
+    }, probes);
+    assert.equal(code, 0);
+    assert.ok(invocation);
+    assert.deepEqual(invocation.slice(-3), [
+      "-e", "VM_CHROMIUM_NO_SANDBOX=1", "mayanklahiri/virtualme:latest",
+    ]);
+    assert.equal(invocation.includes("--cap-add"), false);
+    assert.equal(invocation.includes("--security-opt"), false);
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+test("start forwards an optional GPU specification and marker env", () => {
+  const parent = mkdtempSync(join(tmpdir(), "virtualme-test-"));
+  const dataDir = join(parent, "data");
+  try {
+    /** @type {string[] | undefined} */
+    let invocation;
+    const probes = { haveDocker: () => true, daemonUp: () => true, containerState: () => "absent" };
+    const code = start(["--data", dataDir, "--gpus", "all"], (args) => {
+      invocation = args;
+      return 0;
+    }, probes);
+    assert.equal(code, 0);
+    assert.ok(invocation);
+    assert.deepEqual(invocation.slice(-5), [
+      "--gpus", "all", "-e", "VM_LLAMA_GPU=1", "mayanklahiri/virtualme:latest",
+    ]);
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
 test("start rejects unknown flags as a usage error", () => {
   const probes = { haveDocker: () => true, daemonUp: () => true, containerState: () => "absent" };
   const code = start(["--bogus"], () => 0, probes);

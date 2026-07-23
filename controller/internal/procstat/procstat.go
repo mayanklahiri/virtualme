@@ -35,11 +35,17 @@ var services = []struct {
 
 // Sampler computes CPU% deltas between successive Sample calls.
 type Sampler struct {
-	procRoot string
-	pageSize int
-	hertz    float64
-	prev     map[int]uint64
-	prevTime time.Time
+	procRoot  string
+	pageSize  int
+	hertz     float64
+	prev      map[int]uint64
+	prevTime  time.Time
+	prevCores []cpuCounters
+}
+
+type cpuCounters struct {
+	total uint64
+	idle  uint64
 }
 
 // NewSampler returns a sampler rooted at procRoot (normally "/proc").
@@ -102,6 +108,71 @@ func serviceIndex(comm string) int {
 // The first call reports zero CPU% for every service.
 func (s *Sampler) Sample() []Proc {
 	return s.sampleAt(time.Now())
+}
+
+func parseCores(content string) []cpuCounters {
+	var result []cpuCounters
+	for line := range strings.SplitSeq(content, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 5 || !strings.HasPrefix(fields[0], "cpu") || fields[0] == "cpu" {
+			continue
+		}
+		if _, err := strconv.Atoi(strings.TrimPrefix(fields[0], "cpu")); err != nil {
+			continue
+		}
+		var values []uint64
+		for _, field := range fields[1:] {
+			value, err := strconv.ParseUint(field, 10, 64)
+			if err != nil {
+				value = 0
+			}
+			values = append(values, value)
+		}
+		var total uint64
+		for _, value := range values {
+			total += value
+		}
+		idle := values[3]
+		if len(values) > 4 {
+			idle += values[4]
+		}
+		result = append(result, cpuCounters{total: total, idle: idle})
+	}
+	return result
+}
+
+// Cores returns per-logical-CPU busy percentages since the previous call.
+func (s *Sampler) Cores() []float64 {
+	content, _ := os.ReadFile(filepath.Join(s.procRoot, "stat"))
+	current := parseCores(string(content))
+	result := make([]float64, len(current))
+	if len(current) != len(s.prevCores) {
+		s.prevCores = current
+		return result
+	}
+	for i, now := range current {
+		before := s.prevCores[i]
+		if now.total <= before.total {
+			continue
+		}
+		totalDelta := now.total - before.total
+		idleDelta := uint64(0)
+		if now.idle >= before.idle {
+			idleDelta = now.idle - before.idle
+		}
+		busyDelta := uint64(0)
+		if totalDelta > idleDelta {
+			busyDelta = totalDelta - idleDelta
+		}
+		result[i] = float64(busyDelta) / float64(totalDelta) * 100
+		if result[i] < 0 {
+			result[i] = 0
+		} else if result[i] > 100 {
+			result[i] = 100
+		}
+	}
+	s.prevCores = current
+	return result
 }
 
 func (s *Sampler) sampleAt(now time.Time) []Proc {

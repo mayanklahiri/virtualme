@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved for execution |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/001-constitution.md`–`specs/003-controller.md` executed; ideally after 005 (`metrics/`) and 008 (`agent/`) so the audit table is complete, but the gate and README fix stand alone |
 | Produces | Canonical persistence map, a deterministic LLM-locality gate in `scripts/check.sh`, persistence + locality assertions in smoke/e2e, README correction removing non-local modes |
 | Followed by | Binds all future specs (any new stateful component must appear in the §1 table) |
@@ -152,3 +152,17 @@ Run the `/master-update` skill procedure. Expected changes:
 | 10 | `/master-update` run | §5 changes present |
 
 Commit as `spec 007: persistence grounding + deterministic LLM-locality gate`.
+
+## Amendments
+
+### 2026-07-23 — Comment-aware SPA scan and reserved agent lane
+
+The single `scripts/check-llm-local.sh` helper implements all three §2 checks.
+Its SPA-origin scan ignores JavaScript/CSS comments while still rejecting URLs
+in strings and executable/style content. Runtime LLM analysis and SPA analysis
+use `git ls-files`, so the deterministic gate examines the tracked tree (with
+staged files included) and never generated output.
+
+Spec 008 has not executed yet, but `agent/` is created and enforced now because
+it is already part of this spec's canonical map and known top-level set. This
+reserves the persistence lane without adding agent runtime behavior.

@@ -4,6 +4,9 @@ on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: read
+
 env:
   IMAGE: mayanklahiri/virtualme
 
@@ -16,6 +19,22 @@ jobs:
         run: |
           PKG=$(node -p "require('./package.json').version")
           [ "v$PKG" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != package.json v$PKG"; exit 1; }
+      - name: Immutability — version tags absent from Docker Hub
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          for tag in "$VERSION" "$VERSION-amd64" "$VERSION-arm64"; do
+            if docker manifest inspect "$IMAGE:$tag" >/dev/null 2>&1; then
+              echo "refusing to release: $IMAGE:$tag already exists on Docker Hub" >&2
+              exit 1
+            fi
+          done
+      - name: Immutability — version absent from npm
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          if [ -n "$(npm view "virtualme@$VERSION" version 2>/dev/null)" ]; then
+            echo "refusing to release: virtualme@$VERSION already exists on npm" >&2
+            exit 1
+          fi
 
   docker-arch:
     needs: verify
@@ -67,3 +86,19 @@ jobs:
       - run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  github-release:
+    needs: [docker-manifest, npm-publish]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create GitHub Release with generated notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

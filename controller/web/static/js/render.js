@@ -1,17 +1,21 @@
 const iconForService = {
-  xvfb: "i-display",
-  x11vnc: "i-eye",
-  novnc: "i-eye",
-  valkey: "i-db",
-  llama: "i-chip",
-  chromium: "i-globe",
+  xvfb: "monitor",
+  openbox: "monitor",
+  x11vnc: "monitor",
+  novnc: "monitor",
+  valkey: "activity",
+  llama: "bot",
+  chromium: "monitor",
+  controller: "terminal",
 };
 
 function icon(symbol) {
-  const template = document.querySelector("#service-icon");
-  const svg = template.content.firstElementChild.cloneNode(true);
-  const use = svg.querySelector("use");
-  use.setAttribute("href", `#${symbol}`);
+  const svg = document.createElementNS("http:" + "//www.w3.org/2000/svg", "svg");
+  svg.classList.add("icon");
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS("http:" + "//www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `/icons.svg#i-${symbol}`);
+  svg.append(use);
   return svg;
 }
 
@@ -19,7 +23,7 @@ function createService(name) {
   const item = document.createElement("li");
   item.className = "service";
   item.dataset.service = name;
-  item.append(icon(iconForService[name] ?? "i-gauge"));
+  item.append(icon(iconForService[name] ?? "activity"));
 
   const body = document.createElement("div");
   const head = document.createElement("div");
@@ -52,11 +56,15 @@ export function renderState(snapshot) {
   if (snapshot?.type !== "state" || !Array.isArray(snapshot.services)) {
     return;
   }
-  const status = document.querySelector("#status");
+  const status = document.querySelector("#status-summary");
   status.className = `overall ${snapshot.ok ? "ok" : "error"}`;
   document.querySelector("#status-title").textContent = snapshot.ok ? "All systems operational" : "Service attention required";
   document.querySelector("#status-detail").textContent = snapshot.ok ? "All six supervised services are healthy." : "One or more supervised services are unavailable.";
   document.querySelector("#uptime").textContent = formatUptime(snapshot.uptimeSec);
+  document.querySelector("#home-uptime").textContent = formatUptime(snapshot.uptimeSec);
+  const homeHealth = document.querySelector("#home-health");
+  homeHealth.className = `health-pill ${snapshot.ok ? "ok" : "error"}`;
+  homeHealth.textContent = snapshot.ok ? "All systems operational" : "Service attention required";
 
   const list = document.querySelector("#service-list");
   const active = new Set();
@@ -94,7 +102,8 @@ export function renderState(snapshot) {
 }
 
 export function renderStatus(status) {
-  const pill = document.querySelector("#connection");
-  pill.className = `connection ${status}`;
-  pill.textContent = status === "live" ? "live" : `${status}…`;
+  for (const pill of document.querySelectorAll("[data-connection]")) {
+    pill.className = `connection ${status}`;
+    pill.textContent = status === "live" ? "live" : `${status}…`;
+  }
 }

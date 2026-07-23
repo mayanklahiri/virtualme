@@ -5,17 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/mayanklahiri/virtualme/controller/internal/health"
+	"github.com/mayanklahiri/virtualme/controller/internal/metrics"
 	"github.com/mayanklahiri/virtualme/controller/internal/procstat"
 )
-
-// ringSize keeps ~5 minutes of history at the 2 s collection period.
-const ringSize = 150
 
 // System contains lightweight host resource measurements.
 type System struct {
@@ -33,18 +31,18 @@ type Snapshot struct {
 	Services  []health.Service `json:"services"`
 	System    System           `json:"system"`
 	Processes []procstat.Proc  `json:"processes"`
+	Cores     []float64        `json:"cores"`
 }
 
 // Collector periodically gathers, records, and broadcasts snapshots.
 type Collector struct {
 	cfg       health.Config
 	sampler   *procstat.Sampler
+	store     *metrics.Store
+	procRoot  string
 	broadcast func([]byte)
 	started   time.Time
 	period    time.Duration
-
-	mu   sync.Mutex
-	ring []json.RawMessage
 }
 
 // ReadSystem parses Linux procfs load and memory data.
@@ -78,10 +76,12 @@ func ReadSystem(loadavg, meminfo string) System {
 }
 
 // NewCollector creates a two-second state collector sampling procRoot.
-func NewCollector(cfg health.Config, procRoot string, broadcast func([]byte)) *Collector {
+func NewCollector(cfg health.Config, procRoot string, store *metrics.Store, broadcast func([]byte)) *Collector {
 	return &Collector{
 		cfg:       cfg,
 		sampler:   procstat.NewSampler(procRoot),
+		store:     store,
+		procRoot:  procRoot,
 		broadcast: broadcast,
 		started:   time.Now(),
 		period:    2 * time.Second,
@@ -96,44 +96,38 @@ func readFile(path string) string {
 	return string(content)
 }
 
-func (c *Collector) record(payload []byte) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.ring = append(c.ring, json.RawMessage(payload))
-	if len(c.ring) > ringSize {
-		c.ring = c.ring[len(c.ring)-ringSize:]
-	}
-}
-
-// HistoryMessage marshals the ring buffer oldest-first for connect replay.
-func (c *Collector) HistoryMessage() []byte {
-	c.mu.Lock()
-	snapshots := make([]json.RawMessage, len(c.ring))
-	copy(snapshots, c.ring)
-	c.mu.Unlock()
-	payload, _ := json.Marshal(struct {
-		Type      string            `json:"type"`
-		Snapshots []json.RawMessage `json:"snapshots"`
-	}{Type: "history", Snapshots: snapshots})
-	return payload
-}
-
 func (c *Collector) collect() {
 	report := health.Gather(c.cfg)
+	system := ReadSystem(
+		readFile(filepath.Join(c.procRoot, "loadavg")),
+		readFile(filepath.Join(c.procRoot, "meminfo")),
+	)
+	processes := c.sampler.Sample()
+	cores := c.sampler.Cores()
 	snapshot := Snapshot{
 		Type:      "state",
 		Ts:        time.Now().UnixMilli(),
 		UptimeSec: int64(time.Since(c.started) / time.Second),
 		OK:        report.OK,
 		Services:  report.Services,
-		System:    ReadSystem(readFile("/proc/loadavg"), readFile("/proc/meminfo")),
-		Processes: c.sampler.Sample(),
+		System:    system,
+		Processes: processes,
+		Cores:     cores,
 	}
 	payload, err := json.Marshal(snapshot)
 	if err != nil {
 		return
 	}
-	c.record(payload)
+	procMem := make([]int, len(processes))
+	for i, process := range processes {
+		procMem[i] = process.MemMB
+	}
+	if c.store != nil {
+		c.store.Add(metrics.Sample{
+			Ts: snapshot.Ts, Cores: cores, ProcMemMB: procMem,
+			Load1: system.Load1, MemUsedMB: system.MemUsedMB, MemTotalMB: system.MemTotalMB,
+		})
+	}
 	c.broadcast(payload)
 }
 

@@ -63,6 +63,25 @@ func TestRootServesEmbeddedSPA(t *testing.T) {
 	}
 }
 
+func TestSPAFallbackAndMissingAsset(t *testing.T) {
+	desktopURL, _ := url.Parse("http://127.0.0.1:1")
+	handler := newMux(redConfig(t), ws.NewHub(), desktopURL)
+	for _, route := range []string{"/status", "/desktop-view"} {
+		request := httptest.NewRequest(http.MethodGet, route, nil)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Virtual Me") {
+			t.Fatalf("GET %s = %d, body %q", route, response.Code, response.Body.String())
+		}
+	}
+	request := httptest.NewRequest(http.MethodGet, "/js/nope.js", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("missing asset status = %d, want 404", response.Code)
+	}
+}
+
 func redConfig(t *testing.T) health.Config {
 	t.Helper()
 	return health.Config{

@@ -26,7 +26,7 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `.cursor/skills/` | Shared AI operating and development procedures |
 | `specs/` | Numbered, authoritative implementation specs |
 | `docker/` | Container image and supervised services (spec 002) |
-| `controller/` | Go control plane (specs 002–003) |
+| `controller/` | Go control plane, browser-agent loop, and multi-page console (specs 002–005, 008) |
 
 ## Commands
 
@@ -40,7 +40,13 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `./cli.sh <cmd>` | Run the CLI from a checkout |
 | `bash test/smoke.sh` | Run the container smoke test (spec 002) |
 | `bash test/e2e.sh` | Run full end-to-end tests (spec 003) |
-| `bash controller/tools/fetch-assets.sh` | Fetch pinned web assets (spec 003) |
+| `E2E_AGENT=1 bash test/e2e.sh` | Include the slow real vision/browser-agent probe |
+| `bash controller/tools/fetch-assets.sh` | Fetch pinned fonts and icons (specs 003, 005) |
+
+The controller's browser agent combines vision screenshots, compact rendered
+DOM and read-only CDP observations, OS-level `xdotool` mouse/keyboard
+actuation, and bounded bash execution. CDP never performs input or navigation;
+agent screenshots and step logs persist under `$VM_DATA_DIR/agent/`.
 
 ## Skills
 

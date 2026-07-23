@@ -3,6 +3,7 @@ FROM golang:1.26-trixie AS controller-build
 WORKDIR /src
 COPY package.json package-lock.json ./
 COPY scripts/build-web.sh scripts/build-web.sh
+COPY scripts/build-icons.mjs scripts/build-icons.mjs
 COPY controller/ controller/
 RUN if [ -f controller/tools/fetch-assets.sh ]; then \
       apt-get update && apt-get install -y --no-install-recommends unzip nodejs npm \
@@ -38,6 +39,13 @@ COPY docker/layers/008-s6-overlay.sh /tmp/layers/008-s6-overlay.sh
 RUN bash /tmp/layers/008-s6-overlay.sh
 COPY docker/layers/009-user.sh /tmp/layers/009-user.sh
 RUN bash /tmp/layers/009-user.sh
+COPY docker/layers/010-vision-projector.sh /tmp/layers/010-vision-projector.sh
+RUN bash /tmp/layers/010-vision-projector.sh
+COPY docker/layers/011-agent-tools.sh /tmp/layers/011-agent-tools.sh
+RUN bash /tmp/layers/011-agent-tools.sh
+COPY --chmod=0755 docker/rootfs/usr/local/lib/virtualme/system-manifest.sh /usr/local/lib/virtualme/system-manifest.sh
+COPY docker/layers/012-manifest.sh /tmp/layers/012-manifest.sh
+RUN bash /tmp/layers/012-manifest.sh
 
 # Fast-moving top: service tree + controller binary.
 COPY docker/rootfs/ /
@@ -52,8 +60,11 @@ ENV LANG=C.UTF-8 \
     VM_DISPLAY=:99 \
     VM_RESOLUTION=1600x900x24 \
     VM_MODEL_PATH=/opt/models/gemma-4-E2B-it-Q4_0.gguf \
+    VM_MMPROJ_PATH=/opt/models/mmproj-gemma-4-E2B-F16.gguf \
     VM_LLAMA_PORT=8081 \
-    VM_LLAMA_CTX=4096 \
+    VM_LLAMA_CTX=8192 \
+    VM_AGENT_MAX_STEPS=25 \
+    VM_AGENT_KEEP_TASKS=20 \
     VM_HTTP_ADDR=:8080 \
     S6_READ_ONLY_ROOT=1 \
     S6_BEHAVIOUR_IF_STAGE2_FAILS=2 \

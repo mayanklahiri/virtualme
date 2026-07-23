@@ -118,3 +118,34 @@ func (v *valkeyClient) lrange(key string, start, stop int) ([]string, error) {
 	}
 	return result, nil
 }
+
+func (v *valkeyClient) del(keys ...string) error {
+	_, err := v.do(append([]string{"DEL"}, keys...)...)
+	return err
+}
+
+func (v *valkeyClient) hincrby(key, field string, value int64) error {
+	_, err := v.do("HINCRBY", key, field, strconv.FormatInt(value, 10))
+	return err
+}
+
+func (v *valkeyClient) hgetall(key string) (map[string]int64, error) {
+	reply, err := v.do("HGETALL", key)
+	if err != nil {
+		return nil, err
+	}
+	items, ok := reply.([]any)
+	if !ok || len(items)%2 != 0 {
+		return nil, fmt.Errorf("valkey: HGETALL reply is %T, want even array", reply)
+	}
+	result := make(map[string]int64, len(items)/2)
+	for i := 0; i < len(items); i += 2 {
+		field, fieldOK := items[i].(string)
+		value, valueOK := items[i+1].(string)
+		number, parseErr := strconv.ParseInt(value, 10, 64)
+		if fieldOK && valueOK && parseErr == nil {
+			result[field] = number
+		}
+	}
+	return result, nil
+}

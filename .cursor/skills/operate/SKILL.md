@@ -7,13 +7,15 @@ description: Install, run, and troubleshoot Virtual Me via the CLI (npx virtualm
 
 Virtual Me ships as a Docker image (`mayanklahiri/virtualme`) driven by a
 zero-dependency Node CLI (`npx virtualme`, or `./cli.sh` from a checkout).
+All v1 inference uses the container's loopback-only llama.cpp server; no
+prompts or model requests are sent to external providers.
 
 ## Commands
 
 | Command | Effect |
 |---|---|
 | `npx virtualme doctor` | Verify node/docker/daemon (+ git hooks in a checkout) |
-| `npx virtualme start [--data <dir>]` | Run the container unprivileged (host uid/gid) with tmpfs `/run`+`/tmp`, port 8080, and the host data dir (default `~/.virtualme`, created if missing) mounted rw at the container's `~/.virtualme` |
+| `npx virtualme start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>]` | Run unprivileged with tmpfs `/run`+`/tmp`, port 8080, and the host data dir mounted rw; optionally force Chromium's sandbox fallback or pass Docker GPU access |
 | `npx virtualme status` | Container state + `/healthz` per-service report |
 | `npx virtualme logs -f` | Follow container logs |
 | `npx virtualme stop` | Stop and remove the container (data dir survives) |
@@ -25,13 +27,29 @@ Env overrides: `VIRTUALME_IMAGE`, `VIRTUALME_TAG`, `VIRTUALME_DATA`.
 
 ## Endpoints (container running)
 
-- `http://localhost:8080/` — embedded control-plane SPA (live metrics charts + chat panel)
+- `http://localhost:8080/` — console home
+- `http://localhost:8080/status` — service status and tiered metrics
+- `http://localhost:8080/chat` — shared local-model chat
+- `http://localhost:8080/desktop-view` — embedded noVNC desktop
 - `http://localhost:8080/healthz` — aggregate JSON health
-- `ws://localhost:8080/ws` — state snapshots with history replay + the shared chat protocol
+- `ws://localhost:8080/ws` — live state, requested metrics history, and shared chat
 - `http://localhost:8080/desktop/` — proxied noVNC and websockify
 
 The desktop UI opens `/desktop/vnc.html` with autoconnect, scaling, and the
 proxied `/desktop/websockify` websocket path.
+
+## Browser-agent tasks
+
+Give an operating task in `/chat`, for example: “Open example.com and tell me
+the page title.” The agent observes screenshots, rendered DOM, and read-only
+CDP state; all browser actions use `xdotool` mouse/keyboard input on `:99`.
+The chat timeline shows each tool step. Use the Stop button to cancel an
+in-flight model request, shell command, or runaway task.
+
+Full screenshots and `steps.jsonl` are retained under
+`~/.virtualme/agent/<taskId>/` for the most recent 20 tasks. CPU-only vision
+steps can take tens of seconds. `--gpus all` passes GPU devices and marks
+`VM_LLAMA_GPU=1`, but v1 still ships the pinned CPU llama.cpp build.
 
 ## Troubleshooting
 
@@ -40,3 +58,9 @@ proxied `/desktop/websockify` websocket path.
 3. Slow first health: the ~3 GB Gemma model loads at startup; allow up to 5 minutes on a Raspberry Pi.
 4. RAM: 8 GB minimum (Pi 5 or Pi 4 8GB). The LLM alone needs ~4 GB.
 5. Trust model: prototype has NO auth/TLS — only run on a trusted private network.
+6. Metrics history: persisted multi-resolution files live under `~/.virtualme/metrics/`.
+7. Browser window: closing Chromium auto-restarts it with one blank tab.
+8. Browser profile: settings persist under `~/.virtualme/chromium/`.
+9. Browser sandbox: namespace sandboxing is automatic when supported; use `--no-browser-sandbox` to force the warning-suppressed fallback.
+10. Data location: all persistent state is under `~/.virtualme/`; see the canonical table in `specs/007-persistence-locality.md` §1a.
+11. Agent artifacts: inspect `~/.virtualme/agent/<taskId>/steps.jsonl` and `step-*.jpg`; Stop cancels the current task.

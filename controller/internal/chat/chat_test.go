@@ -2,6 +2,7 @@ package chat
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,8 +14,69 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mayanklahiri/virtualme/controller/internal/agent"
 	"github.com/mayanklahiri/virtualme/controller/internal/ws"
 )
+
+type respServer struct {
+	addr     string
+	commands chan []string
+	close    func()
+}
+
+func newRESPServer(t *testing.T) *respServer {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commands := make(chan []string, 64)
+	stats := map[string]int64{}
+	done := make(chan struct{})
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				close(done)
+				return
+			}
+			reply, parseErr := parseReply(bufio.NewReader(conn))
+			items, _ := reply.([]any)
+			args := make([]string, 0, len(items))
+			for _, item := range items {
+				args = append(args, fmt.Sprint(item))
+			}
+			commands <- args
+			switch {
+			case parseErr != nil:
+				_, _ = io.WriteString(conn, "-ERR parse\r\n")
+			case args[0] == "HINCRBY":
+				value := int64(0)
+				_, _ = fmt.Sscan(args[3], &value)
+				stats[args[2]] += value
+				fmt.Fprintf(conn, ":%d\r\n", stats[args[2]])
+			case args[0] == "HGETALL":
+				fmt.Fprintf(conn, "*8\r\n$7\r\nqueries\r\n$%d\r\n%d\r\n$12\r\npromptTokens\r\n$%d\r\n%d\r\n$16\r\ncompletionTokens\r\n$%d\r\n%d\r\n$5\r\ngenMs\r\n$%d\r\n%d\r\n",
+					len(fmt.Sprint(stats["queries"])), stats["queries"],
+					len(fmt.Sprint(stats["promptTokens"])), stats["promptTokens"],
+					len(fmt.Sprint(stats["completionTokens"])), stats["completionTokens"],
+					len(fmt.Sprint(stats["genMs"])), stats["genMs"])
+			case args[0] == "LTRIM" || args[0] == "DEL":
+				_, _ = io.WriteString(conn, "+OK\r\n")
+			default:
+				_, _ = io.WriteString(conn, ":1\r\n")
+			}
+			_ = conn.Close()
+		}
+	}()
+	server := &respServer{addr: listener.Addr().String(), commands: commands}
+	server.close = func() {
+		_ = listener.Close()
+		<-done
+	}
+	t.Cleanup(server.close)
+	return server
+}
 
 // sseServer streams the given deltas as OpenAI-style SSE, then [DONE].
 // If hold is non-nil the handler blocks on it before streaming.
@@ -55,6 +117,8 @@ func waitEvent(t *testing.T, events chan []byte, wantType string) []byte {
 		case payload := <-events:
 			if got := eventType(payload); got == wantType {
 				return payload
+			} else if got == "llm-status" {
+				continue
 			} else {
 				t.Fatalf("event %q arrived, want %q (payload %s)", got, wantType, payload)
 			}
@@ -97,6 +161,31 @@ func TestStreamingRoundTrip(t *testing.T) {
 	}
 	if service.busy {
 		t.Fatal("busy flag not cleared")
+	}
+}
+
+type noToolExecutor struct{}
+
+func (noToolExecutor) Definitions() []agent.Tool { return nil }
+func (noToolExecutor) Execute(context.Context, string, json.RawMessage) (agent.ToolResult, error) {
+	return agent.ToolResult{}, nil
+}
+
+func TestAgentRoutingPersistsFinalReply(t *testing.T) {
+	llama := sseServer(t, []string{"agent ", "reply"}, nil)
+	events := make(chan []byte, 64)
+	service := NewWithAgent("127.0.0.1:1", llama.URL, func(payload []byte) { events <- payload }, agent.Config{
+		DataDir: t.TempDir(), Executor: noToolExecutor{},
+	})
+	service.HandleClientMessage(nil, []byte(`{"type":"chat","text":"use agent"}`))
+	waitEvent(t, events, "chat-message")
+	waitEvent(t, events, "agent-status")
+	waitEvent(t, events, "chat-delta")
+	waitEvent(t, events, "chat-delta")
+	waitEvent(t, events, "agent-status")
+	done := waitEvent(t, events, "chat-done")
+	if !strings.Contains(string(done), `"text":"agent reply"`) {
+		t.Fatalf("chat-done = %s", done)
 	}
 }
 
@@ -234,6 +323,134 @@ func TestLlamaHTTPErrorBroadcastsAndClearsBusy(t *testing.T) {
 			t.Fatal("busy flag never cleared after llama error")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestStopPersistsPartialAndClearsBusy(t *testing.T) {
+	firstDelta := make(chan struct{})
+	llama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n")
+		flusher.Flush()
+		close(firstDelta)
+		<-r.Context().Done()
+	}))
+	defer llama.Close()
+	events := make(chan []byte, 64)
+	service := New("127.0.0.1:1", llama.URL, func(payload []byte) { events <- payload })
+	service.HandleClientMessage(nil, []byte(`{"type":"chat","text":"long"}`))
+	<-firstDelta
+	for {
+		payload := <-events
+		if eventType(payload) == "chat-delta" {
+			break
+		}
+	}
+	service.HandleClientMessage(nil, []byte(`{"type":"chat-stop"}`))
+	var done []byte
+	deadline := time.After(5 * time.Second)
+	for done == nil {
+		select {
+		case payload := <-events:
+			if eventType(payload) == "chat-done" {
+				done = payload
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for stopped chat-done")
+		}
+	}
+	if !strings.Contains(string(done), `"stopped":true`) || !strings.Contains(string(done), `"text":"partial"`) {
+		t.Fatalf("chat-done = %s", done)
+	}
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	if service.busy || len(service.history) != 2 || service.history[1].Text != "partial" {
+		t.Fatalf("state busy=%v history=%+v", service.busy, service.history)
+	}
+}
+
+func TestClearBroadcastsEmptyAndDeletesKeys(t *testing.T) {
+	valkey := newRESPServer(t)
+	events := make(chan []byte, 4)
+	service := New(valkey.addr, "http://127.0.0.1:1", func(payload []byte) { events <- payload })
+	service.history = []Message{{Role: "user", Text: "old"}}
+	service.HandleClientMessage(nil, []byte(`{"type":"chat-clear"}`))
+	command := <-valkey.commands
+	if len(command) != 3 || command[0] != "DEL" || command[1] != historyKey || command[2] != statsKey {
+		t.Fatalf("DEL command = %v", command)
+	}
+	if got := waitEvent(t, events, "chat-history"); !strings.Contains(string(got), `"messages":[]`) {
+		t.Fatalf("history event = %s", got)
+	}
+	if got := waitEvent(t, events, "chat-stats"); !strings.Contains(string(got), `"queries":0`) {
+		t.Fatalf("stats event = %s", got)
+	}
+}
+
+func TestStatusSequenceAndTimingsStats(t *testing.T) {
+	valkey := newRESPServer(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/slots" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `[{"state":"prompt processing","prompt_n":3,"prompt_total":7}]`)
+			return
+		}
+		time.Sleep(650 * time.Millisecond)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}],\"timings\":{\"prompt_n\":7,\"predicted_n\":2,\"predicted_per_second\":4}}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+	events := make(chan []byte, 128)
+	service := New(valkey.addr, server.URL+"/v1/chat/completions", func(payload []byte) { events <- payload })
+	service.HandleClientMessage(nil, []byte(`{"type":"chat","text":"status"}`))
+	var phases []string
+	var stats Stats
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case payload := <-events:
+			switch eventType(payload) {
+			case "llm-status":
+				var status llmStatus
+				_ = json.Unmarshal(payload, &status)
+				if len(phases) == 0 || phases[len(phases)-1] != status.Phase {
+					phases = append(phases, status.Phase)
+				}
+			case "chat-stats":
+				_ = json.Unmarshal(payload, &stats)
+				if stats.Queries == 1 {
+					if strings.Join(phases, ",") != "sending,processing,generating" &&
+						strings.Join(phases, ",") != "sending,processing,generating,idle" {
+						t.Fatalf("phases = %v", phases)
+					}
+					if stats.PromptTokens != 7 || stats.CompletionTokens != 2 || stats.GenMS <= 0 {
+						t.Fatalf("stats = %+v", stats)
+					}
+					return
+				}
+			}
+		case <-deadline:
+			t.Fatalf("timed out; phases=%v stats=%+v", phases, stats)
+		}
+	}
+}
+
+func TestSlotsUnavailableDoesNotFailChat(t *testing.T) {
+	llama := sseServer(t, []string{"ok"}, nil)
+	events := make(chan []byte, 64)
+	service := New("127.0.0.1:1", llama.URL, func(payload []byte) { events <- payload })
+	service.slotsURL = "http://127.0.0.1:1/slots"
+	service.HandleClientMessage(nil, []byte(`{"type":"chat","text":"hi"}`))
+	for {
+		payload := <-events
+		if eventType(payload) == "chat-done" {
+			return
+		}
+		if eventType(payload) == "chat-error" {
+			t.Fatalf("chat failed: %s", payload)
+		}
 	}
 }
 

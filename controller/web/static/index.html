@@ -1,102 +1,114 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="modern" data-variant="light">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Virtual Me</title>
+    <script>
+      (() => {
+        const savedTheme = localStorage.getItem("vm-theme");
+        const savedVariant = localStorage.getItem("vm-variant");
+        const theme = ["modern", "editorial", "terminal", "warm", "contrast"].includes(savedTheme) ? savedTheme : "modern";
+        const preference = ["auto", "light", "dark"].includes(savedVariant) ? savedVariant : "auto";
+        const variant = preference === "auto"
+          ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+          : preference;
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.variant = variant;
+      })();
+    </script>
     <link rel="stylesheet" href="/css/app.css">
     <script type="module" src="/js/app.js"></script>
   </head>
   <body>
-    <svg hidden class="icon-sprite" aria-hidden="true">
-      <symbol id="i-display" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></symbol>
-      <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
-      <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></symbol>
-      <symbol id="i-db" viewBox="0 0 24 24"><path d="M4 6c0-2 4-3 8-3s8 1 8 3-4 3-8 3-8-1-8-3Z"/><path d="M4 6v6c0 2 4 3 8 3s8-1 8-3V6M4 12v6c0 2 4 3 8 3s8-1 8-3v-6"/></symbol>
-      <symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 1v5M15 1v5M9 18v5M15 18v5M1 9h5M1 15h5M18 9h5M18 15h5"/><rect x="9" y="9" width="6" height="6"/></symbol>
-      <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 18a9 9 0 1 1 16 0"/><line x1="12" y1="12" x2="17" y2="8"/><circle cx="12" cy="12" r="1"/></symbol>
-    </svg>
-    <template id="service-icon"><svg class="icon" aria-hidden="true"><use href="#i-gauge"/></svg></template>
-
-    <header>
-      <h1>Virtual Me</h1>
-      <span id="connection" class="connection connecting" aria-live="polite">connecting…</span>
+    <header class="topbar">
+      <button id="nav-open" class="icon-button nav-open" type="button" aria-expanded="false" aria-controls="sidebar" aria-label="Open navigation">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-menu"/></svg>
+      </button>
+      <strong id="page-title">Home</strong>
+      <span class="connection connecting" data-connection aria-live="polite">connecting…</span>
     </header>
+    <div id="nav-curtain" class="nav-curtain" hidden></div>
+    <nav id="sidebar" class="sidebar" aria-label="Primary">
+      <div class="brand"><svg class="icon" aria-hidden="true"><use href="/icons.svg#i-bot"/></svg><strong>Virtual Me</strong></div>
+      <button id="nav-close" class="icon-button nav-close" type="button" aria-label="Close navigation">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-x"/></svg>
+      </button>
+      <div class="nav-links">
+        <a href="/" data-nav><svg class="icon"><use href="/icons.svg#i-house"/></svg>Home</a>
+        <a href="/status" data-nav><svg class="icon"><use href="/icons.svg#i-activity"/></svg>Status</a>
+        <a href="/chat" data-nav><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg>Chat</a>
+        <a href="/desktop-view" data-nav><svg class="icon"><use href="/icons.svg#i-monitor"/></svg>Desktop</a>
+      </div>
+      <div class="sidebar-footer">
+        <fieldset class="theme-picker">
+          <legend>Theme</legend>
+          <div id="theme-options" class="theme-options"></div>
+          <div id="variant-options" class="variant-options" aria-label="Color variant"></div>
+        </fieldset>
+        <span class="connection connecting" data-connection aria-live="polite">connecting…</span>
+      </div>
+    </nav>
 
     <main>
-      <section id="status" class="overall pending" aria-labelledby="status-title">
-        <div>
-          <h2 id="status-title">Waiting for controller</h2>
-          <p id="status-detail">Service state will appear when the live connection opens.</p>
+      <section data-page="home" aria-labelledby="home-title">
+        <div class="hero">
+          <p class="eyebrow">Private personal background agent</p>
+          <h1 id="home-title">Welcome to Virtual Me</h1>
+          <p>Virtual Me runs a private browser, local language model, management console, and agent loop entirely on your own computer.</p>
+          <div class="home-facts">
+            <span id="home-health" class="health-pill pending">Waiting for controller</span>
+            <span>Uptime <strong id="home-uptime">—</strong></span>
+            <span>Model <strong>Gemma 4 E2B Q4_0</strong></span>
+          </div>
         </div>
-        <p class="uptime">Uptime <strong id="uptime">—</strong></p>
+        <div class="quick-links">
+          <a href="/status" data-nav><svg class="icon"><use href="/icons.svg#i-activity"/></svg><strong>Status</strong><span>Inspect services and metrics</span></a>
+          <a href="/chat" data-nav><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg><strong>Chat</strong><span>Talk to the local model</span></a>
+          <a href="/desktop-view" data-nav><svg class="icon"><use href="/icons.svg#i-monitor"/></svg><strong>Desktop</strong><span>Open the private browser</span></a>
+        </div>
+        <footer><span>Virtual Me v0.1.0</span><a href="https://github.com/mayanklahiri/virtualme" target="_blank" rel="noopener noreferrer">GitHub</a></footer>
       </section>
 
-      <section id="services" aria-labelledby="services-title">
-        <h2 id="services-title">Services</h2>
+      <section data-page="status" hidden aria-labelledby="status-page-title">
+        <h1 id="status-page-title">Status</h1>
+        <div id="status-summary" class="overall pending">
+          <div><h2 id="status-title">Waiting for controller</h2><p id="status-detail">Service state will appear when the live connection opens.</p></div>
+          <p>Uptime <strong id="uptime">—</strong></p>
+        </div>
+        <h2>Services</h2>
         <ul id="service-list" class="services" aria-live="polite"></ul>
-      </section>
-
-      <section id="metrics" aria-labelledby="metrics-title">
-        <h2 id="metrics-title">Process metrics</h2>
-        <div class="charts">
-          <figure class="chart">
-            <figcaption>CPU (% of one core)</figcaption>
-            <canvas id="chart-cpu" tabindex="0" role="img" aria-label="Per-process CPU usage chart"></canvas>
-          </figure>
-          <figure class="chart">
-            <figcaption>Memory (MiB)</figcaption>
-            <canvas id="chart-mem" tabindex="0" role="img" aria-label="Per-process memory usage chart"></canvas>
-          </figure>
+        <div class="system-grid">
+          <article class="metric"><div><label for="load">One-minute load <strong id="load-value">0.00</strong></label><meter id="load" min="0" max="8" value="0">0</meter></div></article>
+          <article class="metric"><div><label for="memory">Memory <strong id="memory-value">0 / 0 MB</strong></label><meter id="memory" min="0" max="1" value="0">0</meter></div></article>
         </div>
-        <ul id="chart-legend" class="legend" aria-hidden="true"></ul>
+        <div id="lookback" class="lookback" role="radiogroup" aria-label="Metrics lookback"></div>
+        <div class="charts">
+          <figure class="chart"><figcaption>CPU per core (stacked %)</figcaption><canvas id="chart-cpu" tabindex="0" role="img" aria-label="Per-core CPU usage"></canvas><ul id="core-legend" class="legend"></ul></figure>
+          <figure class="chart"><figcaption>Memory per process (MiB)</figcaption><canvas id="chart-mem" tabindex="0" role="img" aria-label="Per-process memory usage"></canvas><ul id="process-legend" class="legend"></ul></figure>
+        </div>
         <div id="chart-tooltip" class="tooltip" role="status" hidden></div>
       </section>
 
-      <section id="system" aria-labelledby="system-title">
-        <h2 id="system-title">System</h2>
-        <div class="system-grid">
-          <article class="metric">
-            <svg class="icon" aria-hidden="true"><use href="#i-gauge"/></svg>
-            <div>
-              <label for="load">One-minute load <strong id="load-value">0.00</strong></label>
-              <meter id="load" min="0" max="8" value="0">0</meter>
-            </div>
-          </article>
-          <article class="metric">
-            <svg class="icon" aria-hidden="true"><use href="#i-chip"/></svg>
-            <div>
-              <label for="memory">Memory <strong id="memory-value">0 / 0 MB</strong></label>
-              <meter id="memory" min="0" max="1" value="0">0</meter>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section id="chat" aria-labelledby="chat-title">
-        <h2 id="chat-title">Chat</h2>
+      <section data-page="chat" hidden class="chat-page" aria-labelledby="chat-title">
+        <div class="page-heading"><h1 id="chat-title">Chat</h1><button id="chat-clear" class="secondary" type="button"><svg class="icon"><use href="/icons.svg#i-trash-2"/></svg><span>Clear</span></button></div>
         <ul id="chat-log" class="chat-log" aria-live="polite"></ul>
+        <div id="chat-stats" class="stats-strip">0 queries · 0 prompt + 0 completion tokens · 0 s thinking</div>
         <form id="chat-form" class="chat-form">
           <textarea id="chat-input" rows="2" maxlength="4096" placeholder="Message Virtual Me… (Enter to send, Shift+Enter for a new line)" aria-label="Chat message" disabled></textarea>
           <div class="chat-actions">
-            <span id="chat-count" class="chat-count">0 / 4096</span>
-            <button id="chat-send" type="submit" disabled>Send</button>
+            <span id="chat-count">0 / 4096</span>
+            <button id="chat-stop" type="button" hidden><svg class="icon"><use href="/icons.svg#i-square"/></svg>Stop</button>
+            <button id="chat-send" type="submit" disabled><svg class="icon"><use href="/icons.svg#i-send"/></svg>Send</button>
           </div>
+          <p id="llm-status" class="llm-status" aria-live="polite"></p>
         </form>
       </section>
 
-      <section id="desktop" class="desktop" aria-labelledby="desktop-title">
-        <div>
-          <h2 id="desktop-title">Virtual desktop</h2>
-          <p>Open the private Chromium session through noVNC.</p>
-        </div>
-        <a class="button" href="/desktop/vnc.html?autoconnect=1&amp;resize=scale&amp;path=desktop/websockify" target="_blank" rel="noopener">Open desktop</a>
+      <section data-page="desktop" hidden class="desktop-page" aria-labelledby="desktop-title">
+        <div class="page-heading"><h1 id="desktop-title">Desktop</h1><a class="button" href="/desktop/vnc.html?autoconnect=1&amp;resize=scale&amp;path=desktop/websockify" target="_blank" rel="noopener"><svg class="icon"><use href="/icons.svg#i-external-link"/></svg>Pop out</a></div>
+        <iframe title="Virtual desktop" src="/desktop/vnc.html?autoconnect=1&amp;resize=scale&amp;path=desktop/websockify"></iframe>
       </section>
     </main>
-
-    <footer>
-      <span>Virtual Me v0.1.0</span>
-      <a href="https://github.com/mayanklahiri/virtualme">GitHub repository</a>
-    </footer>
   </body>
 </html>

@@ -9,8 +9,13 @@ DIST=controller/web/dist
 ESBUILD=node_modules/.bin/esbuild
 
 [[ -x "$ESBUILD" ]] || { echo "build-web: esbuild missing; run: npm install" >&2; exit 1; }
-[[ -f "$SRC/fonts/InterVariable.woff2" && -f "$SRC/fonts/InterVariable-Italic.woff2" ]] \
-  || { echo "build-web: fonts missing; run: bash controller/tools/fetch-assets.sh" >&2; exit 1; }
+FONTS=(InterVariable.woff2 InterVariable-Italic.woff2 JetBrainsMono.woff2 Fraunces.woff2 SourceSerif4.woff2 Nunito.woff2 NunitoSans.woff2 AtkinsonHyperlegibleNext.woff2 AtkinsonHyperlegibleMono.woff2)
+for font in "${FONTS[@]}"; do
+  [[ -s "$SRC/fonts/$font" ]] \
+    || { echo "build-web: assets missing; run: bash controller/tools/fetch-assets.sh" >&2; exit 1; }
+done
+[[ -d "$SRC/icons" ]] && compgen -G "$SRC/icons/*.svg" >/dev/null \
+  || { echo "build-web: assets missing; run: bash controller/tools/fetch-assets.sh" >&2; exit 1; }
 
 rm -rf "$DIST"
 mkdir -p "$DIST/js" "$DIST/css" "$DIST/fonts"
@@ -20,4 +25,5 @@ mkdir -p "$DIST/js" "$DIST/css" "$DIST/fonts"
   --sourcemap --sources-content=true --outfile="$DIST/css/app.css"
 cp "$SRC/index.html" "$DIST/index.html"
 cp "$SRC/fonts/"*.woff2 "$DIST/fonts/"
+node scripts/build-icons.mjs
 echo "build-web: OK"

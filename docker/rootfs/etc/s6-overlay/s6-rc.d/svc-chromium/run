@@ -1,6 +1,43 @@
 #!/command/with-contenv bash
 export DISPLAY="$VM_DISPLAY"
+PROFILE="$VM_DATA_DIR/chromium"
+
+# Wait for X (same pattern as openbox/x11vnc).
 until xdpyinfo >/dev/null 2>&1; do sleep 0.2; done
-exec chromium --no-sandbox --disable-gpu --no-first-run \
-  --disable-session-crashed-bubble --user-data-dir="$VM_DATA_DIR/chromium" \
-  --start-maximized about:blank
+
+# Mark the previous session clean so Chromium never offers crash recovery.
+PREFS="$PROFILE/Default/Preferences"
+if [ -f "$PREFS" ]; then
+  sed -i \
+    's/"exit_type"[[:space:]]*:[[:space:]]*"[^"]*"/"exit_type":"Normal"/g; s/"exited_cleanly"[[:space:]]*:[[:space:]]*false/"exited_cleanly":true/g' \
+    "$PREFS" || true
+fi
+
+# Remove only session/tab restore state; preserve settings, cookies, and history.
+rm -rf "$PROFILE/Default/Sessions" \
+       "$PROFILE/Default/Session Storage" \
+       "$PROFILE/Default/Current Tabs" \
+       "$PROFILE/Default/Current Session" \
+       "$PROFILE/Default/Last Tabs" \
+       "$PROFILE/Default/Last Session" 2>/dev/null || true
+
+# shellcheck source=/dev/null
+source /usr/local/lib/virtualme/chromium-sandbox.sh
+
+exec chromium \
+  "${SANDBOX_FLAGS[@]}" \
+  --user-data-dir="$PROFILE" \
+  --class=chromium \
+  --no-first-run \
+  --no-default-browser-check \
+  --disable-session-crashed-bubble \
+  --hide-crash-restore-bubble \
+  --disable-features=InfiniteSessionRestore,Translate \
+  --disable-background-mode \
+  --disable-backgrounding-occluded-windows \
+  --disable-renderer-backgrounding \
+  --remote-debugging-port=9222 \
+  --remote-debugging-address=127.0.0.1 \
+  --start-maximized \
+  --window-position=0,0 \
+  about:blank

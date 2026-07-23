@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved for execution |
+| Status | Executed (2026-07-22) |
 | Depends on | `specs/001-constitution.md`–`specs/003-controller.md` executed (full controller + SPA live, e2e green) |
 | Produces | Multi-page console SPA (Home / Status / Chat / Desktop, history-API routing, mobile offcanvas nav), five dynamic themes with pinned self-hosted fonts + Lucide icon sprite, persistent multi-resolution metrics store with selectable lookback, per-core CPU sampling, markdown chat with stop/clear/copy + conversation stats + fine-grained LLM status, agent-step UI hooks for spec 008, extended `fetch-assets.sh`/`build-web.sh`, e2e additions |
 | Followed by | `specs/008-browser-agent.md` (produces the agent frames whose rendering is defined here) |
@@ -325,3 +325,9 @@ Run the `/master-update` skill procedure. Expected changes:
 | 12 | `/master-update` run | §13 changes present |
 
 Commit as `spec 005: multi-page console, persistent tiered metrics, themes, markdown chat, LLM status`.
+
+## Amendments
+
+### 2026-07-22 — Lucide archive has no GitHub brand icon
+
+The pinned Lucide `1.26.0` archive does not contain `github.svg`; Lucide intentionally excludes brand icons. The `github` entry is therefore removed from the fixed extraction list. The console's GitHub link remains text-only, and no unpinned or fabricated replacement asset is introduced.

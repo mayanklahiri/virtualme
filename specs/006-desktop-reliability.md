@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved for execution |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/002-container.md` executed (desktop stack + Chromium service live) |
 | Produces | Reliable Chromium supervision (deterministic restart, single tab, no restore/crash prompts), best-effort real sandbox with graceful fallback, profile-persistence fix; a Chromium watchdog s6 service; CLI + smoke-test updates |
 | Followed by | Independent of 004/005/007; `specs/008-browser-agent.md` builds on the stable Chromium |
@@ -209,3 +209,26 @@ Run the `/master-update` skill procedure. Expected changes:
 | 10 | `/master-update` run | §7 changes present |
 
 Commit as `spec 006: reliable Chromium supervision, sandbox fallback, profile persistence`.
+
+## Amendments
+
+### 2026-07-23 — Runtime user-namespace probe and isolated smoke coverage
+
+The sandbox helper always runs the `unshare --user --map-root-user` probe after
+the sysctl permits user namespaces, instead of trusting the sysctl value alone.
+Container seccomp or LSM policy can still reject namespace creation when the
+host sysctl is `1`; the executable probe is the reliable graceful-fallback
+boundary required by §4.
+
+The smoke test uses a per-process container name so it cannot replace an
+unrelated user container. It also automates acceptance items 5 and 9: unmapping
+the live browser window exercises the watchdog's process-alive/window-absent
+path, and an isolated replacement container verifies the forced
+`--no-sandbox --test-type` launch.
+
+The prior s6/read-only-root concern required no code change. The tracked tree
+contains the user bundle only under `user-bundles.d/` (not the root-owned
+`s6-rc.d/user` path that s6 rewrites), `/run` remains an executable uid-owned
+tmpfs, `S6_READ_ONLY_ROOT=1` stages s6 runtime state there, and the container
+root filesystem remains mounted read-write. No numbered Docker layer was
+edited.

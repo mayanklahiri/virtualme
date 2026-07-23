@@ -10,10 +10,15 @@ step() { echo "check: $*"; }
 step "shell syntax (bash -n)"
 shopt -s nullglob
 for f in cli.sh scripts/*.sh .githooks/* test/*.sh docker/layers/*.sh \
-         docker/rootfs/etc/cont-init.d/* controller/tools/*.sh; do
+         docker/rootfs/etc/cont-init.d/* \
+         docker/rootfs/etc/s6-overlay/s6-rc.d/*/{run,finish} \
+         docker/rootfs/usr/local/lib/virtualme/*.sh controller/tools/*.sh; do
   bash -n "$f" || fail "bash -n $f"
 done
 shopt -u nullglob
+
+step "llm locality + spa origins + persistence map"
+bash scripts/check-llm-local.sh || fail "llm locality"
 
 step "eslint"
 node_modules/.bin/eslint . || fail eslint
@@ -30,11 +35,6 @@ node bin/virtualme.js version >/dev/null || fail "cli version"
 
 if [[ -d controller && "${CHECK_SKIP_GO:-0}" != "1" ]]; then
   step "go gates"
-  if [[ -f controller/web/static/index.html ]] &&
-     { [[ ! -f controller/web/static/fonts/InterVariable.woff2 ]] ||
-       [[ ! -f controller/web/static/fonts/InterVariable-Italic.woff2 ]]; }; then
-    fail "fonts missing; run: bash controller/tools/fetch-assets.sh (one-time, needs network)"
-  fi
   if [[ -f scripts/build-web.sh ]]; then
     step "web build (esbuild minify + sourcemaps)"
     bash scripts/build-web.sh || fail "build-web"
