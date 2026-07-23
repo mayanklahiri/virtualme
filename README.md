@@ -48,7 +48,7 @@ The first start loads a ~3 GB model; allow a few minutes for `/healthz` to becom
 | `virtualme help` | Show usage and every command |
 | `virtualme version` | Print the package version |
 | `virtualme doctor` | Check Node, Docker, daemon access, hooks, CPU, and RAM |
-| `virtualme start [--data <dir>]` | Run the container unprivileged (host uid/gid) with a read-only root, port 8080, and the data dir mounted rw |
+| `virtualme start [--data <dir>]` | Run the container unprivileged (host uid/gid) with port 8080 and the data dir mounted rw |
 | `virtualme stop` | Stop and remove the container; the data directory survives |
 | `virtualme status` | Show container state and service health |
 | `virtualme logs [-f\|--follow]` | Show or follow container logs |
@@ -60,7 +60,7 @@ Set `VIRTUALME_IMAGE` or `VIRTUALME_TAG` to override the default image reference
 
 ### Data directory
 
-The host directory `~/.virtualme` (override with `--data <dir>` or `VIRTUALME_DATA`) is created on first `start` and mounted read-write at the container's `~/.virtualme`. It holds the Valkey append-only file (including chat history), the Chromium profile, and XDG state. The container root filesystem is read-only and runs as the invoking host uid/gid, so every data file is host-owned.
+The host directory `~/.virtualme` (override with `--data <dir>` or `VIRTUALME_DATA`) is created on first `start` and mounted read-write at the container's `~/.virtualme`. It holds the Valkey append-only file (including chat history), the Chromium profile, and XDG state. The container runs as the invoking host uid/gid, so every data file is host-owned.
 
 ### Ports
 
@@ -131,4 +131,4 @@ Use a Raspberry Pi 5 or Raspberry Pi 4 with 8 GB RAM at minimum. The RAM floor i
 
 ## Architecture
 
-The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Playwright, Valkey, llama.cpp with Gemma 4 E2B, and a Go controller on `:8080`, running unprivileged on a read-only root filesystem with one rw data mount. The controller concurrently probes service health, samples per-process CPU/memory from `/proc`, streams state and a shared llama-backed chat over a minimal RFC 6455 implementation, proxies noVNC, and embeds the same-origin minified SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.
+The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Playwright, Valkey, llama.cpp with Gemma 4 E2B, and a Go controller on `:8080`, running unprivileged (host uid/gid) with one rw data mount. The controller concurrently probes service health, samples per-process CPU/memory from `/proc`, streams state and a shared llama-backed chat over a minimal RFC 6455 implementation, proxies noVNC, and embeds the same-origin minified SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.

@@ -4,7 +4,7 @@ const commands = [
   ["help", "Show this help"],
   ["version", "Print the CLI version"],
   ["doctor", "Check Node, Docker, and checkout setup"],
-  ["start [--data <dir>]", "Start the container (read-only root, host uid, data dir mounted rw)"],
+  ["start [--data <dir>]", "Start the container (host uid, data dir mounted rw)"],
   ["stop", "Stop and remove the container"],
   ["status", "Show container and service health"],
   ["logs [-f]", "Show or follow container logs"],

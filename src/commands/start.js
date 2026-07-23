@@ -50,7 +50,6 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
   const code = docker([
     "run", "-d", "--name", CONTAINER, "--restart", "unless-stopped",
     "--shm-size=1g",
-    "--read-only",
     "--user", `${uid}:${gid}`,
     "--tmpfs", `/run:exec,mode=755,uid=${uid},gid=${gid}`,
     "--tmpfs", "/tmp:mode=1777",

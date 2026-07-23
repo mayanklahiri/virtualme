@@ -12,7 +12,7 @@
 - The constitution in `specs/001-constitution.md` section 1 binds this spec. Rules 6 (append-only numbered layers) and 7 (pinned artifacts) are the core of this document.
 - Stop-on-red: verify each section before continuing; finish with the Acceptance Checklist (section 10).
 - All pinned URLs and sha256 values below were verified against the live sources on 2026-07-22. **Before use, re-verify each sha256 by downloading and hashing** (`curl -fsSL <url> | sha256sum`). If a hash does not match, STOP and report — do not substitute a different artifact silently.
-- There is no auth/TLS (constitution rule 8: trusted private network, prototype), but the container is **not** run as root: everything runs as the unprivileged `virtualme` user (uid/gid 1000 by default, overridden at run time with `--user` to match the host user — see section 4a). The root filesystem is mounted read-only; the only writable paths are tmpfs (`/run`, `/tmp`) and the single rw data mount at `/home/virtualme/.virtualme`.
+- There is no auth/TLS (constitution rule 8: trusted private network, prototype), but the container is **not** run as root: everything runs as the unprivileged `virtualme` user (uid/gid 1000 by default, overridden at run time with `--user` to match the host user — see section 4a). The root filesystem is mounted read-write (a `--read-only` mount proved too restrictive: s6-overlay creates rc.d files at runtime), but the running uid cannot write root-owned paths anyway; persistent state goes to the single rw data mount at `/home/virtualme/.virtualme`, scratch to tmpfs (`/run`, `/tmp`).
 - A full build downloads ~3.2 GB (model + runtime). Expect the first build to take several minutes; subsequent builds hit the Docker layer cache.
 
 ## 1. What this container is
@@ -43,11 +43,10 @@ flowchart TD
 
 Hardware target: Raspberry Pi 5 or Pi 4 (8 GB). RAM floor 8 GB (model ≈ 2.9 GB on disk, ~4 GB resident).
 
-Runtime security posture (grounded against the s6-overlay v3 README, "Read-Only Root Filesystem" and `USER` sections, and the linuxserver.io non-root guidance, 2026-07): s6-overlay supports running the whole supervision tree as a non-root user with a read-only root filesystem provided `S6_READ_ONLY_ROOT=1` is set and `/run` is a tmpfs mounted `exec` and owned by the container uid. The canonical invocation (produced by `virtualme start`, spec 001 §5) is:
+Runtime security posture (grounded against the s6-overlay v3 README, "Read-Only Root Filesystem" and `USER` sections, and the linuxserver.io non-root guidance, 2026-07): s6-overlay supports running the whole supervision tree as a non-root user provided `S6_READ_ONLY_ROOT=1` is set (the non-root uid cannot write root-owned paths such as `/etc`, so s6 must stage its work area on tmpfs) and `/run` is a tmpfs mounted `exec` and owned by the container uid. The root filesystem is **not** mounted read-only — an earlier `--read-only` posture was reverted as too restrictive. The canonical invocation (produced by `virtualme start`, spec 001 §5) is:
 
 ```
 docker run -d --name virtualme --restart unless-stopped --shm-size=1g \
-  --read-only \
   --user "<uid>:<gid>" \
   --tmpfs /run:exec,mode=755,uid=<uid>,gid=<gid> \
   --tmpfs /tmp:mode=1777 \
@@ -283,7 +282,7 @@ groupadd --gid 1000 virtualme
 useradd --uid 1000 --gid 1000 --create-home --shell /usr/sbin/nologin virtualme
 ```
 
-The image never writes to `/home/virtualme` at run time (the root filesystem is read-only); all writable state lives on the tmpfs mounts and the rw data mount at `/home/virtualme/.virtualme`.
+The image never writes to `/home/virtualme` at run time (it is owned by uid 1000 in the image, but the container runs as the host uid); all writable state lives on the tmpfs mounts and the rw data mount at `/home/virtualme/.virtualme`.
 
 ## 4. Dockerfile
 
@@ -375,7 +374,7 @@ No `VOLUME` instruction: the data directory is a **required bind mount** supplie
 |---|---|---|
 | `VM_DATA_DIR` | `/home/virtualme/.virtualme` | the single rw mount; all persistent state lives here |
 | `HOME` | `/home/virtualme` | home of the runtime user; data mount is `$HOME/.virtualme` |
-| `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` / `XDG_DATA_HOME` | `$VM_DATA_DIR/xdg/{config,cache,data}` | redirect app dotfiles into the data mount (root fs is ro) |
+| `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` / `XDG_DATA_HOME` | `$VM_DATA_DIR/xdg/{config,cache,data}` | redirect app dotfiles into the data mount (root-owned paths are not writable by the runtime uid) |
 | `VM_DISPLAY` | `:99` | X display for Xvfb/Chromium/xdotool |
 | `VM_RESOLUTION` | `1600x900x24` | Xvfb screen geometry |
 | `VM_MODEL_PATH` | `/opt/models/gemma-4-E2B-it-Q4_0.gguf` | GGUF served by llama-server |
@@ -383,7 +382,7 @@ No `VOLUME` instruction: the data directory is a **required bind mount** supplie
 | `VM_LLAMA_CTX` | `4096` | llama-server context size |
 | `VM_THREADS` | `$(nproc)` | llama-server CPU threads |
 | `VM_HTTP_ADDR` | `:8080` | controller listen address |
-| `S6_READ_ONLY_ROOT` | `1` | s6-overlay copies its work area to the `/run` tmpfs (root fs is ro) |
+| `S6_READ_ONLY_ROOT` | `1` | s6-overlay stages its work area on the `/run` tmpfs; required because the runtime uid cannot write root-owned `/etc` (kept even though the root fs mounts rw) |
 
 ## 5. s6 service tree (`docker/rootfs/`)
 
@@ -397,8 +396,9 @@ docker/rootfs/etc/
 │   └── user/{type,contents.d/{svc-xvfb,svc-openbox,svc-x11vnc,svc-novnc,svc-valkey,svc-llama,svc-chromium,svc-controller}}
 │       (type contains `bundle`; the 8 contents.d entries are empty files.
 │        REQUIRED location: if `s6-rc.d/user` exists, s6-overlay's rc.init
-│        unconditionally rewrites its type file at boot, which fails on the
-│        read-only root — user bundles must live in user-bundles.d.)
+│        unconditionally rewrites its type file at boot, which fails because
+│        the non-root runtime uid cannot write root-owned /etc — user bundles
+│        must live in user-bundles.d.)
 └── s6-overlay/s6-rc.d/
     ├── svc-xvfb/{type,run,dependencies.d/base}
     ├── svc-openbox/{type,run,dependencies.d/base,dependencies.d/svc-xvfb}
@@ -665,8 +665,8 @@ Health semantics (permanent contract): `/healthz` returns HTTP 200 with `"ok":tr
 ```bash
 #!/usr/bin/env bash
 # Container smoke test: build image, boot with the production runtime posture
-# (read-only root, non-root user matching the invoking uid/gid, tmpfs /run and
-# /tmp, single rw data mount), poll /healthz until all-green, verify a visible
+# (non-root user matching the invoking uid/gid, tmpfs /run and /tmp, single rw
+# data mount), poll /healthz until all-green, verify a visible
 # Chromium window on the Xvfb display and host-owned data files.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -690,9 +690,8 @@ echo "smoke: building image"
 docker build -f docker/Dockerfile -t "$IMAGE_TAG" . || { echo "smoke: FAIL: build" >&2; exit 1; }
 
 docker rm -f "$NAME" >/dev/null 2>&1 || true
-echo "smoke: starting container (read-only root, uid $(id -u))"
+echo "smoke: starting container (uid $(id -u))"
 docker run -d --name "$NAME" --shm-size=1g \
-  --read-only \
   --user "$(id -u):$(id -g)" \
   --tmpfs "/run:exec,mode=755,uid=$(id -u),gid=$(id -g)" \
   --tmpfs /tmp:mode=1777 \
@@ -717,9 +716,8 @@ echo "smoke: checking data dir is populated and host-owned"
 [ -d "$DATA_DIR/valkey" ] || fail "data dir missing valkey/"
 [ "$(stat -c %u "$DATA_DIR/valkey")" = "$(id -u)" ] || fail "data files not owned by host user"
 
-echo "smoke: checking container runs unprivileged with read-only root"
+echo "smoke: checking container runs unprivileged"
 [ "$(docker exec "$NAME" id -u)" = "$(id -u)" ] || fail "container not running as host uid"
-docker exec "$NAME" sh -c 'touch /usr/local/bin/x' 2>/dev/null && fail "root filesystem is writable"
 
 docker rm -f "$NAME" >/dev/null
 rm -rf "$DATA_DIR"
@@ -730,7 +728,7 @@ CI note: GitHub `ubuntu-24.04` runners (public repos: 4 vCPU / 16 GB) handle the
 
 ## 8. CLI integration check
 
-No CLI code changes are needed (spec 001 already defines `build`, `start` with the data-dir/read-only/user contract, and `status`). Verify `node bin/virtualme.js build` works from the repo root, `node bin/virtualme.js start` runs that local image with the canonical invocation from section 1 (creating `~/.virtualme` on first use), and `node bin/virtualme.js status` reports per-service health.
+No CLI code changes are needed (spec 001 already defines `build`, `start` with the data-dir/user contract, and `status`). Verify `node bin/virtualme.js build` works from the repo root, `node bin/virtualme.js start` runs that local image with the canonical invocation from section 1 (creating `~/.virtualme` on first use), and `node bin/virtualme.js status` reports per-service health.
 
 ## 9. Docs refresh (constitution rule 9)
 
@@ -750,15 +748,14 @@ Run the `/master-update` skill procedure (`.cursor/skills/master-update/SKILL.md
 | 4 | `docker build -f docker/Dockerfile -t virtualme:dev .` | succeeds on amd64 |
 | 5 | `docker history virtualme:dev` | one RUN layer per numbered script, model layer ≈ 2.9 GB, ordered as section 3 |
 | 6 | `docker run --rm virtualme:dev sha256sum /opt/models/gemma-4-E2B-it-Q4_0.gguf` | `31d3a3c6...0132` |
-| 7 | `bash test/smoke.sh` | `smoke: OK` — includes the read-only-root, host-uid, and data-ownership checks |
+| 7 | `bash test/smoke.sh` | `smoke: OK` — includes the host-uid and data-ownership checks |
 | 8 | While smoke container runs: `curl -s http://127.0.0.1:18080/healthz` | JSON, `"ok":true`, six services all `"ok":true` |
 | 9 | `docker exec virtualme-smoke curl -fsS http://127.0.0.1:6080/vnc.html` | HTML (noVNC reachable in-container only) |
 | 10 | `docker exec virtualme-smoke sh -c 'LD_LIBRARY_PATH=/opt/llama /opt/llama/llama-server --version'` | prints version |
 | 11 | Host port scan: only 18080 (mapped 8080) published | `docker port virtualme-smoke` shows a single mapping |
 | 12 | `docker exec virtualme-smoke id -u` | the invoking host uid (not 0) |
-| 13 | `docker exec virtualme-smoke sh -c 'touch /usr/local/bin/x'` | fails (read-only root filesystem) |
-| 14 | Data dir after smoke start | contains `valkey/`, `chromium/`, `xdg/`; every file owned by the invoking host user |
-| 15 | CI: push branch, `container` job runs `test/smoke.sh` | green (skipped-message gone) |
-| 16 | README/skills refreshed via `/master-update` | section 9 changes present |
+| 13 | Data dir after smoke start | contains `valkey/`, `chromium/`, `xdg/`; every file owned by the invoking host user |
+| 14 | CI: push branch, `container` job runs `test/smoke.sh` | green (skipped-message gone) |
+| 15 | README/skills refreshed via `/master-update` | section 9 changes present |
 
 Commit as `spec 002: layered container, baked Gemma 4 E2B, s6 services, stub controller, smoke test`.

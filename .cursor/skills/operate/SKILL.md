@@ -13,7 +13,7 @@ zero-dependency Node CLI (`npx virtualme`, or `./cli.sh` from a checkout).
 | Command | Effect |
 |---|---|
 | `npx virtualme doctor` | Verify node/docker/daemon (+ git hooks in a checkout) |
-| `npx virtualme start [--data <dir>]` | Run the container unprivileged (host uid/gid) with a read-only root, tmpfs `/run`+`/tmp`, port 8080, and the host data dir (default `~/.virtualme`, created if missing) mounted rw at the container's `~/.virtualme` |
+| `npx virtualme start [--data <dir>]` | Run the container unprivileged (host uid/gid) with tmpfs `/run`+`/tmp`, port 8080, and the host data dir (default `~/.virtualme`, created if missing) mounted rw at the container's `~/.virtualme` |
 | `npx virtualme status` | Container state + `/healthz` per-service report |
 | `npx virtualme logs -f` | Follow container logs |
 | `npx virtualme stop` | Stop and remove the container (data dir survives) |

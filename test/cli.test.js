@@ -54,7 +54,7 @@ test("build tags both the development and configured start image", () => {
   ]);
 });
 
-test("start runs read-only as the host user with the data dir mounted", () => {
+test("start runs as the host user with the data dir mounted", () => {
   const parent = mkdtempSync(join(tmpdir(), "virtualme-test-"));
   const dataDir = join(parent, "data");
   try {
@@ -73,7 +73,6 @@ test("start runs read-only as the host user with the data dir mounted", () => {
     assert.deepEqual(invocation, [
       "run", "-d", "--name", "virtualme", "--restart", "unless-stopped",
       "--shm-size=1g",
-      "--read-only",
       "--user", `${uid}:${gid}`,
       "--tmpfs", `/run:exec,mode=755,uid=${uid},gid=${gid}`,
       "--tmpfs", "/tmp:mode=1777",
