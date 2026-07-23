@@ -1,0 +1,8 @@
+#!/command/with-contenv bash
+export LD_LIBRARY_PATH=/opt/llama
+exec /opt/llama/llama-server \
+  --model "$VM_MODEL_PATH" \
+  --host 127.0.0.1 --port "$VM_LLAMA_PORT" \
+  --ctx-size "$VM_LLAMA_CTX" \
+  --threads "${VM_THREADS:-$(nproc)}" \
+  --no-webui

@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: npm ci
+      - name: Fetch web assets (spec 003+)
+        run: |
+          if [ -f controller/tools/fetch-assets.sh ]; then bash controller/tools/fetch-assets.sh; fi
+      - run: npm run check
+
+  container:
+    runs-on: ubuntu-24.04
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - name: Smoke test (spec 002+)
+        run: |
+          if [ -f test/smoke.sh ]; then bash test/smoke.sh; else echo "smoke: skipped (no test/smoke.sh yet)"; fi
+      - name: E2E test (spec 003+)
+        run: |
+          if [ -f test/e2e.sh ]; then bash test/e2e.sh; else echo "e2e: skipped (no test/e2e.sh yet)"; fi

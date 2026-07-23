@@ -1,0 +1,2 @@
+#!/command/with-contenv bash
+exec Xvfb "$VM_DISPLAY" -screen 0 "$VM_RESOLUTION" -ac -noreset -nolisten tcp

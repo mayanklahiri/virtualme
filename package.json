@@ -1,0 +1,45 @@
+{
+  "name": "virtualme",
+  "version": "0.1.0",
+  "description": "Virtual Me: private personal background agent. CLI for running the Docker container.",
+  "type": "module",
+  "bin": {
+    "virtualme": "bin/virtualme.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "check": "bash scripts/check.sh",
+    "test": "node --test test/*.test.js",
+    "lint": "eslint .",
+    "typecheck": "tsc -p jsconfig.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mayanklahiri/virtualme.git"
+  },
+  "homepage": "https://github.com/mayanklahiri/virtualme#readme",
+  "keywords": [
+    "agent",
+    "docker",
+    "local-llm",
+    "playwright",
+    "automation"
+  ],
+  "author": "Mayank Lahiri",
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.1.1",
+    "@types/punycode": "2.1.4",
+    "eslint": "10.7.0",
+    "typescript": "7.0.2"
+  }
+}

@@ -1,0 +1,5 @@
+node_modules/
+*.tgz
+controller/web/static/fonts/
+controller/controller
+/.DS_Store
