@@ -1,6 +1,7 @@
 # Virtual Me
 
 [![CI](https://github.com/mayanklahiri/virtualme/actions/workflows/ci.yml/badge.svg)](https://github.com/mayanklahiri/virtualme/actions/workflows/ci.yml)
+[![Release](https://github.com/mayanklahiri/virtualme/actions/workflows/release.yml/badge.svg)](https://github.com/mayanklahiri/virtualme/actions/workflows/release.yml)
 [![npm](https://img.shields.io/npm/v/virtualme)](https://www.npmjs.com/package/virtualme)
 [![Docker](https://img.shields.io/docker/v/mayanklahiri/virtualme?label=docker)](https://hub.docker.com/r/mayanklahiri/virtualme)
 
@@ -8,11 +9,18 @@
 
 ## Overview
 
-Virtual Me is a background AI agent (like OpenClaw or Hermes) that prioritizes privacy, reliability, and cost-effectiveness. It runs completely locally on your computer, a Raspberry Pi, or a remote server, and contains a full virtual browser (Chromium), local LLM, management UI, and built-in agent execution loop. It can be used to automate web-based tasks and automations without any data leaving your computer.
+Virtual Me is a background AI agent that prioritizes privacy, reliability, and
+cost-effectiveness. It runs on your computer, a Raspberry Pi, or a remote
+server, and contains a virtual browser (Chromium), local LLM, management UI,
+and built-in agent execution loop. Model inference stays local; browser
+requests and mail leave the machine only when you use those features.
 
-Virtual Me runs a **fully local** model (llama.cpp + Gemma 4 E2B) by default:
-no data leaves your machine and there are no AI bills. Optional
-commercial-provider backends are a possible future direction, not part of v1.
+Virtual Me runs a **fully local** model
+([llama.cpp](https://github.com/ggml-org/llama.cpp) +
+[Gemma 4 E2B](https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF)) by default:
+prompts and model requests are not sent to an external provider, and there are
+no AI API bills. Commercial-provider backends are a possible future direction,
+not part of v1.
 
 ## Quick start
 
@@ -35,8 +43,9 @@ The first start loads a ~3 GB model; allow a few minutes for `/healthz` to becom
 | npm package | [`virtualme`](https://www.npmjs.com/package/virtualme) |
 | Docker image | [`mayanklahiri/virtualme`](https://hub.docker.com/r/mayanklahiri/virtualme) |
 | Source | [GitHub](https://github.com/mayanklahiri/virtualme) |
-| Releases | [GitHub Releases](https://github.com/mayanklahiri/virtualme/releases) |
-| CI/CD runs | [GitHub Actions](https://github.com/mayanklahiri/virtualme/actions) |
+| Published releases | [GitHub Releases](https://github.com/mayanklahiri/virtualme/releases) |
+| CI | [Workflow runs](https://github.com/mayanklahiri/virtualme/actions/workflows/ci.yml) · [source](.github/workflows/ci.yml) |
+| Release automation | [Workflow runs](https://github.com/mayanklahiri/virtualme/actions/workflows/release.yml) · [source](.github/workflows/release.yml) |
 | Design contracts | [`specs/`](specs/) |
 
 ### CLI commands
@@ -114,10 +123,11 @@ model call or tool process.
 ### Local speech
 
 The `/speech` tab streams sentence-level audio from the fully local
-sherpa-onnx engine and its baked Piper Lessac en-US voice. The browser starts
-playing after the first sentence while later sentences synthesize. Agent chat
-can use the `speak` tool when asked for an audible response; its audio bubble
-supports replay and is not persisted.
+[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) engine and its baked
+[Piper Lessac en-US voice](https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models).
+The browser starts playing after the first sentence while later sentences
+synthesize. Agent chat can use the `speak` tool when asked for an audible
+response; its audio bubble supports replay and is not persisted.
 
 OpenAI-compatible clients can call `POST /v1/audio/speech`; `wav` is the
 default response format and `pcm` returns raw 16-bit mono PCM. The single
@@ -126,10 +136,10 @@ voice is accepted through the API's `voice` field but currently ignored.
 ### Outbound mail
 
 The `/mail` tab submits standards-compliant multipart mail through the
-unprivileged dma queue. Messages can include a generated inline CID image.
-Delivery is direct to recipient MX hosts by default, or through a configured
-STARTTLS smarthost. Optional controller-side DKIM signing exposes the DNS TXT
-name and value to publish in the status panel.
+unprivileged [dma](https://github.com/corecode/dma) queue. Messages can include
+a generated inline CID image. Delivery is direct to recipient MX hosts by
+default, or through a configured STARTTLS smarthost. Optional controller-side
+DKIM signing exposes the DNS TXT name and value to publish in the status panel.
 
 | Environment | Purpose |
 |---|---|
@@ -185,8 +195,8 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 
 | Workflow | Trigger | Purpose and secrets |
 |---|---|---|
-| [`ci.yml`](.github/workflows/ci.yml) | Push to `main`; pull request | Node 22/24 gates, container smoke test, and the CLI-driven E2E test (including the restart cycle and chat probe); no secrets |
-| [`release.yml`](.github/workflows/release.yml) | Tag `v*` | Registry immutability pre-checks; native amd64/arm64 Docker publishing; npm publishing; `github-release` job with generated notes; `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `NPM_TOKEN` |
+| [CI](https://github.com/mayanklahiri/virtualme/actions/workflows/ci.yml) ([source](.github/workflows/ci.yml)) | Push to `main`; pull request | Node 22/24 gates, container smoke test, and the CLI-driven E2E test (including the restart cycle and chat probe); no secrets |
+| [Release](https://github.com/mayanklahiri/virtualme/actions/workflows/release.yml) ([source](.github/workflows/release.yml)) | Tag `v*` | Registry immutability pre-checks; native amd64/arm64 Docker publishing; npm publishing; `github-release` job with generated notes; `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `NPM_TOKEN` |
 
 ### Development setup
 

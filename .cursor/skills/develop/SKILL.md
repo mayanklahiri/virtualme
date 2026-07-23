@@ -43,12 +43,12 @@ drives the real CLI and includes a restart cycle plus a chat probe).
 | `010-vision-projector.sh` | Pinned Gemma 4 E2B multimodal projector |
 | `011-agent-tools.sh` | scrot and ImageMagick capture tooling |
 | `012-manifest.sh` | Image-baked agent system manifest |
-| `013-sherpa-onnx.sh` | Pinned sherpa-onnx offline TTS runtime |
-| `014-tts-model.sh` | Pinned Piper Lessac en-US voice |
+| `013-sherpa-onnx.sh` | sherpa-onnx `v1.13.4` offline TTS runtime |
+| `014-tts-model.sh` | Pinned Piper `en_US-lessac-medium` voice |
 | `015-mta.sh` | Debian dma outbound MTA |
 
-The s6 tree supervises `svc-xvfb`, `svc-openbox`, `svc-x11vnc`, `svc-novnc`,
-`svc-valkey`, `svc-llama`, `svc-chromium`, `svc-chromium-watchdog`, and
+The s6 tree defines `svc-xvfb`, `svc-openbox`, `svc-x11vnc`, `svc-novnc`,
+`svc-valkey`, `svc-llama`, `svc-chromium`, `svc-chromium-watchdog`,
 `svc-controller`, `svc-tts`, and `svc-mailq`. Chromium's run script sources
 `/usr/local/lib/virtualme/chromium-sandbox.sh`; its finish script gives the
 profile time to flush before watchdog or container restarts.

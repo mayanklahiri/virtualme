@@ -26,7 +26,7 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `.cursor/skills/` | Shared AI operating and development procedures |
 | `specs/` | Numbered, authoritative implementation specs |
 | `docker/` | Container image and supervised services (spec 002) |
-| `controller/` | Go control plane, browser-agent loop, local TTS, outbound mail, and multi-page console (specs 002–005, 008–010) |
+| `controller/` | Go control plane, browser-agent loop, local TTS, outbound mail, and multi-page console (specs 002–011) |
 
 ## Commands
 
