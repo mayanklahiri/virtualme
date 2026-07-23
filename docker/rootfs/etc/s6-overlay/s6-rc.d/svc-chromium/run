@@ -2,5 +2,5 @@
 export DISPLAY="$VM_DISPLAY"
 until xdpyinfo >/dev/null 2>&1; do sleep 0.2; done
 exec chromium --no-sandbox --disable-gpu --no-first-run \
-  --disable-session-crashed-bubble --user-data-dir=/data/chromium \
+  --disable-session-crashed-bubble --user-data-dir="$VM_DATA_DIR/chromium" \
   --start-maximized about:blank

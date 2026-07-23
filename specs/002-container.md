@@ -393,8 +393,13 @@ s6-overlay v3 with s6-rc service definitions. Structure:
 docker/rootfs/etc/
 ├── cont-init.d/
 │   └── 10-data-dirs.sh
+├── s6-overlay/user-bundles.d/
+│   └── user/{type,contents.d/{svc-xvfb,svc-openbox,svc-x11vnc,svc-novnc,svc-valkey,svc-llama,svc-chromium,svc-controller}}
+│       (type contains `bundle`; the 8 contents.d entries are empty files.
+│        REQUIRED location: if `s6-rc.d/user` exists, s6-overlay's rc.init
+│        unconditionally rewrites its type file at boot, which fails on the
+│        read-only root — user bundles must live in user-bundles.d.)
 └── s6-overlay/s6-rc.d/
-    ├── user/contents.d/{svc-xvfb,svc-openbox,svc-x11vnc,svc-novnc,svc-valkey,svc-llama,svc-chromium,svc-controller}   (8 empty files)
     ├── svc-xvfb/{type,run,dependencies.d/base}
     ├── svc-openbox/{type,run,dependencies.d/base,dependencies.d/svc-xvfb}
     ├── svc-x11vnc/{type,run,dependencies.d/base,dependencies.d/svc-xvfb}
@@ -405,19 +410,19 @@ docker/rootfs/etc/
     └── svc-controller/{type,run,dependencies.d/base}
 ```
 
-Every `type` file contains exactly `longrun`. Every `dependencies.d/*` is an empty file. Every `run` file is mode 755. Exact contents:
+Every service `type` file contains exactly `longrun`. Every `dependencies.d/*` is an empty file. Every `run` file is mode 755. Exact contents:
 
 **`etc/cont-init.d/10-data-dirs.sh`** (mode 755)
 
 Creates the per-service directories inside the data mount and clears Chromium's
 process-local singleton files, which can survive container replacement on the
 persistent data dir and would otherwise make Chromium reject the profile.
-(cont-init scripts run with the container environment, so `$VM_DATA_DIR` is
-available; with `S6_READ_ONLY_ROOT=1` s6-overlay copies them to the `/run`
-tmpfs before execution.)
+(The `with-contenv` shebang is required: legacy cont-init scripts do NOT
+receive the container environment otherwise, so `$VM_DATA_DIR` would be
+unset.)
 
 ```bash
-#!/usr/bin/env bash
+#!/command/with-contenv bash
 set -euo pipefail
 mkdir -p "$VM_DATA_DIR/valkey" "$VM_DATA_DIR/chromium" \
   "$VM_DATA_DIR/xdg/config" "$VM_DATA_DIR/xdg/cache" "$VM_DATA_DIR/xdg/data"

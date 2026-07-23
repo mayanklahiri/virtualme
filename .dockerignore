@@ -1,3 +1,6 @@
 *
 !controller
 !docker
+!package.json
+!package-lock.json
+!scripts/build-web.sh

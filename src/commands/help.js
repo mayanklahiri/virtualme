@@ -4,11 +4,11 @@ const commands = [
   ["help", "Show this help"],
   ["version", "Print the CLI version"],
   ["doctor", "Check Node, Docker, and checkout setup"],
-  ["start", "Start the Virtual Me container"],
+  ["start [--data <dir>]", "Start the container (read-only root, host uid, data dir mounted rw)"],
   ["stop", "Stop and remove the container"],
   ["status", "Show container and service health"],
   ["logs [-f]", "Show or follow container logs"],
-  ["build", "Build the development image"],
+  ["build", "Build the local development/start image"],
   ["keygen", "Generate a 256-bit base64url token"],
   ["update", "Pull the configured image"],
 ];

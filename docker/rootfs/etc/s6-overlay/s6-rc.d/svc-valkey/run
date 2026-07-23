@@ -1,2 +1,2 @@
 #!/command/with-contenv bash
-exec valkey-server --bind 127.0.0.1 --port 6379 --save "" --appendonly no --dir /data/valkey
+exec valkey-server --bind 127.0.0.1 --port 6379 --save "" --appendonly yes --dir "$VM_DATA_DIR/valkey"

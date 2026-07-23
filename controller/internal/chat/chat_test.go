@@ -162,6 +162,54 @@ func TestBusyRejectsSecondChat(t *testing.T) {
 	waitEvent(t, events, "chat-done")
 }
 
+func TestLoadHistoryRetriesUntilValkeyResponds(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := listener.Addr().String()
+	// Not accepting yet: close so the first attempts get connection refused.
+	_ = listener.Close()
+
+	service := New(addr, "http://127.0.0.1:1", func([]byte) {})
+	service.retryDelay = 10 * time.Millisecond
+
+	entry, _ := json.Marshal(Message{Role: "user", Text: "persisted", Ts: 1})
+	reply := fmt.Sprintf("*1\r\n$%d\r\n%s\r\n", len(entry), entry)
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		revived, err := net.Listen("tcp", addr)
+		if err != nil {
+			return
+		}
+		defer revived.Close()
+		conn, err := revived.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		buffer := make([]byte, 512)
+		_, _ = conn.Read(buffer)
+		_, _ = io.WriteString(conn, reply)
+	}()
+
+	done := make(chan struct{})
+	go func() {
+		service.LoadHistory()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("LoadHistory never completed")
+	}
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	if len(service.history) != 1 || service.history[0].Text != "persisted" {
+		t.Fatalf("history = %+v, want the persisted message", service.history)
+	}
+}
+
 func TestLlamaHTTPErrorBroadcastsAndClearsBusy(t *testing.T) {
 	llama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)

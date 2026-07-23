@@ -49,7 +49,7 @@ func main() {
 	}
 	collector := state.NewCollector(cfg, "/proc", hub.Broadcast)
 	chatService := chat.New(cfg.ValkeyAddr, "http://127.0.0.1:8081/v1/chat/completions", hub.Broadcast)
-	chatService.LoadHistory()
+	go chatService.LoadHistory()
 	hub.SetHandler(chatService.HandleClientMessage)
 	hub.SetOnConnect(func(conn *ws.Conn) {
 		_ = conn.WriteText(collector.HistoryMessage())

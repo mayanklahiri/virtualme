@@ -52,7 +52,7 @@ controller/
 | `/ws` | `hub.HandleUpgrade` (§5); non-upgrade requests get 400 |
 | `/desktop/` | `http.StripPrefix("/desktop/", httputil.NewSingleHostReverseProxy(http://127.0.0.1:6080))` — stdlib ReverseProxy passes the `Connection: Upgrade` websocket through to websockify, so noVNC works end-to-end through port 8080 |
 
-Startup: build `health.Config` from env (same vars/defaults as spec 002 §4), create the ws hub, create `chat.Service` (§6) and load persisted history, start `state.Collector` (2 s period, §3) feeding `hub.Broadcast`, wire `hub.SetHandler(chat.HandleClientMessage)` and `hub.SetOnConnect` to replay the state ring buffer and chat history to each new connection, then `http.ListenAndServe(VM_HTTP_ADDR, mux)`. Log one line per subsystem to stdout.
+Startup: build `health.Config` from env (same vars/defaults as spec 002 §4), create the ws hub, create `chat.Service` (§6) and start its async history load, start `state.Collector` (2 s period, §3) feeding `hub.Broadcast`, wire `hub.SetHandler(chat.HandleClientMessage)` and `hub.SetOnConnect` to replay the state ring buffer and chat history to each new connection, then `http.ListenAndServe(VM_HTTP_ADDR, mux)`. Log one line per subsystem to stdout.
 
 For testability, route construction lives in `func newMux(cfg health.Config, hub *ws.Hub, desktopURL *url.URL) *http.ServeMux`; `main` only reads env and calls it. **`cmd/controller/main_test.go`** covers routing: (a) `/desktop/` proxying — `httptest.Server` backend that records the request path, passed as `desktopURL`; a request to `/desktop/vnc.html` must reach the backend as `/vnc.html`; (b) `/healthz` returns JSON with a `services` array; (c) `/` serves the embedded `index.html` (body contains `Virtual Me`).
 
@@ -215,7 +215,11 @@ Server → clients:
 ```go
 type Service struct{ /* history []Message (mutex), valkey addr, llama URL, busy flag */ }
 func New(valkeyAddr, llamaURL string, broadcast func([]byte)) *Service
-func (s *Service) LoadHistory()                       // at startup: LRANGE; tolerate valkey down (empty + log)
+func (s *Service) LoadHistory()                       // at startup, in a goroutine: LRANGE, retrying
+                                                      // (2 s) until Valkey responds — the controller
+                                                      // regularly boots before Valkey accepts
+                                                      // connections; loaded messages are prepended
+                                                      // ahead of any that arrived while retrying
 func (s *Service) HistoryMessage() []byte             // {"type":"chat-history",...}
 func (s *Service) HandleClientMessage(c *ws.Conn, p []byte)
 ```

@@ -32,10 +32,11 @@ type Message struct {
 
 // Service owns the shared conversation state.
 type Service struct {
-	valkey    *valkeyClient
-	llamaURL  string
-	broadcast func([]byte)
-	client    *http.Client
+	valkey     *valkeyClient
+	llamaURL   string
+	broadcast  func([]byte)
+	client     *http.Client
+	retryDelay time.Duration
 
 	mu      sync.Mutex
 	history []Message
@@ -45,28 +46,46 @@ type Service struct {
 // New creates a chat service; broadcast sends a text frame to every client.
 func New(valkeyAddr, llamaURL string, broadcast func([]byte)) *Service {
 	return &Service{
-		valkey:    newValkeyClient(valkeyAddr),
-		llamaURL:  llamaURL,
-		broadcast: broadcast,
-		client:    &http.Client{Timeout: 120 * time.Second},
+		valkey:     newValkeyClient(valkeyAddr),
+		llamaURL:   llamaURL,
+		broadcast:  broadcast,
+		client:     &http.Client{Timeout: 120 * time.Second},
+		retryDelay: 2 * time.Second,
 	}
 }
 
-// LoadHistory populates memory from Valkey; a down Valkey yields empty history.
+// LoadHistory populates memory from Valkey, retrying until Valkey responds so
+// a controller that boots before Valkey still recovers the conversation.
+// Run it in a goroutine; a permanently-down Valkey only costs a warning log.
 func (s *Service) LoadHistory() {
-	entries, err := s.valkey.lrange(historyKey, 0, -1)
-	if err != nil {
-		log.Println("chat: history unavailable:", err)
-		return
+	for attempt := 0; ; attempt++ {
+		entries, err := s.valkey.lrange(historyKey, 0, -1)
+		if err == nil {
+			s.adoptHistory(entries)
+			return
+		}
+		if attempt == 0 {
+			log.Println("chat: history unavailable, retrying:", err)
+		}
+		time.Sleep(s.retryDelay)
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.history = s.history[:0]
+}
+
+// adoptHistory prepends persisted messages ahead of anything that arrived in
+// memory while the load was still retrying.
+func (s *Service) adoptHistory(entries []string) {
+	loaded := make([]Message, 0, len(entries))
 	for _, entry := range entries {
 		var message Message
 		if json.Unmarshal([]byte(entry), &message) == nil {
-			s.history = append(s.history, message)
+			loaded = append(loaded, message)
 		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.history = append(loaded, s.history...)
+	if len(s.history) > historyCap {
+		s.history = s.history[len(s.history)-historyCap:]
 	}
 }
 
