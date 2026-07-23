@@ -62,6 +62,7 @@ export function renderState(snapshot) {
   document.querySelector("#status-detail").textContent = snapshot.ok ? "All six supervised services are healthy." : "One or more supervised services are unavailable.";
   document.querySelector("#uptime").textContent = formatUptime(snapshot.uptimeSec);
   document.querySelector("#home-uptime").textContent = formatUptime(snapshot.uptimeSec);
+  document.querySelector("#home-host").textContent = snapshot.hostname || "—";
   const homeHealth = document.querySelector("#home-health");
   homeHealth.className = `health-pill ${snapshot.ok ? "ok" : "error"}`;
   homeHealth.textContent = snapshot.ok ? "All systems operational" : "Service attention required";
@@ -90,6 +91,12 @@ export function renderState(snapshot) {
   const load = Number(system.load1) || 0;
   const used = Number(system.memUsedMB) || 0;
   const total = Number(system.memTotalMB) || 0;
+  const diskFree = Number(system.diskFreeMB) || 0;
+  const diskTotal = Number(system.diskTotalMB) || 0;
+  const cores = Array.isArray(snapshot.cores) ? snapshot.cores.length : 0;
+  document.querySelector("#home-cpu").textContent = `${cores} cores · load ${load.toFixed(2)}`;
+  document.querySelector("#home-memory").textContent = `${(used / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} GB`;
+  document.querySelector("#home-disk").textContent = `${(diskFree / 1024).toFixed(1)} GB free of ${(diskTotal / 1024).toFixed(1)} GB`;
   const loadMeter = document.querySelector("#load");
   loadMeter.value = Math.min(load, Number(loadMeter.max));
   loadMeter.setAttribute("aria-valuenow", String(load));

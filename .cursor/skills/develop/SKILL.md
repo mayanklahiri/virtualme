@@ -14,7 +14,7 @@ gates everything.
 
     npm install
     git config core.hooksPath .githooks
-    bash controller/tools/fetch-assets.sh   # once; downloads pinned fonts
+    bash controller/tools/fetch-assets.sh   # once; downloads pinned web assets
 
 ## Quality gates
 
@@ -43,10 +43,13 @@ drives the real CLI and includes a restart cycle plus a chat probe).
 | `010-vision-projector.sh` | Pinned Gemma 4 E2B multimodal projector |
 | `011-agent-tools.sh` | scrot and ImageMagick capture tooling |
 | `012-manifest.sh` | Image-baked agent system manifest |
+| `013-sherpa-onnx.sh` | Pinned sherpa-onnx offline TTS runtime |
+| `014-tts-model.sh` | Pinned Piper Lessac en-US voice |
+| `015-mta.sh` | Debian dma outbound MTA |
 
 The s6 tree supervises `svc-xvfb`, `svc-openbox`, `svc-x11vnc`, `svc-novnc`,
 `svc-valkey`, `svc-llama`, `svc-chromium`, `svc-chromium-watchdog`, and
-`svc-controller`. Chromium's run script sources
+`svc-controller`, `svc-tts`, and `svc-mailq`. Chromium's run script sources
 `/usr/local/lib/virtualme/chromium-sandbox.sh`; its finish script gives the
 profile time to flush before watchdog or container restarts.
 
@@ -55,17 +58,33 @@ profile time to flush before watchdog or container restarts.
 | Path | Responsibility |
 |---|---|
 | `controller/cmd/controller` | Route and subsystem wiring |
-| `controller/internal/health` | Concurrent six-service health probes |
+| `controller/internal/health` | Concurrent eight-service health probes |
 | `controller/internal/procstat` | Per-core CPU and per-service CPU/RSS sampling from `/proc` |
 | `controller/internal/ws` | Minimal server-side RFC 6455, hub, client-frame dispatch |
 | `controller/internal/state` | Two-second live snapshot collector |
 | `controller/internal/metrics` | Persistent four-tier metrics aggregation and querying |
 | `controller/internal/chat` | Shared streaming chat, controls, stats, and LLM status |
 | `controller/internal/agent` | Tool-call loop, read-only CDP/DOM observations, OS-level actions, bash, and artifacts |
+| `controller/cmd/ttsd`, `controller/internal/tts` | Serialized sherpa subprocess synthesis, WAV parsing, NDJSON client, and streaming helpers |
+| `controller/internal/mail` | Stdlib MIME/CID composition, DKIM signing, dma submission, and spool status |
 | `controller/web/static` | Hand-written multi-page SPA, themes, charts, markdown, agent hooks |
 | `controller/web/dist` | Gitignored minified SPA + generated icon sprite |
-| `controller/tools/fetch-assets.sh` | Pinned fonts and selected Lucide SVG fetch |
+| `controller/tools/fetch-assets.sh` | Pinned fonts, selected Lucide SVGs, and hero image fetch |
 | `scripts/build-icons.mjs` | Deterministic Lucide SVG sprite generation |
+
+Console themes define two complete light/dark token blocks in `app.css`,
+including `--brand-a`, `--brand-b`, `--font-scale`, and `--p1` through `--p8`.
+Adding a theme also requires entries in the `theme.js` registry, the
+`index.html` boot registry, and the CSS swatch registry. Pinned web fonts and
+the Earthrise hero image are declared in `controller/tools/fetch-assets.sh`;
+the fetched image is copied by `scripts/build-web.sh` and never committed.
+
+The controller maps `tts-req`/`tts-stop` websocket requests to per-connection
+`tts-*` streams, serves `POST /v1/audio/speech`, and broadcasts agent `speak`
+tool audio with `origin:"chat"`.
+It maps `mail-send`/`mail-status-req` requests to `mail-result`/`mail-status`
+frames. Persistent dma configuration, queue files, and the DKIM key live under
+`$VM_DATA_DIR/mail/`; `svc-mailq` retries deferred messages.
 
 ## How to add things
 
@@ -84,7 +103,8 @@ profile time to flush before watchdog or container restarts.
   the layer sequence in `docker/Dockerfile`. Never edit old layers without a
   spec amendment.
 - **s6 service**: `docker/rootfs/etc/s6-overlay/s6-rc.d/svc-<name>/` with
-  `type`, `run`, `dependencies.d/`, plus an entry in `user/contents.d/`.
+  `type`, `run`, `dependencies.d/`, plus an entry in
+  `docker/rootfs/etc/s6-overlay/user-bundles.d/user/contents.d/`.
 - **Spec**: next number in `specs/`, follow the format of 001–003.
 
 After any structural change run the `/master-update` skill.

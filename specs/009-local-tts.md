@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Proposed |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/002-container.md` (layers, s6), `specs/003-controller.md` (websocket hub, SPA), `specs/005-console-ui.md` (multi-page console, frame conventions), `specs/007-persistence-locality.md` (locality gate; no new persistent state), `specs/008-browser-agent.md` (agent tool registry) executed |
 | Produces | A supervised local TTS engine (sherpa-onnx offline TTS + pinned Piper VITS voice) in new docker layers 013–014; an in-repo `ttsd` streaming daemon (`svc-tts`); websocket TTS frames; a console **Speech** tab with streaming in-browser playback; an OpenAI-compatible `POST /v1/audio/speech` endpoint; a `speak` agent tool with chat-side audio playback |
 | Followed by | `specs/010-outbound-mail.md`, `specs/011-ui-refresh.md` |
@@ -252,3 +252,13 @@ Run the `/master-update` skill procedure. Expected changes: README gains a "Spee
 | 13 | `/master-update` run | §9 docs updated |
 
 Commit as `spec 009: local TTS (sherpa-onnx + Piper) — engine, console tab, OpenAI speech API, speak tool`.
+
+## Amendments
+
+### 2026-07-23 — s6 user-bundle membership
+
+The repository's s6-overlay version defines the user bundle under
+`docker/rootfs/etc/s6-overlay/user-bundles.d/user/`. Accordingly, `svc-tts`
+membership is installed at `user-bundles.d/user/contents.d/svc-tts`, not the
+deprecated runtime-generated `s6-rc.d/user/contents.d/` path shown in §3a.
+Creating the latter in the image prevents unprivileged s6 startup.

@@ -78,6 +78,16 @@ docker run -d --name "$NAME" --shm-size=1g \
 
 echo "smoke: waiting for all-green /healthz (timeout ${TIMEOUT}s)"
 wait_green
+curl -fsS "http://127.0.0.1:${PORT}/healthz" \
+  | grep -q '"name":"tts","ok":true' || fail "TTS health probe missing or unhealthy"
+curl -fsS "http://127.0.0.1:${PORT}/healthz" \
+  | grep -q '"name":"mail","ok":true' || fail "mail health probe missing or unhealthy"
+[ -d "$DATA_DIR/mail/spool" ] || fail "data dir missing mail/spool"
+docker exec "$NAME" pgrep -f 'svc-mailq' >/dev/null \
+  || fail "svc-mailq is not supervised and up"
+docker exec "$NAME" sh -c \
+  'grep -q "0100007F:1F92" /proc/net/tcp && ! grep -q "00000000:1F92" /proc/net/tcp' \
+  || fail "ttsd is not bound exclusively to 127.0.0.1:8082"
 
 echo "smoke: checking vision projector pin and read-only CDP endpoint"
 docker exec "$NAME" sh -c \
@@ -160,7 +170,7 @@ compgen -G "$DATA_DIR/valkey/appendonly*" >/dev/null \
 for entry in "$DATA_DIR"/*; do
   [ -e "$entry" ] || continue
   case "$(basename "$entry")" in
-    valkey|chromium|xdg|metrics|agent) ;;
+    valkey|chromium|xdg|metrics|agent|mail) ;;
     *) fail "unexpected top-level data entry: $(basename "$entry")" ;;
   esac
 done

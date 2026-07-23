@@ -21,7 +21,10 @@ type Config struct {
 	NoVNCURL       string
 	ValkeyAddr     string
 	LlamaHealthURL string
+	TTSHealthURL   string
 	Xdotool        string
+	SendmailPath   string
+	MailSpoolDir   string
 }
 
 // Service is the probe result for one supervised internal service.
@@ -49,6 +52,8 @@ func env(key, fallback string) string {
 // FromEnv returns the container's configured service endpoints.
 func FromEnv() Config {
 	llamaPort := env("VM_LLAMA_PORT", "8081")
+	ttsPort := env("VM_TTS_PORT", "8082")
+	dataDir := env("VM_DATA_DIR", "/home/virtualme/.virtualme")
 	return Config{
 		Display:        env("VM_DISPLAY", ":99"),
 		X11SocketDir:   env("VM_X11_SOCKET_DIR", "/tmp/.X11-unix"),
@@ -56,7 +61,10 @@ func FromEnv() Config {
 		NoVNCURL:       env("VM_NOVNC_URL", "http://127.0.0.1:6080/vnc.html"),
 		ValkeyAddr:     env("VM_VALKEY_ADDR", "127.0.0.1:6379"),
 		LlamaHealthURL: env("VM_LLAMA_HEALTH_URL", "http://127.0.0.1:"+llamaPort+"/health"),
+		TTSHealthURL:   env("VM_TTS_HEALTH_URL", "http://127.0.0.1:"+ttsPort+"/healthz"),
 		Xdotool:        env("VM_XDOTOOL", "xdotool"),
+		SendmailPath:   env("VM_SENDMAIL_PATH", "/usr/sbin/sendmail"),
+		MailSpoolDir:   env("VM_MAIL_SPOOL_DIR", filepath.Join(dataDir, "mail", "spool")),
 	}
 }
 
@@ -119,6 +127,29 @@ func checkChromium(cfg Config) Service {
 	return Service{Name: "chromium", OK: true}
 }
 
+func checkMail(cfg Config) Service {
+	info, err := os.Stat(cfg.SendmailPath)
+	if err != nil {
+		return Service{Name: "mail", Detail: err.Error()}
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		return Service{Name: "mail", Detail: "sendmail is not executable"}
+	}
+	probe, err := os.CreateTemp(cfg.MailSpoolDir, ".health-*")
+	if err != nil {
+		return Service{Name: "mail", Detail: err.Error()}
+	}
+	name := probe.Name()
+	if err := probe.Close(); err != nil {
+		_ = os.Remove(name)
+		return Service{Name: "mail", Detail: err.Error()}
+	}
+	if err := os.Remove(name); err != nil {
+		return Service{Name: "mail", Detail: err.Error()}
+	}
+	return Service{Name: "mail", OK: true}
+}
+
 // Gather runs all probes concurrently and returns them in stable display order.
 func Gather(cfg Config) Health {
 	probes := []func() Service{
@@ -127,7 +158,9 @@ func Gather(cfg Config) Health {
 		func() Service { return checkHTTP("novnc", cfg.NoVNCURL) },
 		func() Service { return checkValkey(cfg.ValkeyAddr) },
 		func() Service { return checkHTTP("llama", cfg.LlamaHealthURL) },
+		func() Service { return checkHTTP("tts", cfg.TTSHealthURL) },
 		func() Service { return checkChromium(cfg) },
+		func() Service { return checkMail(cfg) },
 	}
 	services := make([]Service, len(probes))
 	var wait sync.WaitGroup

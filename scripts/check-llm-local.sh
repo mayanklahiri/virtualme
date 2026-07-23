@@ -108,6 +108,7 @@ required_paths=(
   xdg/data
   metrics
   agent
+  mail
 )
 for path in "${required_paths[@]}"; do
   if ! grep -Fq "\$VM_DATA_DIR/$path" "$data_dirs"; then

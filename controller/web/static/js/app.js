@@ -6,11 +6,15 @@ import { initRouter } from "./router.js";
 import { initNav } from "./nav.js";
 import { initTheme } from "./theme.js";
 import { initAgent } from "./agent.js";
+import { initTTS } from "./tts.js";
+import { initMail } from "./mail.js";
 
 initTheme();
 initNav();
 const charts = initCharts((value) => socket.send(value));
 const chat = initChat((value) => socket.send(value));
+const speech = initTTS((value) => socket.send(value));
+const mail = initMail((value) => socket.send(value));
 const agent = initAgent(chat.log, (text) => chat.setStatus(text));
 initRouter((page) => {
   if (page === "status") charts.draw();
@@ -20,6 +24,8 @@ function onStatus(status) {
   renderStatus(status);
   chat.status(status);
   charts.status(status);
+  speech.status(status);
+  mail.connection(status);
 }
 
 function onMessage(message) {
@@ -57,6 +63,18 @@ function onMessage(message) {
       break;
     case "agent-status":
       agent.status(message);
+      break;
+    case "tts-start":
+    case "tts-chunk":
+    case "tts-status":
+    case "tts-done":
+    case "tts-error":
+      speech.frame(message);
+      chat.tts(message);
+      break;
+    case "mail-result":
+    case "mail-status":
+      mail.frame(message);
       break;
   }
 }

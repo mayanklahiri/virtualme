@@ -25,14 +25,28 @@ func TestReadSystemMissingData(t *testing.T) {
 	}
 }
 
+func TestReadDisk(t *testing.T) {
+	freeMB, totalMB := ReadDisk(t.TempDir())
+	if freeMB <= 0 || totalMB <= 0 || freeMB > totalMB {
+		t.Fatalf("ReadDisk(tempdir) = %d, %d", freeMB, totalMB)
+	}
+}
+
+func TestReadDiskMissingPath(t *testing.T) {
+	if freeMB, totalMB := ReadDisk(t.TempDir() + "/missing"); freeMB != 0 || totalMB != 0 {
+		t.Fatalf("ReadDisk(missing) = %d, %d", freeMB, totalMB)
+	}
+}
+
 func TestSnapshotJSON(t *testing.T) {
 	snapshot := Snapshot{
 		Type:      "state",
 		Ts:        123,
 		UptimeSec: 5,
+		Hostname:  "virtualme",
 		OK:        true,
 		Services:  []health.Service{{Name: "xvfb", OK: true}},
-		System:    System{Load1: 0.5, MemUsedMB: 1, MemTotalMB: 2},
+		System:    System{Load1: 0.5, MemUsedMB: 1, MemTotalMB: 2, DiskFreeMB: 3, DiskTotalMB: 4},
 		Processes: []procstat.Proc{{Name: "xvfb", CPUPct: 1.5, MemMB: 42}},
 		Cores:     []float64{25},
 	}
@@ -45,6 +59,7 @@ func TestSnapshotJSON(t *testing.T) {
 		`"type":"state"`,
 		`"ts":123`,
 		`"uptimeSec":5`,
+		`"hostname":"virtualme"`,
 		`"ok":true`,
 		`"services":[`,
 		`"system":{`,

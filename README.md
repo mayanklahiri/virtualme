@@ -62,11 +62,13 @@ The host directory `~/.virtualme` (override with `--data <dir>` or
 `VIRTUALME_DATA`) is created on first `start` and mounted read-write at the
 container's `~/.virtualme`. It contains `valkey/` (chat history and stats),
 `chromium/` (browser profile), `xdg/{config,cache,data}/`, `metrics/` (tiered
-history), and `agent/` (agent artifacts). Chromium settings survive container
+history), `agent/` (agent artifacts), and `mail/` (dma config/spool and the
+DKIM private key). Chromium settings and queued mail survive container
 and image replacement. The container runs as the invoking host uid/gid, so
 every data file is host-owned. Everything else is intentionally ephemeral or
 baked into the image; the canonical persistence map is
-[`specs/007-persistence-locality.md` §1](specs/007-persistence-locality.md#1-canonical-persistence-map).
+[`specs/007-persistence-locality.md` §1](specs/007-persistence-locality.md#1-canonical-persistence-map),
+as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persistence--gate-updates-supersedes-spec-007-lists).
 
 ### Ports
 
@@ -77,6 +79,7 @@ baked into the image; the canonical persistence map is
 | `6080` (internal) | noVNC/websockify |
 | `6379` (internal) | Valkey |
 | `8081` (internal) | llama-server |
+| `8082` (internal, loopback only) | Local sherpa-onnx/Piper TTS daemon |
 | `9222` (internal, loopback only) | Chromium DevTools observation endpoint |
 | Xvfb display `:99` | Virtual desktop |
 
@@ -84,15 +87,18 @@ baked into the image; the canonical persistence map is
 
 | Route | Purpose |
 |---|---|
-| `/` | Console home: health, uptime, model, and links |
+| `/` | Console home: host identity, live health/capacity, model, and links |
 | `/status` | Service health, system meters, and persistent per-core/process metrics |
 | `/chat` | Markdown chat, generation controls, LLM progress, and conversation totals |
+| `/speech` | Streaming local text-to-speech with the Lessac en-US voice |
+| `/mail` | Outbound-mail composer, queue status, and DKIM DNS record |
 | `/desktop-view` | Embedded private noVNC desktop |
-| `/healthz` | Aggregate JSON health for all six services |
-| `/ws` | Websocket: live state, requested metrics history, shared chat, and agent UI frames |
+| `/healthz` | Aggregate JSON health for all eight services |
+| `/ws` | Websocket: live state, metrics, chat, agent, TTS, and mail frames |
+| `POST /v1/audio/speech` | OpenAI-compatible local speech API (`wav` or raw `pcm`) |
 | `/desktop/` | Reverse proxy to noVNC and websockify |
 
-History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status history offers `15m` through `30d` lookbacks. The console has five themes, each with light and dark variants plus automatic system-scheme selection.
+History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status history offers `15m` through `30d` lookbacks. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, uptime, CPU/load, memory, and disk capacity beside a theme-tinted Earthrise image.
 
 Closing Chromium in `/desktop-view` automatically brings back one blank tab. Chromium uses its namespace sandbox when the host permits unprivileged user namespaces; otherwise it falls back to `--no-sandbox` with the warning infobar suppressed. Use `--no-browser-sandbox` to force that fallback when diagnosing host compatibility.
 
@@ -104,6 +110,42 @@ system information; it acts through `xdotool` OS mouse/keyboard input or a
 bounded bash tool. CDP is read-only and never performs input or navigation.
 The console shows each tool step and its screenshot; Stop cancels the active
 model call or tool process.
+
+### Local speech
+
+The `/speech` tab streams sentence-level audio from the fully local
+sherpa-onnx engine and its baked Piper Lessac en-US voice. The browser starts
+playing after the first sentence while later sentences synthesize. Agent chat
+can use the `speak` tool when asked for an audible response; its audio bubble
+supports replay and is not persisted.
+
+OpenAI-compatible clients can call `POST /v1/audio/speech`; `wav` is the
+default response format and `pcm` returns raw 16-bit mono PCM. The single
+voice is accepted through the API's `voice` field but currently ignored.
+
+### Outbound mail
+
+The `/mail` tab submits standards-compliant multipart mail through the
+unprivileged dma queue. Messages can include a generated inline CID image.
+Delivery is direct to recipient MX hosts by default, or through a configured
+STARTTLS smarthost. Optional controller-side DKIM signing exposes the DNS TXT
+name and value to publish in the status panel.
+
+| Environment | Purpose |
+|---|---|
+| `VM_MAIL_MAILNAME` | HELO/default From domain; defaults to the container hostname |
+| `VM_MAIL_FROM` | Envelope/header From; defaults to `virtualme@<mailname>` |
+| `VM_MAIL_SMARTHOST` | Relay hostname; unset selects direct MX delivery |
+| `VM_MAIL_SMARTHOST_PORT` | Relay port; defaults to `587` |
+| `VM_MAIL_SMARTHOST_USER` | Optional relay username |
+| `VM_MAIL_SMARTHOST_PASS` | Optional relay password |
+| `VM_MAIL_DKIM_DOMAIN` | Enable DKIM signing for this domain |
+| `VM_MAIL_DKIM_SELECTOR` | DKIM selector; defaults to `virtualme` |
+
+Set these variables before `virtualme start`; the CLI forwards them to the
+container. Direct delivery needs SPF and/or DKIM alignment plus acceptable IP
+and PTR reputation. Residential/dynamic IP mail is usually rejected, including
+by Gmail, so use a reputable smarthost for reliable delivery.
 
 Task screenshots and JSONL step logs are retained under
 `~/.virtualme/agent/<taskId>/` for the most recent 20 tasks. CPU-only vision can
@@ -135,6 +177,9 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [006](specs/006-desktop-reliability.md) | Reliable Chromium supervision, sandbox fallback, and profile persistence |
 | [007](specs/007-persistence-locality.md) | Persistence grounding and deterministic LLM-locality gate |
 | [008](specs/008-browser-agent.md) | OS-level browser-control agent |
+| [009](specs/009-local-tts.md) | Local sherpa-onnx/Piper speech synthesis |
+| [010](specs/010-outbound-mail.md) | Outbound dma queue, MIME/DKIM, and Mail console |
+| [011](specs/011-ui-refresh.md) | Console brand, collapsed theme picker, eight themes, and live-capacity home page |
 
 ### CI/CD
 
@@ -175,4 +220,4 @@ Use a Raspberry Pi 5 or Raspberry Pi 4 with 8 GB RAM at minimum. The RAM floor i
 
 ## Architecture
 
-The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Playwright, Valkey, vision-enabled llama.cpp with Gemma 4 E2B, and a Go controller on `:8080`, running unprivileged (host uid/gid) with one rw data mount. The controller concurrently probes service health, samples and persists metrics, streams shared chat, and runs a bounded browser-agent loop combining screenshots, compact DOM/read-only CDP observations, OS-level `xdotool` actions, and bash. It proxies noVNC and embeds the same-origin minified multi-page SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.
+The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Playwright, Valkey, vision-enabled llama.cpp with Gemma 4 E2B, local sherpa-onnx/Piper TTS, a dma outbound-mail queue, and a Go controller on `:8080`, running unprivileged (host uid/gid) with one rw data mount. The controller concurrently probes service health, samples and persists metrics, composes and DKIM-signs mail, streams shared chat and speech, and runs a bounded browser-agent loop combining screenshots, compact DOM/read-only CDP observations, OS-level `xdotool` actions, bash, and audible responses. It proxies noVNC and embeds the same-origin minified multi-page SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.

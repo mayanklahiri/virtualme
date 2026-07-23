@@ -1,4 +1,5 @@
 import { renderMarkdown } from "./markdown.js";
+import { AudioPlayer } from "./audio-player.js";
 
 const MAX_LEN = 4096;
 
@@ -27,6 +28,7 @@ export function initChat(send) {
   let live = false;
   let streaming = null;
   let clearTimer;
+  const audio = new Map();
 
   function setEnabled() {
     input.disabled = !live || busy;
@@ -197,6 +199,41 @@ export function initChat(send) {
         generating: `generating — ${message.tokens ?? 0} tokens · ${Number(message.tokPerSec ?? 0).toFixed(1)} tok/s · ${elapsed}s`,
       };
       statusLine.textContent = labels[message.phase] ?? "";
+    },
+    async tts(message) {
+      if (message.origin !== "chat") return;
+      let entry = audio.get(message.id);
+      if (message.type === "tts-start") {
+        const item = document.createElement("li");
+        item.className = "msg assistant audio-bubble";
+        const icon = svgIcon("volume-2");
+        const label = document.createElement("span");
+        label.textContent = `speaking · sentence 1/${message.sentences}`;
+        const replay = document.createElement("button");
+        replay.type = "button";
+        replay.hidden = true;
+        replay.append(svgIcon("play"), document.createTextNode("Replay"));
+        const player = new AudioPlayer();
+        replay.addEventListener("click", () => player.replay());
+        item.append(icon, label, replay);
+        append(item);
+        entry = { player, label, replay, sentences: message.sentences };
+        audio.set(message.id, entry);
+        await player.begin(message.sampleRate);
+      } else if (!entry) {
+        return;
+      }
+      if (message.type === "tts-chunk") {
+        entry.player.push(message.pcm);
+      } else if (message.type === "tts-status" && message.phase === "synthesizing") {
+        entry.label.textContent = `speaking · sentence ${message.sentence}/${message.sentences}`;
+      } else if (message.type === "tts-done") {
+        entry.label.textContent = `${Number(message.audioSec).toFixed(1)} s audio`;
+        entry.replay.hidden = false;
+      } else if (message.type === "tts-error") {
+        entry.label.textContent = `speech failed: ${message.error}`;
+        entry.player.stop();
+      }
     },
   };
 }

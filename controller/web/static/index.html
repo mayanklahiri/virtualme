@@ -8,7 +8,7 @@
       (() => {
         const savedTheme = localStorage.getItem("vm-theme");
         const savedVariant = localStorage.getItem("vm-variant");
-        const theme = ["modern", "editorial", "terminal", "warm", "contrast"].includes(savedTheme) ? savedTheme : "modern";
+        const theme = ["modern", "editorial", "terminal", "warm", "contrast", "arctic", "solar", "studio"].includes(savedTheme) ? savedTheme : "modern";
         const preference = ["auto", "light", "dark"].includes(savedVariant) ? savedVariant : "auto";
         const variant = preference === "auto"
           ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
@@ -17,6 +17,7 @@
         document.documentElement.dataset.variant = variant;
       })();
     </script>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/app.css">
     <script type="module" src="/js/app.js"></script>
   </head>
@@ -30,7 +31,7 @@
     </header>
     <div id="nav-curtain" class="nav-curtain" hidden></div>
     <nav id="sidebar" class="sidebar" aria-label="Primary">
-      <div class="brand"><svg class="icon" aria-hidden="true"><use href="/icons.svg#i-bot"/></svg><strong>Virtual Me</strong></div>
+      <div class="brand"><svg class="icon brand-mark" aria-hidden="true"><use href="/icons.svg#i-virtualme-mark"/></svg><strong class="wordmark">Virtual&nbsp;Me</strong></div>
       <button id="nav-close" class="icon-button nav-close" type="button" aria-label="Close navigation">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-x"/></svg>
       </button>
@@ -38,14 +39,20 @@
         <a href="/" data-nav><svg class="icon"><use href="/icons.svg#i-house"/></svg>Home</a>
         <a href="/status" data-nav><svg class="icon"><use href="/icons.svg#i-activity"/></svg>Status</a>
         <a href="/chat" data-nav><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg>Chat</a>
+        <a href="/speech" data-nav><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg>Speech</a>
+        <a href="/mail" data-nav><svg class="icon"><use href="/icons.svg#i-mail"/></svg>Mail</a>
         <a href="/desktop-view" data-nav><svg class="icon"><use href="/icons.svg#i-monitor"/></svg>Desktop</a>
       </div>
       <div class="sidebar-footer">
-        <fieldset class="theme-picker">
-          <legend>Theme</legend>
+        <button id="theme-button" class="theme-button" type="button" aria-expanded="false" aria-controls="theme-popover">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-palette"/></svg>
+          <span id="theme-current">Modern</span>
+          <svg class="icon theme-chevron" aria-hidden="true"><use href="/icons.svg#i-chevron-down"/></svg>
+        </button>
+        <div id="theme-popover" class="theme-popover" role="dialog" aria-label="Theme" hidden>
           <div id="theme-options" class="theme-options"></div>
           <div id="variant-options" class="variant-options" aria-label="Color variant"></div>
-        </fieldset>
+        </div>
         <span class="connection connecting" data-connection aria-live="polite">connecting…</span>
       </div>
     </nav>
@@ -53,18 +60,27 @@
     <main>
       <section data-page="home" aria-labelledby="home-title">
         <div class="hero">
-          <p class="eyebrow">Private personal background agent</p>
-          <h1 id="home-title">Welcome to Virtual Me</h1>
-          <p>Virtual Me runs a private browser, local language model, management console, and agent loop entirely on your own computer.</p>
-          <div class="home-facts">
-            <span id="home-health" class="health-pill pending">Waiting for controller</span>
-            <span>Uptime <strong id="home-uptime">—</strong></span>
-            <span>Model <strong>Gemma 4 E2B Q4_0</strong></span>
+          <div class="hero-copy">
+            <p class="eyebrow">Private personal background agent</p>
+            <h1 id="home-title">Good to see you.</h1>
+            <p><strong>Virtual Me</strong> is watching the desk so you don't have to — a private browser, local model, and agent loop, all on this machine.</p>
+            <div class="home-facts">
+              <span id="home-health" class="health-pill pending">Waiting for controller</span>
+              <span>Host <strong id="home-host">—</strong></span>
+              <span>Uptime <strong id="home-uptime">—</strong></span>
+              <span>CPU <strong id="home-cpu">—</strong></span>
+              <span>Memory <strong id="home-memory">—</strong></span>
+              <span>Disk <strong id="home-disk">—</strong></span>
+              <span>Model <strong>Gemma 4 E2B Q4_0</strong></span>
+            </div>
           </div>
+          <figure class="hero-media" aria-hidden="true"><img src="/img/hero-earthrise.jpg" alt=""></figure>
         </div>
         <div class="quick-links">
           <a href="/status" data-nav><svg class="icon"><use href="/icons.svg#i-activity"/></svg><strong>Status</strong><span>Inspect services and metrics</span></a>
           <a href="/chat" data-nav><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg><strong>Chat</strong><span>Talk to the local model</span></a>
+          <a href="/speech" data-nav><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg><strong>Speech</strong><span>Speak with the local voice</span></a>
+          <a href="/mail" data-nav><svg class="icon"><use href="/icons.svg#i-mail"/></svg><strong>Mail</strong><span>Compose and inspect delivery</span></a>
           <a href="/desktop-view" data-nav><svg class="icon"><use href="/icons.svg#i-monitor"/></svg><strong>Desktop</strong><span>Open the private browser</span></a>
         </div>
         <footer><span>Virtual Me v0.1.0</span><a href="https://github.com/mayanklahiri/virtualme" target="_blank" rel="noopener noreferrer">GitHub</a></footer>
@@ -103,6 +119,67 @@
           </div>
           <p id="llm-status" class="llm-status" aria-live="polite"></p>
         </form>
+      </section>
+
+      <section data-page="speech" hidden class="speech-page" aria-labelledby="speech-title">
+        <h1 id="speech-title">Speech</h1>
+        <div class="speech-card">
+          <label for="speech-input">Text</label>
+          <textarea id="speech-input" rows="8" maxlength="4096" placeholder="Enter text to speak aloud"></textarea>
+          <div class="speech-controls">
+            <span id="speech-count">0 / 4096</span>
+            <label for="speech-speed">Speed <output id="speech-speed-value">1.0×</output></label>
+            <input id="speech-speed" type="range" min="0.5" max="2" step="0.1" value="1">
+            <span>Voice <strong>Lessac (en-US)</strong></span>
+          </div>
+          <div class="speech-actions">
+            <button id="speech-stop" class="secondary" type="button" hidden><svg class="icon"><use href="/icons.svg#i-square"/></svg>Stop</button>
+            <button id="speech-speak" type="button" disabled><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg>Speak</button>
+          </div>
+          <p id="speech-status" class="llm-status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section data-page="mail" hidden class="mail-page" aria-labelledby="mail-title">
+        <h1 id="mail-title">Mail</h1>
+        <div class="mail-grid">
+          <form id="mail-form" class="mail-card">
+            <h2>Compose</h2>
+            <label for="mail-to">To</label>
+            <input id="mail-to" name="to" type="email" required autocomplete="email" placeholder="recipient@example.com">
+            <label for="mail-subject">Subject</label>
+            <input id="mail-subject" name="subject" type="text" maxlength="998">
+            <label for="mail-body">Body</label>
+            <textarea id="mail-body" name="body" rows="8" maxlength="20000"></textarea>
+            <label class="mail-checkbox"><input id="mail-image" type="checkbox"> Embed test image</label>
+            <div class="mail-actions">
+              <button id="mail-gmail-test" class="secondary" type="button">Send Gmail test</button>
+              <button id="mail-send" type="submit"><svg class="icon"><use href="/icons.svg#i-send"/></svg>Send</button>
+            </div>
+            <p id="mail-result" class="mail-result" aria-live="polite"></p>
+          </form>
+          <div class="mail-card">
+            <h2>Status</h2>
+            <dl class="mail-status">
+              <div><dt>Delivery mode</dt><dd id="mail-mode">—</dd></div>
+              <div><dt>From</dt><dd id="mail-from">—</dd></div>
+              <div><dt>DKIM</dt><dd id="mail-dkim">—</dd></div>
+            </dl>
+            <div id="mail-dns" hidden>
+              <label for="mail-dns-name">DNS TXT name</label>
+              <div class="copy-row"><input id="mail-dns-name" readonly><button type="button" data-copy="mail-dns-name"><svg class="icon"><use href="/icons.svg#i-copy"/></svg></button></div>
+              <label for="mail-dns-value">DNS TXT value</label>
+              <div class="copy-row"><textarea id="mail-dns-value" rows="4" readonly></textarea><button type="button" data-copy="mail-dns-value"><svg class="icon"><use href="/icons.svg#i-copy"/></svg></button></div>
+            </div>
+            <h2>Queue</h2>
+            <table class="mail-queue"><thead><tr><th>ID</th><th>Size</th><th>Age</th></tr></thead><tbody id="mail-queue"></tbody></table>
+            <p id="mail-last">No messages submitted in this controller session.</p>
+          </div>
+        </div>
+        <aside class="mail-guidance">
+          <strong>Deliverability</strong>
+          <p>Direct MX delivery needs SPF and/or DKIM alignment plus acceptable sending-IP and PTR reputation. Residential or dynamic IPs are commonly rejected; configure the VM_MAIL_SMARTHOST variables for reliable relay delivery.</p>
+        </aside>
       </section>
 
       <section data-page="desktop" hidden class="desktop-page" aria-labelledby="desktop-title">

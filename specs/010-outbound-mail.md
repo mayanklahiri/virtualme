@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Proposed |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/002-container.md` (layers, s6, unprivileged uid), `specs/003-controller.md` (websocket hub, SPA), `specs/005-console-ui.md` (multi-page console), `specs/007-persistence-locality.md` (persistence map + smoke known-set, superseded per §7) executed; `specs/009-local-tts.md` only for layer numbering (this spec appends layer 015 after 013–014) |
 | Produces | A packaged MTA (`dma`, DragonFly Mail Agent) in new docker layer 015 with a supervised queue-runner service (`svc-mailq`); a controller `internal/mail` package (Gmail-compatible MIME with inline CID images + DKIM signing, stdlib-only); websocket mail frames; a console **Mail** tab for sending test messages with embedded images; `$VM_DATA_DIR/mail/` persistence |
 | Followed by | `specs/011-ui-refresh.md` |

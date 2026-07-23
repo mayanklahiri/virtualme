@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,11 +13,47 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/mayanklahiri/virtualme/controller/internal/tts"
 )
 
 type fakeExecutor struct {
 	mu    sync.Mutex
 	calls []string
+}
+
+func TestSpeakToolDefinitionAndExecution(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintln(w, `{"type":"start","sampleRate":22050,"channels":1,"sentences":1}`)
+		_, _ = fmt.Fprintln(w, `{"type":"chunk","seq":0,"pcm":"AQI="}`)
+		_, _ = fmt.Fprintln(w, `{"type":"done","audioSec":1.2,"rtf":0.1}`)
+	}))
+	defer server.Close()
+	var frames [][]byte
+	tools := NewLocalTools(Config{
+		DataDir: t.TempDir(), TTS: &tts.Client{URL: server.URL},
+		Broadcast: func(payload []byte) { frames = append(frames, append([]byte(nil), payload...)) },
+	}).(*localTools)
+	tools.resetTask("task-1")
+	found := false
+	for _, definition := range tools.Definitions() {
+		if definition.Name == "speak" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("speak definition missing")
+	}
+	result, err := tools.Execute(context.Background(), "speak", json.RawMessage(`{"text":"Hello aloud","speed":1}`))
+	if err != nil || result.Text != `{"audioSec":1.2,"ok":true}` {
+		t.Fatalf("Execute(speak) = %+v, %v", result, err)
+	}
+	joined := string(bytes.Join(frames, []byte("\n")))
+	for _, want := range []string{`"type":"tts-start"`, `"type":"tts-chunk"`, `"type":"tts-done"`, `"origin":"chat"`} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("frames missing %s: %s", want, joined)
+		}
+	}
 }
 
 func (f *fakeExecutor) Definitions() []Tool {

@@ -11,6 +11,7 @@ RUN if [ -f controller/tools/fetch-assets.sh ]; then \
     fi
 RUN if [ -f scripts/build-web.sh ]; then npm ci && bash scripts/build-web.sh; fi
 RUN cd controller && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/controller ./cmd/controller
+RUN cd controller && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ttsd ./cmd/ttsd
 
 FROM debian:stable-slim
 
@@ -46,10 +47,17 @@ RUN bash /tmp/layers/011-agent-tools.sh
 COPY --chmod=0755 docker/rootfs/usr/local/lib/virtualme/system-manifest.sh /usr/local/lib/virtualme/system-manifest.sh
 COPY docker/layers/012-manifest.sh /tmp/layers/012-manifest.sh
 RUN bash /tmp/layers/012-manifest.sh
+COPY docker/layers/013-sherpa-onnx.sh /tmp/layers/013-sherpa-onnx.sh
+RUN bash /tmp/layers/013-sherpa-onnx.sh
+COPY docker/layers/014-tts-model.sh /tmp/layers/014-tts-model.sh
+RUN bash /tmp/layers/014-tts-model.sh
+COPY docker/layers/015-mta.sh /tmp/layers/015-mta.sh
+RUN bash /tmp/layers/015-mta.sh
 
 # Fast-moving top: service tree + controller binary.
 COPY docker/rootfs/ /
 COPY --from=controller-build /out/controller /usr/local/bin/controller
+COPY --from=controller-build /out/ttsd /usr/local/bin/ttsd
 
 ENV LANG=C.UTF-8 \
     HOME=/home/virtualme \
@@ -63,6 +71,12 @@ ENV LANG=C.UTF-8 \
     VM_MMPROJ_PATH=/opt/models/mmproj-gemma-4-E2B-F16.gguf \
     VM_LLAMA_PORT=8081 \
     VM_LLAMA_CTX=16384 \
+    VM_TTS_PORT=8082 \
+    VM_SHERPA_DIR=/opt/sherpa-onnx \
+    VM_TTS_MODEL_DIR=/opt/models/tts/vits-piper-en_US-lessac-medium \
+    VM_TTS_VOICE=en_US-lessac-medium \
+    VM_TTS_MAX_CHARS=4096 \
+    VM_MAIL_FLUSH_SEC=60 \
     VM_AGENT_MAX_STEPS=25 \
     VM_AGENT_KEEP_TASKS=20 \
     VM_HTTP_ADDR=:8080 \

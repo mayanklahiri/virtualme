@@ -2,6 +2,7 @@ node_modules/
 *.tgz
 controller/web/static/fonts/
 controller/web/static/icons/
+controller/web/static/img/
 controller/web/dist/
 controller/controller
 /.DS_Store

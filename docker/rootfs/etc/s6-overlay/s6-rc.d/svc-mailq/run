@@ -1,0 +1,7 @@
+#!/command/with-contenv bash
+# dma submits immediately; retry deferred messages forever.
+set -euo pipefail
+while :; do
+  /usr/sbin/dma -q || true
+  sleep "${VM_MAIL_FLUSH_SEC:-60}"
+done

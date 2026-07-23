@@ -1,4 +1,4 @@
-const themes = ["modern", "editorial", "terminal", "warm", "contrast"];
+const themes = ["modern", "editorial", "terminal", "warm", "contrast", "arctic", "solar", "studio"];
 const variants = [
   ["auto", "palette"],
   ["light", "sun"],
@@ -19,10 +19,31 @@ function icon(name) {
 export function initTheme() {
   const themeBox = document.querySelector("#theme-options");
   const variantBox = document.querySelector("#variant-options");
+  const themeButton = document.querySelector("#theme-button");
+  const themeCurrent = document.querySelector("#theme-current");
+  const popover = document.querySelector("#theme-popover");
   const savedTheme = localStorage.getItem("vm-theme");
   const savedVariant = localStorage.getItem("vm-variant");
   let theme = themes.includes(savedTheme) ? savedTheme : "modern";
   let preference = variants.some(([name]) => name === savedVariant) ? savedVariant : "auto";
+
+  function closePopover() {
+    if (popover.hidden) {
+      return;
+    }
+    popover.hidden = true;
+    themeButton.setAttribute("aria-expanded", "false");
+    themeButton.focus();
+  }
+
+  function togglePopover() {
+    const opening = popover.hidden;
+    popover.hidden = !opening;
+    themeButton.setAttribute("aria-expanded", String(opening));
+    if (opening) {
+      themeBox.querySelector(`[data-value="${theme}"]`)?.focus();
+    }
+  }
 
   function apply() {
     const resolved = preference === "auto" ? (scheme.matches ? "dark" : "light") : preference;
@@ -34,8 +55,21 @@ export function initTheme() {
     for (const button of variantBox.children) {
       button.setAttribute("aria-pressed", String(button.dataset.value === preference));
     }
+    themeCurrent.textContent = theme[0].toUpperCase() + theme.slice(1);
     dispatchEvent(new CustomEvent("themechange"));
   }
+
+  themeButton.addEventListener("click", togglePopover);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !popover.hidden) {
+      closePopover();
+    }
+  });
+  document.addEventListener("click", (event) => {
+    if (!popover.hidden && !popover.contains(event.target) && !themeButton.contains(event.target)) {
+      closePopover();
+    }
+  });
 
   for (const name of themes) {
     const button = document.createElement("button");
@@ -51,6 +85,7 @@ export function initTheme() {
       theme = name;
       localStorage.setItem("vm-theme", theme);
       apply();
+      closePopover();
     });
     themeBox.append(button);
   }

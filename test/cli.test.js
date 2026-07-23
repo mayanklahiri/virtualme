@@ -108,6 +108,31 @@ test("start can force Chromium's sandbox fallback without adding privileges", ()
   }
 });
 
+test("start forwards configured outbound-mail environment", () => {
+  const parent = mkdtempSync(join(tmpdir(), "virtualme-test-"));
+  const dataDir = join(parent, "data");
+  const previous = process.env.VM_MAIL_SMARTHOST;
+  process.env.VM_MAIL_SMARTHOST = "relay.example";
+  try {
+    /** @type {string[] | undefined} */
+    let invocation;
+    const probes = { haveDocker: () => true, daemonUp: () => true, containerState: () => "absent" };
+    const code = start(["--data", dataDir], (args) => {
+      invocation = args;
+      return 0;
+    }, probes);
+    assert.equal(code, 0);
+    assert.ok(invocation);
+    assert.deepEqual(invocation.slice(-3), [
+      "-e", "VM_MAIL_SMARTHOST=relay.example", "mayanklahiri/virtualme:latest",
+    ]);
+  } finally {
+    if (previous === undefined) delete process.env.VM_MAIL_SMARTHOST;
+    else process.env.VM_MAIL_SMARTHOST = previous;
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
 test("start forwards an optional GPU specification and marker env", () => {
   const parent = mkdtempSync(join(tmpdir(), "virtualme-test-"));
   const dataDir = join(parent, "data");

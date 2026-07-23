@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/mayanklahiri/virtualme/controller/internal/health"
@@ -17,9 +18,11 @@ import (
 
 // System contains lightweight host resource measurements.
 type System struct {
-	Load1      float64 `json:"load1"`
-	MemUsedMB  int     `json:"memUsedMB"`
-	MemTotalMB int     `json:"memTotalMB"`
+	Load1       float64 `json:"load1"`
+	MemUsedMB   int     `json:"memUsedMB"`
+	MemTotalMB  int     `json:"memTotalMB"`
+	DiskFreeMB  int     `json:"diskFreeMB"`
+	DiskTotalMB int     `json:"diskTotalMB"`
 }
 
 // Snapshot is the websocket state message consumed by the SPA.
@@ -27,6 +30,7 @@ type Snapshot struct {
 	Type      string           `json:"type"`
 	Ts        int64            `json:"ts"`
 	UptimeSec int64            `json:"uptimeSec"`
+	Hostname  string           `json:"hostname"`
 	OK        bool             `json:"ok"`
 	Services  []health.Service `json:"services"`
 	System    System           `json:"system"`
@@ -43,6 +47,8 @@ type Collector struct {
 	broadcast func([]byte)
 	started   time.Time
 	period    time.Duration
+	hostname  string
+	dataDir   string
 }
 
 // ReadSystem parses Linux procfs load and memory data.
@@ -75,8 +81,23 @@ func ReadSystem(loadavg, meminfo string) System {
 	return result
 }
 
+// ReadDisk returns available and total filesystem capacity in MiB.
+func ReadDisk(path string) (freeMB, totalMB int) {
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(path, &stat); err != nil {
+		return 0, 0
+	}
+	return int(stat.Bavail * uint64(stat.Bsize) / (1024 * 1024)),
+		int(stat.Blocks * uint64(stat.Bsize) / (1024 * 1024))
+}
+
 // NewCollector creates a two-second state collector sampling procRoot.
 func NewCollector(cfg health.Config, procRoot string, store *metrics.Store, broadcast func([]byte)) *Collector {
+	hostname, _ := os.Hostname()
+	dataDir := os.Getenv("VM_DATA_DIR")
+	if dataDir == "" {
+		dataDir = "/home/virtualme/.virtualme"
+	}
 	return &Collector{
 		cfg:       cfg,
 		sampler:   procstat.NewSampler(procRoot),
@@ -85,6 +106,8 @@ func NewCollector(cfg health.Config, procRoot string, store *metrics.Store, broa
 		broadcast: broadcast,
 		started:   time.Now(),
 		period:    2 * time.Second,
+		hostname:  hostname,
+		dataDir:   dataDir,
 	}
 }
 
@@ -102,12 +125,14 @@ func (c *Collector) collect() {
 		readFile(filepath.Join(c.procRoot, "loadavg")),
 		readFile(filepath.Join(c.procRoot, "meminfo")),
 	)
+	system.DiskFreeMB, system.DiskTotalMB = ReadDisk(c.dataDir)
 	processes := c.sampler.Sample()
 	cores := c.sampler.Cores()
 	snapshot := Snapshot{
 		Type:      "state",
 		Ts:        time.Now().UnixMilli(),
 		UptimeSec: int64(time.Since(c.started) / time.Second),
+		Hostname:  c.hostname,
 		OK:        report.OK,
 		Services:  report.Services,
 		System:    system,

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/mayanklahiri/virtualme/controller/internal/health"
+	"github.com/mayanklahiri/virtualme/controller/internal/tts"
 	"github.com/mayanklahiri/virtualme/controller/internal/ws"
 )
 
@@ -34,6 +38,87 @@ func TestDesktopProxyStripsPrefix(t *testing.T) {
 	}
 }
 
+func fakeTTSServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		encoded := base64.StdEncoding.EncodeToString([]byte{1, 2, 3, 4})
+		_, _ = w.Write([]byte(`{"type":"start","sampleRate":22050,"channels":1,"sentences":1}` + "\n"))
+		_, _ = w.Write([]byte(`{"type":"chunk","seq":0,"pcm":"` + encoded + `"}` + "\n"))
+		_, _ = w.Write([]byte(`{"type":"done","audioSec":1,"rtf":0.1}` + "\n"))
+	}))
+}
+
+func TestSpeechEndpointWAVAndPCM(t *testing.T) {
+	server := fakeTTSServer(t)
+	defer server.Close()
+	for _, format := range []string{"wav", "pcm"} {
+		request := httptest.NewRequest(http.MethodPost, "/v1/audio/speech",
+			strings.NewReader(`{"input":"Hello.","response_format":"`+format+`"}`))
+		response := httptest.NewRecorder()
+		speechHandler(&tts.Client{URL: server.URL}).ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s status = %d: %s", format, response.Code, response.Body.String())
+		}
+		body := response.Body.Bytes()
+		if format == "wav" {
+			if !bytes.HasPrefix(body, []byte("RIFF")) || !bytes.HasSuffix(body, []byte{1, 2, 3, 4}) {
+				t.Fatalf("wav body = %x", body)
+			}
+		} else if !bytes.Equal(body, []byte{1, 2, 3, 4}) {
+			t.Fatalf("pcm body = %x", body)
+		}
+	}
+}
+
+func TestSpeechEndpointErrors(t *testing.T) {
+	bad := httptest.NewRecorder()
+	speechHandler(&tts.Client{}).ServeHTTP(bad, httptest.NewRequest(http.MethodPost, "/v1/audio/speech",
+		strings.NewReader(`{"input":"Hello.","response_format":"mp3"}`)))
+	if bad.Code != http.StatusBadRequest {
+		t.Fatalf("bad format status = %d", bad.Code)
+	}
+	down := httptest.NewRecorder()
+	client := &tts.Client{URL: "http://127.0.0.1:1", HTTP: &http.Client{}}
+	speechHandler(client).ServeHTTP(down, httptest.NewRequest(http.MethodPost, "/v1/audio/speech",
+		strings.NewReader(`{"input":"Hello."}`)).WithContext(context.Background()))
+	if down.Code != http.StatusBadGateway {
+		t.Fatalf("down status = %d: %s", down.Code, down.Body.String())
+	}
+}
+
+func TestTTSWSReplacesAndStopsPerConnection(t *testing.T) {
+	manager := newTTSWS(&tts.Client{})
+	conn := new(ws.Conn)
+	firstCtx, firstCancel, firstToken, oldID := manager.start(conn, "first")
+	defer firstCancel()
+	if oldID != "" {
+		t.Fatalf("first old id = %q", oldID)
+	}
+	secondCtx, secondCancel, _, oldID := manager.start(conn, "second")
+	defer secondCancel()
+	if oldID != "first" {
+		t.Fatalf("replacement old id = %q", oldID)
+	}
+	select {
+	case <-firstCtx.Done():
+	default:
+		t.Fatal("replacement did not cancel first stream")
+	}
+	manager.done(conn, firstToken)
+	if manager.stop(conn, "wrong") {
+		t.Fatal("wrong id stopped active stream")
+	}
+	if !manager.stop(conn, "second") {
+		t.Fatal("active stream was not stopped")
+	}
+	select {
+	case <-secondCtx.Done():
+	default:
+		t.Fatal("stop did not cancel second stream")
+	}
+}
+
 func TestHealthRouteReturnsServices(t *testing.T) {
 	desktopURL, _ := url.Parse("http://127.0.0.1:1")
 	request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -45,7 +130,7 @@ func TestHealthRouteReturnsServices(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&report); err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Services) != 6 {
+	if len(report.Services) != 8 {
 		t.Fatalf("services = %d", len(report.Services))
 	}
 }
@@ -91,6 +176,9 @@ func redConfig(t *testing.T) health.Config {
 		NoVNCURL:       "http://127.0.0.1:1",
 		ValkeyAddr:     "127.0.0.1:1",
 		LlamaHealthURL: "http://127.0.0.1:1",
+		TTSHealthURL:   "http://127.0.0.1:1",
 		Xdotool:        "/does/not/exist",
+		SendmailPath:   "/does/not/exist",
+		MailSpoolDir:   t.TempDir(),
 	}
 }

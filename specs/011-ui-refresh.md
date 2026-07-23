@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Proposed |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/003-controller.md` (SPA, asset pipeline), `specs/005-console-ui.md` (themes, theme picker, homepage) executed; `specs/007-persistence-locality.md` gates (SPA same-origin, spec 007 §2b) bind all assets; independent of 009/010 (if those land first, the Speech/Mail nav entries simply inherit the refresh) |
 | Produces | A collapsed theme selector (button + popover); a "Virtual Me" brand identity (pinned display font, in-repo logo mark, per-theme accent gradient, favicon); a friendlier homepage with a pinned public-domain hero photograph (theme-tinted), hostname, and live capacity stats; revised `editorial`/`terminal`/`warm` themes; three new themes (`arctic`, `solar`, `studio`); a per-theme type-scale token |
 | Followed by | Future specs |

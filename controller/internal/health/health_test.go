@@ -114,7 +114,7 @@ func TestGather(t *testing.T) {
 	if !result.OK {
 		t.Fatalf("Gather() = %+v", result)
 	}
-	want := []string{"xvfb", "x11vnc", "novnc", "valkey", "llama", "chromium"}
+	want := []string{"xvfb", "x11vnc", "novnc", "valkey", "llama", "tts", "chromium", "mail"}
 	if len(result.Services) != len(want) {
 		t.Fatalf("got %d services", len(result.Services))
 	}
@@ -152,6 +152,11 @@ func allGreenConfig(t *testing.T) (Config, func()) {
 	if err := os.WriteFile(script, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	sendmail := filepath.Join(t.TempDir(), "sendmail")
+	if err := os.WriteFile(sendmail, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	spool := t.TempDir()
 	cfg := Config{
 		Display:        ":99",
 		X11SocketDir:   socketDir,
@@ -159,7 +164,10 @@ func allGreenConfig(t *testing.T) (Config, func()) {
 		NoVNCURL:       httpServer.URL,
 		ValkeyAddr:     valkey.Addr().String(),
 		LlamaHealthURL: httpServer.URL,
+		TTSHealthURL:   httpServer.URL,
 		Xdotool:        script,
+		SendmailPath:   sendmail,
+		MailSpoolDir:   spool,
 	}
 	return cfg, func() {
 		_ = vnc.Close()

@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mayanklahiri/virtualme/controller/internal/tts"
 )
 
 const (
@@ -77,6 +79,7 @@ type Config struct {
 	Client        *http.Client
 	Runner        Runner
 	Executor      Executor
+	TTS           *tts.Client
 }
 
 // Result describes how an agent task terminated.
@@ -158,6 +161,7 @@ func buildSystemPrompt(cfg Config) string {
 You can operate the visible Chromium window. Act only through the provided OS-input tools; CDP/DOM tools are observation-only.
 Prefer DOM refs with click_element/type_into for precision. Use coordinate clicks only as fallback. Screenshots use %dx%d API coordinates mapped to a %dx%d display.
 Use tools when the user asks you to operate or inspect the browser/system. For ordinary questions, answer directly without tools.
+Use speak only when the user explicitly asks to hear something or an audible response is clearly better; otherwise answer in text.
 Stop as soon as the task is complete and report the result. Never claim an action succeeded unless an observation confirms it.
 Environment manifest: %s`, apiWidth, apiHeight, width, height, environment)
 }
@@ -237,6 +241,9 @@ func (a *Agent) Handle(ctx context.Context, userText string) (Result, error) {
 			}
 			a.step++
 			a.status("acting")
+			if local, ok := a.tools.(*localTools); ok {
+				local.stepID = fmt.Sprintf("%s-%d", a.taskID, a.step)
+			}
 			result, toolErr := a.tools.Execute(ctx, call.Function.Name, json.RawMessage(call.Function.Arguments))
 			if toolErr != nil {
 				result.Text = "tool error: " + toolErr.Error()

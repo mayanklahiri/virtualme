@@ -22,7 +22,7 @@ func (a *Agent) beginTask() error {
 	a.taskDir = filepath.Join(a.cfg.DataDir, a.taskID)
 	a.step = 0
 	if local, ok := a.tools.(*localTools); ok {
-		local.resetTask()
+		local.resetTask(a.taskID)
 	}
 	return os.MkdirAll(a.taskDir, 0o755)
 }

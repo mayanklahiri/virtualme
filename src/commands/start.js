@@ -69,6 +69,18 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
   if (flags.gpus) {
     dockerArgs.push("--gpus", flags.gpus, "-e", "VM_LLAMA_GPU=1");
   }
+  if (process.env.VM_MAIL_SMARTHOST) {
+    dockerArgs.push("--add-host", "vmhost:host-gateway");
+  }
+  for (const name of [
+    "VM_MAIL_MAILNAME", "VM_MAIL_FROM", "VM_MAIL_SMARTHOST",
+    "VM_MAIL_SMARTHOST_PORT", "VM_MAIL_SMARTHOST_USER",
+    "VM_MAIL_SMARTHOST_PASS", "VM_MAIL_DKIM_DOMAIN", "VM_MAIL_DKIM_SELECTOR",
+  ]) {
+    if (process.env[name] !== undefined) {
+      dockerArgs.push("-e", `${name}=${process.env[name]}`);
+    }
+  }
   dockerArgs.push(`${IMAGE}:${TAG}`);
   const code = docker(dockerArgs);
   if (code === 0) {

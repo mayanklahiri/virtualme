@@ -15,6 +15,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/mayanklahiri/virtualme/controller/internal/tts"
 )
 
 const (
@@ -108,14 +110,18 @@ type localTools struct {
 	boxes     map[int][4]float64
 	cwd       string
 	env       map[string]string
+	taskID    string
+	stepID    string
 }
 
-func (t *localTools) resetTask() {
+func (t *localTools) resetTask(taskID string) {
 	t.boxMu.Lock()
 	t.boxes = make(map[int][4]float64)
 	t.boxMu.Unlock()
 	t.cwd = t.cfg.DataDir
 	t.env = make(map[string]string)
+	t.taskID = taskID
+	t.stepID = ""
 }
 
 // NewLocalTools constructs all built-in observation and action tools.
@@ -164,6 +170,7 @@ func (t *localTools) Definitions() []Tool {
 		{Name: "navigate", Description: "Navigate by focusing Chromium's omnibox and typing a URL via OS input.", Schema: schema(`{"type":"object","properties":{"url":{"type":"string"}},"required":["url"],"additionalProperties":false}`)},
 		{Name: "bash", Description: "Run a one-shot bash command in the container; cwd and exported variables persist for this task.", Schema: schema(`{"type":"object","properties":{"command":{"type":"string"},"timeoutSec":{"type":"integer","minimum":1,"maximum":300}},"required":["command"],"additionalProperties":false}`)},
 		{Name: "system_info", Description: "Probe the local OS, packages, environment, paths, disk, and services.", Schema: schema(`{"type":"object","properties":{"topic":{"type":"string","enum":["os","packages","env","paths","all"]}},"additionalProperties":false}`)},
+		{Name: "speak", Description: "Speak text aloud to the user through the console (local text-to-speech). Use when the user asks to hear something or an audible response is clearly better.", Schema: schema(`{"type":"object","properties":{"text":{"type":"string","maxLength":4096},"speed":{"type":"number","minimum":0.5,"maximum":2}},"required":["text"],"additionalProperties":false}`)},
 	}
 }
 
@@ -286,9 +293,73 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 		return t.bash(ctx, raw)
 	case "system_info":
 		return t.systemInfo(ctx, raw)
+	case "speak":
+		return t.speak(ctx, raw)
 	default:
 		return ToolResult{}, fmt.Errorf("unknown tool %q", name)
 	}
+}
+
+func (t *localTools) speak(ctx context.Context, raw json.RawMessage) (ToolResult, error) {
+	var args struct {
+		Text  string  `json:"text"`
+		Speed float64 `json:"speed"`
+	}
+	if err := decodeArgs(raw, &args); err != nil {
+		return ToolResult{}, err
+	}
+	args.Text = strings.TrimSpace(args.Text)
+	if args.Text == "" || len([]rune(args.Text)) > 4096 {
+		return ToolResult{}, errors.New("text must be 1-4096 characters")
+	}
+	if args.Speed != 0 && (args.Speed < 0.5 || args.Speed > 2) {
+		return ToolResult{}, errors.New("speed must be between 0.5 and 2.0")
+	}
+	if t.cfg.TTS == nil {
+		return ToolResult{}, errors.New("local text-to-speech is unavailable")
+	}
+	origin, id := "chat", t.stepID
+	if id == "" {
+		id = t.taskID
+	}
+	queued, _ := json.Marshal(map[string]any{"type": "tts-status", "id": id, "origin": origin, "phase": "queued"})
+	t.cfg.Broadcast(queued)
+	sentenceCount := 0
+	summary, err := t.cfg.TTS.Synthesize(ctx, tts.Request{Text: args.Text, Speed: args.Speed}, func(event tts.Event) error {
+		frame := map[string]any{"id": id, "origin": origin}
+		switch event.Type {
+		case "start":
+			sentenceCount = event.Sentences
+			frame["type"], frame["sampleRate"], frame["channels"], frame["sentences"] = "tts-start", event.SampleRate, event.Channels, event.Sentences
+		case "chunk":
+			frame["type"], frame["seq"], frame["pcm"] = "tts-chunk", event.Seq, event.PCM
+			status, _ := json.Marshal(map[string]any{"type": "tts-status", "id": id, "origin": origin, "phase": "synthesizing", "sentence": event.Seq + 1, "sentences": sentenceCount})
+			t.cfg.Broadcast(status)
+		case "done":
+			frame["type"], frame["audioSec"], frame["rtf"] = "tts-done", event.AudioSec, event.RTF
+		default:
+			return nil
+		}
+		payload, _ := json.Marshal(frame)
+		t.cfg.Broadcast(payload)
+		return nil
+	})
+	if err != nil {
+		if ctx.Err() != nil {
+			stopped, _ := json.Marshal(map[string]any{"type": "tts-status", "id": id, "origin": origin, "phase": "stopped"})
+			t.cfg.Broadcast(stopped)
+			return ToolResult{}, ctx.Err()
+		}
+		payload, _ := json.Marshal(map[string]any{"type": "tts-error", "id": id, "origin": origin, "error": err.Error()})
+		t.cfg.Broadcast(payload)
+		failed, _ := json.Marshal(map[string]any{"type": "tts-status", "id": id, "origin": origin, "phase": "failed"})
+		t.cfg.Broadcast(failed)
+		return ToolResult{}, err
+	}
+	done, _ := json.Marshal(map[string]any{"type": "tts-status", "id": id, "origin": origin, "phase": "done", "sentences": sentenceCount, "rtf": summary.RTF})
+	t.cfg.Broadcast(done)
+	result, _ := json.Marshal(map[string]any{"ok": true, "audioSec": summary.AudioSec})
+	return ToolResult{Text: string(result), Summary: "Spoke text aloud"}, nil
 }
 
 func (t *localTools) action(ctx context.Context, summary string, args ...string) (ToolResult, error) {
