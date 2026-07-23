@@ -139,6 +139,16 @@ export function initCharts(send) {
     return result;
   }
 
+  function barBounds(part, index, scale, width) {
+    const sample = part[index];
+    const halfBucket = resSec * 500;
+    const leftTS = index > 0 ? (part[index - 1].ts + sample.ts) / 2 : sample.ts - halfBucket;
+    const rightTS = index + 1 < part.length ? (sample.ts + part[index + 1].ts) / 2 : sample.ts + halfBucket;
+    const left = Math.max(PAD.left, scale.x(leftTS));
+    const right = Math.min(width - PAD.right, scale.x(rightTS));
+    return { left, width: Math.max(right - left, 1) };
+  }
+
   function drawCPU() {
     const { context, width, height } = setup(cpuCanvas);
     const coreCount = Math.max(0, ...samples.map((sample) => sample.cores.length));
@@ -146,45 +156,40 @@ export function initCharts(send) {
     axes(context, width, height, max, "%");
     const scale = scales(width, height, max);
     context.fillStyle = css("--accent");
-    for (let core = 0; core < coreCount; core++) {
-      context.globalAlpha = 0.3 + (core % 5) * 0.14;
-      for (const part of segments()) {
-        context.beginPath();
-        part.forEach((sample, index) => {
-          const top = sample.cores.slice(0, core + 1).reduce((sum, value) => sum + (value || 0), 0);
-          const x = scale.x(sample.ts);
-          const y = scale.y(top);
-          if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
-        });
-        for (let index = part.length - 1; index >= 0; index--) {
-          const sample = part[index];
-          const base = sample.cores.slice(0, core).reduce((sum, value) => sum + (value || 0), 0);
-          context.lineTo(scale.x(sample.ts), scale.y(base));
+    for (const part of segments()) {
+      part.forEach((sample, index) => {
+        const bar = barBounds(part, index, scale, width);
+        let base = 0;
+        for (let core = 0; core < coreCount; core++) {
+          const value = sample.cores[core] || 0;
+          const top = base + value;
+          context.globalAlpha = 0.3 + (core % 5) * 0.14;
+          context.fillRect(bar.left, scale.y(top), bar.width, scale.y(base) - scale.y(top));
+          base = top;
         }
-        context.closePath();
-        context.fill();
-      }
+      });
     }
     context.globalAlpha = 1;
   }
 
   function drawMemory() {
     const { context, width, height } = setup(memCanvas);
-    const max = Math.max(1, ...samples.flatMap((sample) => sample.procMemMB));
+    const max = Math.max(1, ...samples.map((sample) =>
+      sample.procMemMB.reduce((sum, value) => sum + (value || 0), 0)));
     axes(context, width, height, max, "");
     const scale = scales(width, height, max);
-    for (let process = 0; process < PROCESSES.length; process++) {
-      context.strokeStyle = css(`--p${process + 1}`);
-      context.lineWidth = 1.5;
-      for (const part of segments()) {
-        context.beginPath();
-        part.forEach((sample, index) => {
-          const x = scale.x(sample.ts);
-          const y = scale.y(sample.procMemMB[process] || 0);
-          if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
-        });
-        context.stroke();
-      }
+    for (const part of segments()) {
+      part.forEach((sample, index) => {
+        const bar = barBounds(part, index, scale, width);
+        let base = 0;
+        for (let process = 0; process < PROCESSES.length; process++) {
+          const value = sample.procMemMB[process] || 0;
+          const top = base + value;
+          context.fillStyle = css(`--p${process + 1}`);
+          context.fillRect(bar.left, scale.y(top), bar.width, scale.y(base) - scale.y(top));
+          base = top;
+        }
+      });
     }
   }
 
@@ -194,18 +199,17 @@ export function initCharts(send) {
     drawMemory();
   }
 
-  function show(index, clientX, clientY) {
+  function show(canvas, index, clientX, clientY) {
     hover = index;
     const sample = samples[index];
     if (!sample) {
       tooltip.hidden = true;
       return;
     }
-    tooltip.textContent = [
-      new Date(sample.ts).toLocaleString(),
-      ...sample.cores.map((value, i) => `cpu${i}: ${value.toFixed(1)}%`),
-      ...sample.procMemMB.map((value, i) => `${PROCESSES[i]}: ${value} MiB`),
-    ].join("\n");
+    const values = canvas === cpuCanvas
+      ? sample.cores.map((value, i) => `cpu${i}: ${value.toFixed(1)}%`)
+      : sample.procMemMB.map((value, i) => `${PROCESSES[i]}: ${value} MiB`);
+    tooltip.textContent = [new Date(sample.ts).toLocaleString(), ...values].join("\n");
     tooltip.hidden = false;
     tooltip.style.left = `${Math.min(clientX + 12, innerWidth - tooltip.offsetWidth - 8)}px`;
     tooltip.style.top = `${Math.min(clientY + 12, innerHeight - tooltip.offsetHeight - 8)}px`;
@@ -214,17 +218,17 @@ export function initCharts(send) {
     canvas.addEventListener("mousemove", (event) => {
       const rect = canvas.getBoundingClientRect();
       const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left - PAD.left) / Math.max(rect.width - PAD.left - PAD.right, 1)));
-      show(Math.round(ratio * Math.max(samples.length - 1, 0)), event.clientX, event.clientY);
+      show(canvas, Math.round(ratio * Math.max(samples.length - 1, 0)), event.clientX, event.clientY);
     });
-    canvas.addEventListener("mouseleave", () => show(-1, 0, 0));
+    canvas.addEventListener("mouseleave", () => show(canvas, -1, 0, 0));
     canvas.addEventListener("keydown", (event) => {
       if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
         event.preventDefault();
         const next = hover < 0 ? samples.length - 1 : hover + (event.key === "ArrowLeft" ? -1 : 1);
         const rect = canvas.getBoundingClientRect();
-        show(Math.max(0, Math.min(samples.length - 1, next)), rect.left + PAD.left, rect.bottom);
+        show(canvas, Math.max(0, Math.min(samples.length - 1, next)), rect.left + PAD.left, rect.bottom);
       } else if (event.key === "Escape") {
-        show(-1, 0, 0);
+        show(canvas, -1, 0, 0);
       }
     });
   }

@@ -331,3 +331,7 @@ Commit as `spec 005: multi-page console, persistent tiered metrics, themes, mark
 ### 2026-07-22 — Lucide archive has no GitHub brand icon
 
 The pinned Lucide `1.26.0` archive does not contain `github.svg`; Lucide intentionally excludes brand icons. The `github` entry is therefore removed from the fixed extraction list. The console's GitHub link remains text-only, and no unpinned or fabricated replacement asset is introduced.
+
+### 2026-07-23 — Time-series charts use stacked filled bars
+
+Section 7's area/line rendering is superseded. Both CPU-per-core and memory-per-process charts render stacked filled time-bucket bars. CPU retains its `0 → cores × 100%` scale; memory auto-scales to the maximum total memory across all process series. Each chart's tooltip lists only that chart's series, and legend entries remain visually separated without splitting a swatch from its label.
