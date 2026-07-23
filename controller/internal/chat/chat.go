@@ -539,7 +539,13 @@ func (s *Service) generateAgent(ctx context.Context, started time.Time) {
 			return
 		}
 	}
-	s.finishReply(result.Reply, result.Stopped, 0, 0, time.Since(started))
+	s.finishReply(
+		result.Reply,
+		result.Stopped,
+		result.PromptTokens,
+		result.CompletionTokens,
+		time.Since(started),
+	)
 }
 
 func (s *Service) finishReply(text string, stopped bool, promptTokens, completionTokens int, elapsed time.Duration) {

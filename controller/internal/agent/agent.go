@@ -74,9 +74,11 @@ type Config struct {
 
 // Result describes how an agent task terminated.
 type Result struct {
-	Reply   string
-	Stopped bool
-	Failed  bool
+	Reply            string
+	Stopped          bool
+	Failed           bool
+	PromptTokens     int
+	CompletionTokens int
 }
 
 // Executor runs one model tool.
@@ -175,26 +177,38 @@ func (a *Agent) Handle(ctx context.Context, userText string) (Result, error) {
 		messages = append(messages, PromptMessage{Role: "user", Content: userText})
 	}
 	var prose strings.Builder
+	promptTokens, completionTokens := 0, 0
 	for a.step < a.cfg.MaxSteps {
 		a.status("planning")
-		reply, calls, err := a.complete(ctx, messages, func(delta string) {
+		reply, calls, usage, err := a.complete(ctx, messages, func(delta string) {
 			prose.WriteString(delta)
 			a.broadcast(map[string]any{"type": "chat-delta", "text": delta})
 		})
+		promptTokens += usage.PromptTokens
+		completionTokens += usage.CompletionTokens
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
 				a.status("stopped")
-				return Result{Reply: prose.String(), Stopped: true}, nil
+				return Result{
+					Reply: prose.String(), Stopped: true,
+					PromptTokens: promptTokens, CompletionTokens: completionTokens,
+				}, nil
 			}
 			a.status("failed")
-			return Result{Reply: prose.String(), Failed: true}, err
+			return Result{
+				Reply: prose.String(), Failed: true,
+				PromptTokens: promptTokens, CompletionTokens: completionTokens,
+			}, err
 		}
 		if len(calls) == 0 {
 			if reply != "" && prose.Len() == 0 {
 				prose.WriteString(reply)
 			}
 			a.status("done")
-			return Result{Reply: prose.String()}, nil
+			return Result{
+				Reply:        prose.String(),
+				PromptTokens: promptTokens, CompletionTokens: completionTokens,
+			}, nil
 		}
 		messages = append(messages, PromptMessage{Role: "assistant", Content: reply, ToolCalls: calls})
 		observationMessages := make([]PromptMessage, 0)
@@ -243,7 +257,10 @@ func (a *Agent) Handle(ctx context.Context, userText string) (Result, error) {
 		a.broadcast(map[string]any{"type": "chat-delta", "text": message})
 	}
 	a.status("failed")
-	return Result{Reply: message, Failed: true}, nil
+	return Result{
+		Reply: message, Failed: true,
+		PromptTokens: promptTokens, CompletionTokens: completionTokens,
+	}, nil
 }
 
 type streamedReply struct {
@@ -261,9 +278,18 @@ type streamedReply struct {
 			} `json:"tool_calls"`
 		} `json:"delta"`
 	} `json:"choices"`
+	Timings struct {
+		PromptN    int `json:"prompt_n"`
+		PredictedN int `json:"predicted_n"`
+	} `json:"timings"`
 }
 
-func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta func(string)) (string, []ToolCall, error) {
+type tokenUsage struct {
+	PromptTokens     int
+	CompletionTokens int
+}
+
+func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta func(string)) (string, []ToolCall, tokenUsage, error) {
 	definitions := make([]map[string]any, 0)
 	for _, tool := range a.tools.Definitions() {
 		definitions = append(definitions, map[string]any{
@@ -278,20 +304,22 @@ func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta 
 	})
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, a.cfg.LlamaURL, bytes.NewReader(body))
 	if err != nil {
-		return "", nil, err
+		return "", nil, tokenUsage{}, err
 	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := a.cfg.Client.Do(request)
 	if err != nil {
-		return "", nil, err
+		return "", nil, tokenUsage{}, err
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		message, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-		return "", nil, fmt.Errorf("llama returned %s: %s", response.Status, strings.TrimSpace(string(message)))
+		return "", nil, tokenUsage{}, fmt.Errorf("llama returned %s: %s", response.Status, strings.TrimSpace(string(message)))
 	}
 	var text strings.Builder
 	calls := make(map[int]*ToolCall)
+	usage := tokenUsage{}
+	fallbackCompletionTokens := 0
 	scanner := bufio.NewScanner(response.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
@@ -303,13 +331,23 @@ func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta 
 			break
 		}
 		var chunk streamedReply
-		if json.Unmarshal([]byte(data), &chunk) != nil || len(chunk.Choices) == 0 {
+		if json.Unmarshal([]byte(data), &chunk) != nil {
+			continue
+		}
+		if chunk.Timings.PromptN > 0 {
+			usage.PromptTokens = chunk.Timings.PromptN
+		}
+		if chunk.Timings.PredictedN > 0 {
+			usage.CompletionTokens = chunk.Timings.PredictedN
+		}
+		if len(chunk.Choices) == 0 {
 			continue
 		}
 		delta := chunk.Choices[0].Delta
 		if delta.Content != "" {
 			text.WriteString(delta.Content)
 			onDelta(delta.Content)
+			fallbackCompletionTokens++
 		}
 		for _, part := range delta.ToolCalls {
 			call := calls[part.Index]
@@ -326,7 +364,10 @@ func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta 
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return text.String(), nil, err
+		return text.String(), nil, usage, err
+	}
+	if usage.CompletionTokens == 0 {
+		usage.CompletionTokens = fallbackCompletionTokens
 	}
 	ordered := make([]ToolCall, 0, len(calls))
 	for index := 0; index < len(calls); index++ {
@@ -337,7 +378,7 @@ func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta 
 			ordered = append(ordered, *calls[index])
 		}
 	}
-	return text.String(), ordered, nil
+	return text.String(), ordered, usage, nil
 }
 
 func encodeBase64(data []byte) string {

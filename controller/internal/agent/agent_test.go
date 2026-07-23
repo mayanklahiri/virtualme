@@ -49,10 +49,13 @@ func TestToolLoopThenFinalReply(t *testing.T) {
 					"index": 0, "id": "call-1", "type": "function",
 					"function": map[string]string{"name": "echo", "arguments": `{"value":"ok"}`},
 				}},
-			}}}})
+			}}}}, map[string]any{"timings": map[string]int{"prompt_n": 11, "predicted_n": 3}})
 			return
 		}
-		sse(w, map[string]any{"choices": []any{map[string]any{"delta": map[string]string{"content": "finished"}}}})
+		sse(w,
+			map[string]any{"choices": []any{map[string]any{"delta": map[string]string{"content": "finished"}}}},
+			map[string]any{"timings": map[string]int{"prompt_n": 17, "predicted_n": 4}},
+		)
 	}))
 	defer server.Close()
 	executor := &fakeExecutor{}
@@ -67,6 +70,10 @@ func TestToolLoopThenFinalReply(t *testing.T) {
 	}
 	if result.Reply != "finished" || result.Failed || result.Stopped {
 		t.Fatalf("result = %+v", result)
+	}
+	if result.PromptTokens != 28 || result.CompletionTokens != 7 {
+		t.Fatalf("token usage = %d prompt + %d completion, want 28 + 7",
+			result.PromptTokens, result.CompletionTokens)
 	}
 	if len(executor.calls) != 1 || executor.calls[0] != `echo:{"value":"ok"}` {
 		t.Fatalf("calls = %v", executor.calls)

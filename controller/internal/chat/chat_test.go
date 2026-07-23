@@ -101,6 +101,22 @@ func sseServer(t *testing.T, deltas []string, hold chan struct{}) *httptest.Serv
 	return server
 }
 
+func timedSSEServer(t *testing.T, delta string, promptTokens, completionTokens int) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		content, _ := json.Marshal(map[string]any{
+			"choices": []map[string]any{{"delta": map[string]string{"content": delta}}},
+		})
+		timings, _ := json.Marshal(map[string]any{
+			"timings": map[string]int{"prompt_n": promptTokens, "predicted_n": completionTokens},
+		})
+		fmt.Fprintf(w, "data: %s\n\ndata: %s\n\ndata: [DONE]\n\n", content, timings)
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
 func eventType(payload []byte) string {
 	var event struct {
 		Type string `json:"type"`
@@ -172,20 +188,26 @@ func (noToolExecutor) Execute(context.Context, string, json.RawMessage) (agent.T
 }
 
 func TestAgentRoutingPersistsFinalReply(t *testing.T) {
-	llama := sseServer(t, []string{"agent ", "reply"}, nil)
+	valkey := newRESPServer(t)
+	llama := timedSSEServer(t, "agent reply", 23, 5)
 	events := make(chan []byte, 64)
-	service := NewWithAgent("127.0.0.1:1", llama.URL, func(payload []byte) { events <- payload }, agent.Config{
+	service := NewWithAgent(valkey.addr, llama.URL, func(payload []byte) { events <- payload }, agent.Config{
 		DataDir: t.TempDir(), Executor: noToolExecutor{},
 	})
 	service.HandleClientMessage(nil, []byte(`{"type":"chat","text":"use agent"}`))
 	waitEvent(t, events, "chat-message")
 	waitEvent(t, events, "agent-status")
 	waitEvent(t, events, "chat-delta")
-	waitEvent(t, events, "chat-delta")
 	waitEvent(t, events, "agent-status")
 	done := waitEvent(t, events, "chat-done")
 	if !strings.Contains(string(done), `"text":"agent reply"`) {
 		t.Fatalf("chat-done = %s", done)
+	}
+	stats := waitEvent(t, events, "chat-stats")
+	if !strings.Contains(string(stats), `"queries":1`) ||
+		!strings.Contains(string(stats), `"promptTokens":23`) ||
+		!strings.Contains(string(stats), `"completionTokens":5`) {
+		t.Fatalf("chat-stats = %s", stats)
 	}
 }
 
