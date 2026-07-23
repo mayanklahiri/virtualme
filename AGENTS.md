@@ -57,3 +57,8 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | [001](specs/001-constitution.md) | Constitution, CLI, gates, CI/CD, and docs |
 | [002](specs/002-container.md) | Docker image and controller stub |
 | [003](specs/003-controller.md) | Controller, UI, assets, and end-to-end tests |
+| [004](specs/004-release-hardening.md) | Immutable release versions, registry pre-checks, GitHub Releases |
+| [005](specs/005-console-ui.md) | Multi-page console, tiered metrics, themes, markdown chat, LLM status |
+| [006](specs/006-desktop-reliability.md) | Reliable Chromium supervision, sandbox fallback, profile persistence |
+| [007](specs/007-persistence-locality.md) | Persistence grounding and deterministic LLM-locality gate |
+| [008](specs/008-browser-agent.md) | OS-level browser-control agent (vision + xdotool + DOM + bash) |
