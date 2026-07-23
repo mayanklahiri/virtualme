@@ -19,12 +19,13 @@ import (
 )
 
 const (
-	historyKey    = "virtualme:chat"
-	statsKey      = "virtualme:chat-stats"
-	historyCap    = 200
-	contextWindow = 16
-	maxTextLen    = 4096
-	systemPrompt  = "You are Virtual Me, a private assistant running locally inside the user's own container."
+	historyKey       = "virtualme:chat"
+	statsKey         = "virtualme:chat-stats"
+	historyCap       = 200
+	contextWindow    = 16
+	historyPromptCap = 8 * 1024
+	maxTextLen       = 4096
+	systemPrompt     = "You are Virtual Me, a private assistant running locally inside the user's own container."
 )
 
 // Message is one chat history entry.
@@ -84,10 +85,7 @@ func NewWithAgent(valkeyAddr, llamaURL string, broadcast func([]byte), agentConf
 	agentConfig.History = func() []agent.PromptMessage {
 		service.mu.Lock()
 		defer service.mu.Unlock()
-		recent := service.history
-		if len(recent) > contextWindow {
-			recent = recent[len(recent)-contextWindow:]
-		}
+		recent := boundedHistory(service.history)
 		messages := make([]agent.PromptMessage, 0, len(recent))
 		for _, message := range recent {
 			messages = append(messages, agent.PromptMessage{Role: message.Role, Content: message.Text})
@@ -96,6 +94,20 @@ func NewWithAgent(valkeyAddr, llamaURL string, broadcast func([]byte), agentConf
 	}
 	service.agent = agent.New(agentConfig)
 	return service
+}
+
+func boundedHistory(history []Message) []Message {
+	start := max(0, len(history)-contextWindow)
+	size := 0
+	for index := len(history) - 1; index >= start; index-- {
+		next := len(history[index].Text)
+		if size > 0 && size+next > historyPromptCap {
+			start = index + 1
+			break
+		}
+		size += next
+	}
+	return history[start:]
 }
 
 // LoadHistory populates memory from Valkey, retrying until Valkey responds so
@@ -288,10 +300,7 @@ func (s *Service) clearBusy() {
 func (s *Service) contextMessages() []map[string]string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	recent := s.history
-	if len(recent) > contextWindow {
-		recent = recent[len(recent)-contextWindow:]
-	}
+	recent := boundedHistory(s.history)
 	messages := make([]map[string]string, 0, len(recent)+1)
 	messages = append(messages, map[string]string{"role": "system", "content": systemPrompt})
 	for _, message := range recent {

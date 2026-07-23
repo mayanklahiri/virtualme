@@ -106,6 +106,92 @@ func TestStepCapFails(t *testing.T) {
 	}
 }
 
+func TestPromptCompactionBoundsToolRoundsAndObservations(t *testing.T) {
+	messages := []PromptMessage{
+		{Role: "system", Content: "system"},
+		{Role: "user", Content: "task"},
+	}
+	for round := range 6 {
+		messages = append(messages,
+			PromptMessage{
+				Role: "assistant",
+				ToolCalls: []ToolCall{{
+					ID:       fmt.Sprintf("call-%d", round),
+					Function: FunctionCall{Name: "dom", Arguments: `{}`},
+				}},
+			},
+			PromptMessage{Role: "tool", ToolCallID: fmt.Sprintf("call-%d", round), Content: "captured"},
+			PromptMessage{Role: "user", Content: fmt.Sprintf("Observation from dom:\nround %d", round)},
+		)
+	}
+	compacted := compactTaskMessages(messages, 2)
+	rounds, observations := 0, 0
+	for _, message := range compacted {
+		if message.Role == "assistant" && len(message.ToolCalls) > 0 {
+			rounds++
+		}
+		if isObservationMessage(message) {
+			observations++
+			if !strings.Contains(fmt.Sprint(message.Content), "round 5") {
+				t.Fatalf("stale observation retained: %+v", message)
+			}
+		}
+	}
+	if rounds != maxToolRounds || observations != 1 {
+		t.Fatalf("compacted to %d rounds and %d observations: %+v", rounds, observations, compacted)
+	}
+	if compacted[0].Content != "system" || compacted[1].Content != "task" {
+		t.Fatalf("base conversation was not preserved: %+v", compacted[:2])
+	}
+}
+
+func TestPromptTextTruncation(t *testing.T) {
+	text := strings.Repeat("x", observationTextCap+100)
+	got := truncatePromptText(text, observationTextCap)
+	if len(got) != observationTextCap || !strings.Contains(got, "[truncated to fit model context]") {
+		t.Fatalf("truncated text length=%d suffix=%q", len(got), got[len(got)-40:])
+	}
+}
+
+func TestContextOverflowCompactsAndRetries(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		if requests == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":{"type":"exceed_context_size_error"}}`)
+			return
+		}
+		sse(w, map[string]any{"choices": []any{
+			map[string]any{"delta": map[string]string{"content": "recovered"}},
+		}})
+	}))
+	defer server.Close()
+	agent := New(Config{
+		LlamaURL: server.URL,
+		DataDir:  t.TempDir(),
+		Executor: noDefinitionsExecutor{},
+		History: func() []PromptMessage {
+			return []PromptMessage{
+				{Role: "user", Content: "old"},
+				{Role: "assistant", Content: strings.Repeat("large", 5000)},
+				{Role: "user", Content: "current"},
+			}
+		},
+	})
+	result, err := agent.Handle(context.Background(), "current")
+	if err != nil || result.Reply != "recovered" || requests != 2 {
+		t.Fatalf("result=%+v err=%v requests=%d", result, err, requests)
+	}
+}
+
+type noDefinitionsExecutor struct{}
+
+func (noDefinitionsExecutor) Definitions() []Tool { return nil }
+func (noDefinitionsExecutor) Execute(context.Context, string, json.RawMessage) (ToolResult, error) {
+	return ToolResult{}, nil
+}
+
 func TestContextCancelStops(t *testing.T) {
 	release := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {

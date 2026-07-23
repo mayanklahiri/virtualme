@@ -211,6 +211,27 @@ func TestAgentRoutingPersistsFinalReply(t *testing.T) {
 	}
 }
 
+func TestBoundedHistoryLimitsCountAndTextSize(t *testing.T) {
+	history := make([]Message, 20)
+	for index := range history {
+		history[index] = Message{
+			Role: "user",
+			Text: fmt.Sprintf("%02d:%s", index, strings.Repeat("x", 1020)),
+		}
+	}
+	recent := boundedHistory(history)
+	size := 0
+	for _, message := range recent {
+		size += len(message.Text)
+	}
+	if len(recent) >= contextWindow || size > historyPromptCap {
+		t.Fatalf("bounded history has %d messages and %d bytes", len(recent), size)
+	}
+	if !strings.HasPrefix(recent[len(recent)-1].Text, "19:") {
+		t.Fatalf("newest message was not retained: %+v", recent)
+	}
+}
+
 func TestInvalidInputPerConnectionError(t *testing.T) {
 	events := make(chan []byte, 64)
 	service := New("127.0.0.1:1", "http://127.0.0.1:1", func(p []byte) { events <- p })

@@ -205,3 +205,9 @@ Run the `/master-update` skill procedure. Expected changes:
 - `AGENTS.md`: architecture paragraph mentions the vision-enabled agent loop.
 
 Commit as `spec 008: OS-level browser-control agent (vision + xdotool + DOM + bash)`.
+
+## Amendments
+
+### 2026-07-23 — Increase and bound the llama context
+
+Section 3b's 8192-token default is superseded: `VM_LLAMA_CTX` defaults to 16384 tokens. Agent requests must remain below that configured limit. Chat history is bounded by both message count and text size. Tool output and full observations are separately capped; observation content is not duplicated in both tool and user messages. The loop retains at most four recent complete tool rounds and only the latest full observation, preventing accumulated screenshots, DOM snapshots, and command output from exhausting the context. Completions reserve at most one quarter of the configured context, capped at 1024 tokens. If llama still rejects a request for context overflow, the loop drops all but the current user turn and latest tool round, then retries once without exposing llama's raw HTTP error.
