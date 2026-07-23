@@ -19,8 +19,11 @@ gates everything.
 ## Quality gates
 
 `npm run check` = shell syntax, eslint, tsc --checkJs, node --test, CLI dry
-run, gofmt/go vet/go test. The pre-commit hook and CI run the same script.
-Container tests: `bash test/smoke.sh`, `bash test/e2e.sh` (need Docker).
+run, web build (esbuild minify + sourcemaps into gitignored
+`controller/web/dist/`), gofmt/go vet/go test. The pre-commit hook and CI run
+the same script.
+Container tests: `bash test/smoke.sh`, `bash test/e2e.sh` (need Docker; e2e
+drives the real CLI and includes a restart cycle plus a chat probe).
 
 ## Docker layers
 
@@ -34,6 +37,7 @@ Container tests: `bash test/smoke.sh`, `bash test/e2e.sh` (need Docker).
 | `006-valkey.sh` | Valkey |
 | `007-node-playwright.sh` | Node.js and Playwright Core `1.61.1` |
 | `008-s6-overlay.sh` | s6-overlay `v3.2.3.2` |
+| `009-user.sh` | Unprivileged `virtualme` user (uid/gid 1000) |
 
 The s6 tree supervises `svc-xvfb`, `svc-openbox`, `svc-x11vnc`, `svc-novnc`,
 `svc-valkey`, `svc-llama`, `svc-chromium`, and `svc-controller`.
@@ -44,9 +48,12 @@ The s6 tree supervises `svc-xvfb`, `svc-openbox`, `svc-x11vnc`, `svc-novnc`,
 |---|---|
 | `controller/cmd/controller` | Route and subsystem wiring |
 | `controller/internal/health` | Concurrent six-service health probes |
-| `controller/internal/ws` | Minimal server-side RFC 6455 and connection hub |
-| `controller/internal/state` | Two-second health/system snapshot collector |
-| `controller/web/static` | Embedded same-origin vanilla-JS SPA |
+| `controller/internal/procstat` | Per-service CPU/RSS sampling from `/proc` |
+| `controller/internal/ws` | Minimal server-side RFC 6455, hub, client-frame dispatch |
+| `controller/internal/state` | Two-second snapshot collector + 150-entry ring buffer |
+| `controller/internal/chat` | Shared chat: llama SSE streaming + in-repo Valkey RESP client |
+| `controller/web/static` | Hand-written SPA sources (charts, chat, ws client) |
+| `controller/web/dist` | Gitignored minified build output (`scripts/build-web.sh`) |
 | `controller/tools/fetch-assets.sh` | Pinned Inter variable-font fetch |
 
 ## How to add things

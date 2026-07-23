@@ -13,21 +13,21 @@ zero-dependency Node CLI (`npx virtualme`, or `./cli.sh` from a checkout).
 | Command | Effect |
 |---|---|
 | `npx virtualme doctor` | Verify node/docker/daemon (+ git hooks in a checkout) |
-| `npx virtualme start` | `docker run -d --name virtualme --restart unless-stopped --shm-size=1g -p 8080:8080 -v virtualme-data:/data mayanklahiri/virtualme:latest` |
+| `npx virtualme start [--data <dir>]` | Run the container unprivileged (host uid/gid) with a read-only root, tmpfs `/run`+`/tmp`, port 8080, and the host data dir (default `~/.virtualme`, created if missing) mounted rw at the container's `~/.virtualme` |
 | `npx virtualme status` | Container state + `/healthz` per-service report |
 | `npx virtualme logs -f` | Follow container logs |
-| `npx virtualme stop` | Stop and remove the container (volume survives) |
+| `npx virtualme stop` | Stop and remove the container (data dir survives) |
 | `npx virtualme update` | Pull the latest image |
-| `npx virtualme build` | Build `:dev` image from a source checkout |
+| `npx virtualme build` | Build `:dev` and the configured start tag from a source checkout |
 | `npx virtualme keygen` | Print a 256-bit base64url token |
 
-Env overrides: `VIRTUALME_IMAGE`, `VIRTUALME_TAG`.
+Env overrides: `VIRTUALME_IMAGE`, `VIRTUALME_TAG`, `VIRTUALME_DATA`.
 
 ## Endpoints (container running)
 
-- `http://localhost:8080/` — embedded control-plane SPA
+- `http://localhost:8080/` — embedded control-plane SPA (live metrics charts + chat panel)
 - `http://localhost:8080/healthz` — aggregate JSON health
-- `ws://localhost:8080/ws` — server-push state snapshots
+- `ws://localhost:8080/ws` — state snapshots with history replay + the shared chat protocol
 - `http://localhost:8080/desktop/` — proxied noVNC and websockify
 
 The desktop UI opens `/desktop/vnc.html` with autoconnect, scaling, and the
