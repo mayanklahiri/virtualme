@@ -27,6 +27,7 @@ import (
 	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 	"github.com/mayanklahiri/virtualme/controller/internal/mail"
 	"github.com/mayanklahiri/virtualme/controller/internal/metrics"
+	"github.com/mayanklahiri/virtualme/controller/internal/projects"
 	"github.com/mayanklahiri/virtualme/controller/internal/state"
 	"github.com/mayanklahiri/virtualme/controller/internal/tts"
 	"github.com/mayanklahiri/virtualme/controller/internal/valkey"
@@ -344,6 +345,9 @@ func main() {
 	jobManager := jobs.New(valkey.New(cfg.ValkeyAddr), hub.Broadcast)
 	chatService.SetJobManager(jobManager)
 	jobManager.Register("chat", chatService.Execute)
+	projectService := projects.New(
+		valkey.New(cfg.ValkeyAddr), jobManager, chatService, dataDir, hub.Broadcast,
+	)
 	jobManager.Register("soak-probe", func(ctx context.Context, env jobs.Envelope) (string, error) {
 		var payload struct {
 			Echo string `json:"echo"`
@@ -388,6 +392,9 @@ func main() {
 		if jobManager.HandleMessage(conn, payload) {
 			return
 		}
+		if projectService.HandleMessage(conn, payload) {
+			return
+		}
 		chatService.HandleClientMessage(conn, payload)
 	})
 	hub.SetOnConnect(func(conn *ws.Conn) {
@@ -395,6 +402,7 @@ func main() {
 		_ = conn.WriteText(chatService.StatsMessage())
 		_ = conn.WriteText(mailService.StatusMessage())
 		_ = conn.WriteText(jobManager.StateMessage())
+		_ = conn.WriteText(projectService.Message())
 	})
 	hub.SetOnDisconnect(jobManager.DropInitiator)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -413,7 +421,7 @@ func main() {
 		addr = ":8080"
 	}
 	log.Println("health: eight concurrent probes configured")
-	log.Println("websocket: state hub ready (chat + metrics + tts + mail + jobs wired)")
+	log.Println("websocket: state hub ready (chat + metrics + tts + mail + jobs + projects wired)")
 	log.Println("chat: queued llama-backed shared conversation ready")
 	log.Println("jobs: sequential worker and scheduler ready")
 	log.Println("agent: OS-level browser-control loop ready")

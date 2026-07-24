@@ -478,6 +478,34 @@ func (s *Service) Execute(ctx context.Context, env jobs.Envelope) (string, error
 	return s.generate(ctx, env)
 }
 
+// RunTask runs an isolated agent turn without reading or writing shared chat history.
+func (s *Service) RunTask(ctx context.Context, text string) (string, error) {
+	text = strings.TrimSpace(text)
+	if text == "" || len([]rune(text)) > 8192 {
+		return "", fmt.Errorf("task must be 1-8192 characters")
+	}
+	if s.agent == nil {
+		return "", fmt.Errorf("agent is unavailable")
+	}
+	result, err := s.agent.HandleFresh(ctx, text)
+	if err != nil && result.Reply == "" {
+		return "", err
+	}
+	if ctx.Err() != nil {
+		return result.Reply, ctx.Err()
+	}
+	if err != nil {
+		return result.Reply, err
+	}
+	if result.Failed {
+		return result.Reply, fmt.Errorf("agent task failed")
+	}
+	if result.Stopped {
+		return result.Reply, fmt.Errorf("agent task stopped")
+	}
+	return result.Reply, err
+}
+
 func (s *Service) generate(ctx context.Context, env jobs.Envelope) (string, error) {
 	started := time.Now()
 	statusCtx, stopStatus := context.WithCancel(context.Background())

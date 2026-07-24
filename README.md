@@ -72,11 +72,12 @@ the detected host timezone passed into the container.
 
 The host directory `~/.virtualme` (override with `--data <dir>` or
 `VIRTUALME_DATA`) is created on first `start` and mounted read-write at the
-container's `~/.virtualme`. It contains `valkey/` (chat history, stats, and the
-reliable job queue),
+container's `~/.virtualme`. It contains `valkey/` (chat history, stats, the
+reliable job queue, and project records),
 `chromium/` (browser profile), `xdg/{config,cache,data}/`, `metrics/` (tiered
-history), `agent/` (agent artifacts), and `mail/` (dma config/spool and the
-DKIM private key). Chromium settings and queued mail survive container
+history), `agent/` (agent artifacts), `projects/` (per-project scratch space),
+and `mail/` (dma config/spool and the DKIM private key). Chromium settings,
+projects, and queued mail survive container
 and image replacement. The container runs as the invoking host uid/gid, so
 every data file is host-owned. Everything else is intentionally ephemeral or
 baked into the image; the canonical persistence map is
@@ -101,6 +102,8 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | Route | Purpose |
 |---|---|
 | `/` | Console home: host identity, live health/capacity, model, and links |
+| `/projects` | Recurring natural-language tasks, schedules, manual runs, and recent results |
+| `/projects/<id>` | Project task, schedule, status, run history, and scratch-directory details |
 | `/status` | Service health, system meters, active time selectors, and persistent per-core/process metrics |
 | `/chat` | Markdown chat, generation controls, LLM progress, and conversation totals |
 | `/speech` | Streaming local text-to-speech with the Lessac en-US voice |
@@ -130,6 +133,18 @@ wait instead of returning a busy error. Closing the initiating browser tab
 cancels its running generation immediately and drops its queued jobs. The CLI
 passes the host `TZ` into the container so time-bucket scheduling uses the
 host's local wall clock.
+
+### Projects
+
+Use `/projects` to create recurring agent tasks in plain language. Each project
+has a coarse day/time selector, an Enabled switch, a manual Run now action, and
+five recent run summaries. Scheduled runs persist through Valkey and execute
+sequentially with chat work. A manual run is tied to its initiating browser tab
+and is cancelled if that tab closes; scheduled runs are not.
+
+Project scratch files live under `~/.virtualme/projects/<id>/`. Deleting a
+project removes its record and run summaries but deliberately preserves that
+directory and its operator data.
 
 ### Local speech
 
@@ -203,7 +218,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [011](specs/011-ui-refresh.md) | Console brand, collapsed theme picker, eight themes, and live-capacity home page |
 | [012](specs/012-agent-observation-soak.md) | Dense DOM observations, settled navigation, desktop coverage, Playwright-layer removal, and the live soak suite |
 | [013](specs/013-job-queue-scheduler.md) | Valkey job queue, time-bucket scheduler, and initiator-bound cancellation |
-| [014](specs/014-projects.md) | Projects: periodic natural-language tasks with schedules and scratch dirs (draft) |
+| [014](specs/014-projects.md) | Projects: periodic natural-language tasks with schedules and scratch dirs |
 | [015](specs/015-jobs-page.md) | Jobs page: activity ledger and queue peek with details pane (draft) |
 | [016](specs/016-chromium-determinism.md) | Chromium determinism flags and single full-screen window (draft) |
 | [017](specs/017-jiggler.md) | Jiggler: humanlike OS-level mouse motion with a Status switch (draft) |
@@ -255,4 +270,4 @@ Use a Raspberry Pi 5 or Raspberry Pi 4 with 8 GB RAM at minimum. The RAM floor i
 
 ## Architecture
 
-The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Valkey, vision-enabled llama.cpp with Gemma 4 E2B, local sherpa-onnx/Piper TTS, a dma outbound-mail queue, and a Go controller on `:8080`, running unprivileged (host uid/gid) with one rw data mount. The controller concurrently probes service health, samples and persists metrics, composes and DKIM-signs mail, schedules and sequentially executes reliable Valkey jobs, streams shared chat and speech, and runs a bounded browser-agent loop combining screenshots, compact DOM/read-only CDP observations, OS-level `xdotool` actions, bash, and audible responses. It proxies noVNC and embeds the same-origin minified multi-page SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.
+The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Valkey, vision-enabled llama.cpp with Gemma 4 E2B, local sherpa-onnx/Piper TTS, a dma outbound-mail queue, and a Go controller on `:8080`, running unprivileged (host uid/gid) with one rw data mount. The controller concurrently probes service health, samples and persists metrics, composes and DKIM-signs mail, schedules and sequentially executes reliable Valkey jobs and recurring projects, streams shared chat and speech, and runs a bounded browser-agent loop combining screenshots, compact DOM/read-only CDP observations, OS-level `xdotool` actions, bash, and audible responses. It proxies noVNC and embeds the same-origin minified multi-page SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.

@@ -26,7 +26,7 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `.cursor/skills/` | Shared AI operating and development procedures |
 | `specs/` | Numbered, authoritative implementation specs |
 | `docker/` | Container image and supervised services (spec 002) |
-| `controller/` | Go control plane, reliable job queue/scheduler, browser-agent loop, local TTS, outbound mail, and multi-page console (specs 002–013) |
+| `controller/` | Go control plane, reliable job queue/scheduler, recurring projects, browser-agent loop, local TTS, outbound mail, and multi-page console (specs 002–014) |
 
 ## Commands
 
@@ -60,6 +60,9 @@ delivery; mail configuration and spool state live under `$VM_DATA_DIR/mail/`.
 All LLM work runs sequentially through a Valkey-backed interactive/scheduled
 job queue with visibility recovery, retries, dead-lettering, time-bucket
 scheduling, and initiator-disconnect cancellation.
+Recurring projects persist natural-language tasks and selectors in Valkey,
+run through that queue without modifying chat history, and own scratch
+directories under `$VM_DATA_DIR/projects/`.
 
 ## Skills
 
@@ -86,7 +89,7 @@ scheduling, and initiator-disconnect cancellation.
 | [011](specs/011-ui-refresh.md) | Console brand, collapsed theme picker, eight themes, and live-capacity home page |
 | [012](specs/012-agent-observation-soak.md) | Dense DOM observations, settled navigation, desktop coverage, Playwright-layer removal, and the live soak suite |
 | [013](specs/013-job-queue-scheduler.md) | Valkey job queue, time-bucket scheduler, initiator-bound cancellation |
-| [014](specs/014-projects.md) | Projects: periodic natural-language tasks with schedules and scratch dirs (draft) |
+| [014](specs/014-projects.md) | Projects: periodic natural-language tasks with schedules and scratch dirs |
 | [015](specs/015-jobs-page.md) | Jobs page: activity ledger and queue peek with details pane (draft) |
 | [016](specs/016-chromium-determinism.md) | Chromium determinism flags and single full-screen window (draft) |
 | [017](specs/017-jiggler.md) | Jiggler: humanlike OS-level mouse motion with a Status switch (draft) |

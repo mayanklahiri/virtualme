@@ -109,6 +109,7 @@ required_paths=(
   metrics
   agent
   mail
+  projects
 )
 for path in "${required_paths[@]}"; do
   if ! grep -Fq "\$VM_DATA_DIR/$path" "$data_dirs"; then

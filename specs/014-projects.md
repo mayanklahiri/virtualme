@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/013-job-queue-scheduler.md` (queue, selectors, scheduler sources), `specs/005-console-ui.md` (themes, page conventions) |
 | Produces | A "Projects" nav entry and `/projects` page (list + create-project modal), a per-project overview at `/projects/<id>`, Valkey-persisted project records, a per-project data subdirectory under `$VM_DATA_DIR/projects/<id>/`, manual "Run now" kicks, and scheduler integration |
 | Followed by | `specs/015-jobs-page.md` |

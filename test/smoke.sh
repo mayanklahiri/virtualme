@@ -170,7 +170,7 @@ compgen -G "$DATA_DIR/valkey/appendonly*" >/dev/null \
 for entry in "$DATA_DIR"/*; do
   [ -e "$entry" ] || continue
   case "$(basename "$entry")" in
-    valkey|chromium|xdg|metrics|agent|mail) ;;
+    valkey|chromium|xdg|metrics|agent|mail|projects) ;;
     *) fail "unexpected top-level data entry: $(basename "$entry")" ;;
   esac
 done

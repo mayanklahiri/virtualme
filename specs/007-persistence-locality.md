@@ -172,3 +172,10 @@ reserves the persistence lane without adding agent runtime behavior.
 | State | Path | Owner / mechanism | Introduced |
 |---|---|---|---|
 | `virtualme:jobs:*` job queue state | `$VM_DATA_DIR/valkey/` (AOF) | `internal/jobs` via `svc-valkey` | 013 |
+
+### 2026-07-23 — Persistent projects and scratch space
+
+| State | Path | Owner / mechanism | Introduced |
+|---|---|---|---|
+| `virtualme:projects*` project records and run summaries | `$VM_DATA_DIR/valkey/` (AOF) | `internal/projects` via `svc-valkey` | 014 |
+| Project scratch space | `$VM_DATA_DIR/projects/<id>/` | `internal/projects`, created on first run and retained after project deletion | 014 |

@@ -8,6 +8,7 @@ import { initTheme } from "./theme.js";
 import { initAgent } from "./agent.js";
 import { initTTS } from "./tts.js";
 import { initMail } from "./mail.js";
+import { initProjects } from "./projects.js";
 
 initTheme();
 initNav();
@@ -15,9 +16,11 @@ const charts = initCharts((value) => socket.send(value));
 const chat = initChat((value) => socket.send(value));
 const speech = initTTS((value) => socket.send(value));
 const mail = initMail((value) => socket.send(value));
+const projects = initProjects((value) => socket.send(value));
 const agent = initAgent(chat.log, (text) => chat.setStatus(text));
 initRouter((page) => {
   if (page === "status") charts.draw();
+  if (page === "projects" || page === "project-detail") projects.render(page);
 });
 
 function onStatus(status) {
@@ -75,6 +78,15 @@ function onMessage(message) {
     case "mail-result":
     case "mail-status":
       mail.frame(message);
+      break;
+    case "projects":
+      projects.frame(message);
+      break;
+    case "project-error":
+      projects.error(message.error ?? "unknown error");
+      break;
+    case "queue-state":
+      projects.queue(message);
       break;
   }
 }

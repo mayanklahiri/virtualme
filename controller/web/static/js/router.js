@@ -1,5 +1,6 @@
 const routes = new Map([
   ["/", ["home", "Home"]],
+  ["/projects", ["projects", "Projects"]],
   ["/status", ["status", "Status"]],
   ["/chat", ["chat", "Chat"]],
   ["/speech", ["speech", "Speech"]],
@@ -9,12 +10,17 @@ const routes = new Map([
 
 export function initRouter(onNavigate = () => {}) {
   function render() {
-    const [page, title] = routes.get(location.pathname) ?? routes.get("/");
+    const projectDetail = location.pathname.startsWith("/projects/") && location.pathname.length > 10;
+    const [page, title] = projectDetail
+      ? ["project-detail", "Project"]
+      : (routes.get(location.pathname) ?? routes.get("/"));
     for (const section of document.querySelectorAll("[data-page]")) {
       section.hidden = section.dataset.page !== page;
     }
     for (const link of document.querySelectorAll("a[data-nav]")) {
-      if (new URL(link.href).pathname === (routes.has(location.pathname) ? location.pathname : "/")) {
+      const linkPath = new URL(link.href).pathname;
+      const currentPath = routes.has(location.pathname) ? location.pathname : (projectDetail ? "/projects" : "/");
+      if (linkPath === currentPath) {
         link.setAttribute("aria-current", "page");
       } else {
         link.removeAttribute("aria-current");

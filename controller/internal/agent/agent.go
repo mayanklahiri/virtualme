@@ -177,15 +177,24 @@ func (a *Agent) status(phase string) {
 	})
 }
 
-// Handle executes one user task until the model returns a final answer.
+// Handle executes one user task with the configured conversation history.
 func (a *Agent) Handle(ctx context.Context, userText string) (Result, error) {
+	return a.handle(ctx, userText, true)
+}
+
+// HandleFresh executes one user task without shared conversation history.
+func (a *Agent) HandleFresh(ctx context.Context, userText string) (Result, error) {
+	return a.handle(ctx, userText, false)
+}
+
+func (a *Agent) handle(ctx context.Context, userText string, includeHistory bool) (Result, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if err := a.beginTask(); err != nil {
 		return Result{Failed: true}, err
 	}
 	messages := []PromptMessage{{Role: "system", Content: a.system}}
-	if a.cfg.History != nil {
+	if includeHistory && a.cfg.History != nil {
 		messages = append(messages, a.cfg.History()...)
 	} else {
 		messages = append(messages, PromptMessage{Role: "user", Content: userText})
@@ -199,7 +208,9 @@ func (a *Agent) Handle(ctx context.Context, userText string) (Result, error) {
 		historyEnd = min(historyEnd, len(messages))
 		onDelta := func(delta string) {
 			prose.WriteString(delta)
-			a.broadcast(map[string]any{"type": "chat-delta", "text": delta})
+			if includeHistory {
+				a.broadcast(map[string]any{"type": "chat-delta", "text": delta})
+			}
 		}
 		reply, calls, usage, err := a.complete(ctx, messages, onDelta)
 		if errors.Is(err, errContextExceeded) {

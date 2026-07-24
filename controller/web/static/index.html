@@ -37,6 +37,7 @@
       </button>
       <div class="nav-links">
         <a href="/" data-nav><svg class="icon"><use href="/icons.svg#i-house"/></svg>Home</a>
+        <a href="/projects" data-nav><svg class="icon"><use href="/icons.svg#i-folder-kanban"/></svg>Projects</a>
         <a href="/status" data-nav><svg class="icon"><use href="/icons.svg#i-activity"/></svg>Status</a>
         <a href="/chat" data-nav><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg>Chat</a>
         <a href="/speech" data-nav><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg>Speech</a>
@@ -77,6 +78,7 @@
           <figure class="hero-media" aria-hidden="true"><img src="/img/hero-earthrise.jpg" alt=""></figure>
         </div>
         <div class="quick-links">
+          <a href="/projects" data-nav><svg class="icon"><use href="/icons.svg#i-folder-kanban"/></svg><strong>Projects</strong><span>Recurring background tasks</span></a>
           <a href="/status" data-nav><svg class="icon"><use href="/icons.svg#i-activity"/></svg><strong>Status</strong><span>Inspect services and metrics</span></a>
           <a href="/chat" data-nav><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg><strong>Chat</strong><span>Talk to the local model</span></a>
           <a href="/speech" data-nav><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg><strong>Speech</strong><span>Speak with the local voice</span></a>
@@ -84,6 +86,33 @@
           <a href="/desktop-view" data-nav><svg class="icon"><use href="/icons.svg#i-monitor"/></svg><strong>Desktop</strong><span>Open the private browser</span></a>
         </div>
         <footer><span>Virtual Me v0.1.0</span><a href="https://github.com/mayanklahiri/virtualme" target="_blank" rel="noopener noreferrer">GitHub</a></footer>
+      </section>
+
+      <section data-page="projects" hidden aria-labelledby="projects-title">
+        <div class="page-heading">
+          <h1 id="projects-title">Projects</h1>
+          <button id="project-new" type="button"><svg class="icon"><use href="/icons.svg#i-plus"/></svg>New project</button>
+        </div>
+        <ul id="project-list" class="project-list"></ul>
+        <p id="projects-empty" class="empty-note" hidden>No projects yet. A project is a task Virtual Me runs on a schedule.</p>
+        <p id="project-error" class="project-error" role="alert"></p>
+        <dialog id="project-dialog">
+          <form id="project-create-form" method="dialog">
+            <h2>New project</h2>
+            <label for="project-name">Name</label>
+            <input id="project-name" maxlength="80" required autocomplete="off">
+            <div class="dialog-actions">
+              <button value="cancel" class="secondary" type="button" id="project-cancel">Cancel</button>
+              <button type="submit">Create</button>
+            </div>
+          </form>
+        </dialog>
+      </section>
+
+      <section data-page="project-detail" hidden aria-labelledby="project-detail-title">
+        <p class="project-error" role="alert"></p>
+        <div id="project-detail"></div>
+        <p id="project-detail-missing" class="empty-note" hidden>Project not found. <a href="/projects" data-nav>Return to Projects</a>.</p>
       </section>
 
       <section data-page="status" hidden aria-labelledby="status-page-title">

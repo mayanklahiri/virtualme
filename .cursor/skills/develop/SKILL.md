@@ -70,6 +70,7 @@ profile time to flush before watchdog or container restarts.
 | `controller/internal/chat` | Shared streaming chat, controls, stats, and LLM status |
 | `controller/internal/valkey` | Shared dependency-free RESP2 client |
 | `controller/internal/jobs` | Reliable priority queue, sequential worker, scheduler, and cancellation |
+| `controller/internal/projects` | Persistent recurring tasks, scheduler source, executor, run summaries, and scratch directories |
 | `controller/internal/agent` | Tool-call loop, read-only CDP/DOM observations, OS-level actions, bash, and artifacts |
 | `controller/cmd/ttsd`, `controller/internal/tts` | Serialized sherpa subprocess synthesis, WAV parsing, NDJSON client, and streaming helpers |
 | `controller/internal/mail` | Stdlib MIME/CID composition, DKIM signing, dma submission, and spool status |
@@ -94,6 +95,10 @@ frames. Persistent dma configuration, queue files, and the DKIM key live under
 It maps `job-push`/`queue-peek` to `job-pushed`/`queue-state`; all LLM work
 runs through the single `internal/jobs` worker, and disconnecting an initiating
 websocket cancels that connection's work.
+It maps `projects-req`, `project-create`, `project-update`, `project-delete`,
+and `project-run` to `projects` snapshots or sender-only `project-error`
+frames. Project records and summaries use Valkey; agent scratch space lives
+under `$VM_DATA_DIR/projects/<id>/`.
 
 ## How to add things
 
@@ -111,6 +116,9 @@ websocket cancels that connection's work.
   use an interactive envelope for client work or a `RegisterSource` provider
   for scheduled work, and cover retries/cancellation with the hermetic RESP
   fixture.
+- **Web icon**: add its Lucide name to `controller/tools/fetch-assets.sh`,
+  fetch pinned assets, and let `scripts/build-icons.mjs` rebuild the generated
+  sprite during `npm run build:web`.
 - **Docker layer**: new `docker/layers/NNN-<slug>.sh` with the next number;
   `set -euo pipefail`; pin URLs+sha256; add a `COPY`+`RUN` pair at the END of
   the layer sequence in `docker/Dockerfile`. Never edit old layers without a

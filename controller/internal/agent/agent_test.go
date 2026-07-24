@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -128,6 +129,28 @@ func TestToolLoopThenFinalReply(t *testing.T) {
 	}
 	if !strings.Contains(joined, `"text":"tool result"`) {
 		t.Fatal("agent-step frames must carry observation text")
+	}
+}
+
+func TestHandleFreshExcludesConfiguredHistory(t *testing.T) {
+	var body []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ = io.ReadAll(r.Body)
+		sse(w, map[string]any{"choices": []any{map[string]any{"delta": map[string]string{"content": "fresh"}}}})
+	}))
+	defer server.Close()
+	agent := New(Config{
+		LlamaURL: server.URL, DataDir: t.TempDir(), Executor: &fakeExecutor{},
+		History: func() []PromptMessage {
+			return []PromptMessage{{Role: "user", Content: "shared-history-secret"}}
+		},
+	})
+	result, err := agent.HandleFresh(context.Background(), "isolated-project-task")
+	if err != nil || result.Reply != "fresh" {
+		t.Fatalf("result = %+v, %v", result, err)
+	}
+	if strings.Contains(string(body), "shared-history-secret") || !strings.Contains(string(body), "isolated-project-task") {
+		t.Fatalf("request history was not isolated: %s", body)
 	}
 }
 

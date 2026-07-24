@@ -35,6 +35,8 @@ also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 ## Endpoints (container running)
 
 - `http://localhost:8080/` — console home
+- `http://localhost:8080/projects` — recurring projects and schedules
+- `http://localhost:8080/projects/<id>` — project task, runs, and scratch details
 - `http://localhost:8080/status` — service status, active time selectors, and tiered metrics
 - `http://localhost:8080/chat` — shared local-model chat
 - `http://localhost:8080/speech` — streaming local text-to-speech
@@ -67,6 +69,18 @@ Chat and agent work runs sequentially through the reliable Valkey queue;
 additional messages wait instead of returning a busy error. Closing the browser
 tab that initiated a queued or running request drops its queued jobs and
 immediately cancels its active generation.
+
+## Projects
+
+Create periodic natural-language agent tasks from `/projects`, choose day/time
+chips, and enable scheduling. Run now is manual and tied to the current browser
+connection: keep that page open until it finishes, or enable a schedule for
+connection-independent execution. Project scratch directories are
+`~/.virtualme/projects/<id>/`.
+
+Deleting a project removes its Valkey record and run summaries but intentionally
+keeps its scratch directory. Operator data is never deleted implicitly; remove
+an obsolete project directory manually after inspecting it.
 
 Full screenshots and `steps.jsonl` (tool arguments, summaries, and capped
 observation text) are retained under `~/.virtualme/agent/<taskId>/` for the
@@ -110,8 +124,9 @@ private key mode at 0600.
 7. Browser window: closing Chromium auto-restarts it with one blank tab; the watchdog also re-maximizes a drifted window so the remote desktop never shows black dead space.
 8. Browser profile: settings persist under `~/.virtualme/chromium/`.
 9. Browser sandbox: namespace sandboxing is automatic when supported; use `--no-browser-sandbox` to force the warning-suppressed fallback.
-10. Data location: all persistent state is under `~/.virtualme/`; see `specs/007-persistence-locality.md` §1a plus the mail row superseded by spec 010 §7.
+10. Data location: all persistent state is under `~/.virtualme/`; see `specs/007-persistence-locality.md` §1a plus its amendments.
 11. Agent artifacts: inspect `~/.virtualme/agent/<taskId>/steps.jsonl` and `step-*.jpg`; Stop cancels the current task.
 12. Speech: check the `tts` entry in `/healthz`; `ttsd` listens only on container loopback port 8082.
 13. Mail not arriving: check the `mail` health entry, last result, and queue; confirm relay credentials/port or direct-path outbound port 25, publish the displayed DKIM TXT record and SPF, and verify sending-IP PTR/reputation. Residential/dynamic IPs should use a smarthost.
 14. Job queue: `queue-peek` on `/ws` returns upcoming, running, and finished jobs; durable queue keys are in the Valkey AOF under `~/.virtualme/valkey/`.
+15. Projects: records and run summaries are in the Valkey AOF; scratch files are under `~/.virtualme/projects/<id>/` and survive project deletion.
