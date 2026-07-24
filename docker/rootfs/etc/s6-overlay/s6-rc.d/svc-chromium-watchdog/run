@@ -6,18 +6,33 @@ MISS=0
 GRACE="${VM_CHROMIUM_WATCHDOG_GRACE:-3}"
 read -r SCREEN_W SCREEN_H < <(xdotool getdisplaygeometry)
 while sleep 2; do
-  WIN="$(xdotool search --onlyvisible --class chromium 2>/dev/null | head -1 || true)"
+  WINDOWS=""
+  while read -r CANDIDATE; do
+    if xwininfo -id "$CANDIDATE" 2>/dev/null |
+       grep -q 'Map State: IsViewable'; then
+      WINDOWS+="${WINDOWS:+$'\n'}$CANDIDATE"
+    fi
+  done < <(xdotool search --class chromium 2>/dev/null || true)
+  WINDOW_COUNT="$(printf '%s\n' "$WINDOWS" | sed '/^$/d' | wc -l)"
+  if [ "$WINDOW_COUNT" -gt 3 ]; then
+    echo "watchdog: $WINDOW_COUNT chromium windows mapped" >&2
+  fi
+
+  # xdotool returns X clients in map order; after filtering hidden clients,
+  # the last one is the visible surface after a popup.
+  WIN="$(printf '%s\n' "$WINDOWS" | tail -1)"
   if [ -n "$WIN" ]; then
     MISS=0
-    # Self-heal geometry drift (spec 012 §3): if the window covers less than
-    # ~95% of the virtual screen, the uncovered root shows as black in the
-    # remote desktop. Re-fit it; the openbox rule handles fresh maps.
+    # Self-heal any geometry drift (spec 016 §3). The active Chromium surface
+    # must exactly cover the virtual screen; the openbox rule handles fresh maps.
     GEO="$(xdotool getwindowgeometry --shell "$WIN" 2>/dev/null || true)"
+    X="$(printf '%s\n' "$GEO" | sed -n 's/^X=//p')"
+    Y="$(printf '%s\n' "$GEO" | sed -n 's/^Y=//p')"
     WIDTH="$(printf '%s\n' "$GEO" | sed -n 's/^WIDTH=//p')"
     HEIGHT="$(printf '%s\n' "$GEO" | sed -n 's/^HEIGHT=//p')"
-    if [ -n "$WIDTH" ] && [ -n "$HEIGHT" ] &&
-       { [ "$WIDTH" -lt $((SCREEN_W * 95 / 100)) ] || [ "$HEIGHT" -lt $((SCREEN_H * 90 / 100)) ]; }; then
-      echo "chromium-watchdog: window ${WIDTH}x${HEIGHT} < screen ${SCREEN_W}x${SCREEN_H}; re-fitting" >&2
+    if [ "$X" != "0" ] || [ "$Y" != "0" ] ||
+       [ "$WIDTH" != "$SCREEN_W" ] || [ "$HEIGHT" != "$SCREEN_H" ]; then
+      echo "chromium-watchdog: window ${WIDTH:-?}x${HEIGHT:-?}+${X:-?}+${Y:-?} != screen ${SCREEN_W}x${SCREEN_H}+0+0; re-fitting" >&2
       xdotool windowmove "$WIN" 0 0 windowsize "$WIN" 100% 100% || true
     fi
     continue

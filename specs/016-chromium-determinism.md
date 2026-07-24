@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/006-desktop-reliability.md` (supervision, sandbox fallback, watchdog), `specs/012-agent-observation-soak.md` (openbox kiosk config, watchdog geometry) |
 | Produces | A grounded, per-flag-documented Chromium launch optimized for deterministic browser automation; a fast predictable startup; a hard guarantee of exactly one full-screen Chromium window (no overlapping windows); a documented — but unimplemented — door to a 2×2 four-window tiling layout |
 | Followed by | Future specs |
@@ -110,8 +110,34 @@ Requirement: leave open the future option of four Chromium **windows** (not tabs
 
 ## 7. Acceptance checklist
 
-- [ ] `npm run check` green (shell-syntax gate covers the edited run scripts).
-- [ ] Smoke additions in §6 pass on both a userns-sandbox host and with `--no-browser-sandbox`.
-- [ ] Desktop view shows an edge-to-edge browser with no titlebar; dragging is impossible; a `window.open` popup covers the full screen and closing it restores the main window fullscreen.
-- [ ] `virtualme logs` shows no unknown-flag or feature-parse warnings from Chromium.
-- [ ] Repo text search: the 2×2/i3 door is documented in this spec + develop skill and nowhere implemented.
+- [x] `npm run check` green (shell-syntax gate covers the edited run scripts).
+- [ ] Smoke additions in §6 pass on both a userns-sandbox host and with `--no-browser-sandbox`. (Automatic and forced-fallback paths pass on the execution host; its runtime user-namespace probe selects fallback, so a sandbox-capable host was unavailable.)
+- [x] Desktop view shows an edge-to-edge browser with no titlebar; dragging is impossible; a `window.open` popup covers the full screen and closing it restores the main window fullscreen.
+- [x] `virtualme logs` shows no unknown-flag or feature-parse warnings from Chromium.
+- [x] Repo text search: the 2×2/i3 door is documented in this spec + develop skill and nowhere implemented.
+
+## Amendments
+
+### 2026-07-23 — Execution details
+
+- The pinned Chromium creates a hidden 10×10 `chromium`-class X client in
+  addition to its mapped browser window, so the literal unfiltered `xdotool`
+  count does not represent mapped browser windows. The watchdog starts with
+  the required `xdotool search --class chromium` order, filters candidates by
+  X `Map State: IsViewable`, then selects the tail. Smoke uses xdotool's
+  equivalent `--onlyvisible` filter. This preserves spec 006's
+  live-process/no-visible-window recovery while making the newest full-screen
+  popup the geometry target.
+- Geometry recovery now checks exact `0,0` position and exact display
+  dimensions, matching the hard full-screen contract instead of spec 012's
+  approximate threshold.
+- Smoke runs the full-screen/window/CDP assertions and three timed Chromium
+  service restarts in both automatic-sandbox and forced-fallback containers.
+  No numbered Docker layer was edited.
+- Spec 006's launch/watchdog contract and spec 012's Openbox/geometry contract
+  record the corresponding supersession in their own `## Amendments` sections.
+- Container smoke passed with six measured service restarts between 1.398 s
+  and 2.365 s, exact 1600×900 geometry, one mapped Chromium window, and one
+  `about:blank` CDP page target. The execution host selected sandbox fallback
+  in automatic mode, so the userns-sandbox-host half of that acceptance item
+  remains unverified. All four live soak flows passed.

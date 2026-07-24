@@ -24,20 +24,38 @@ rm -rf "$PROFILE/Default/Sessions" \
 # shellcheck source=/dev/null
 source /usr/local/lib/virtualme/chromium-sandbox.sh
 
-exec chromium \
-  "${SANDBOX_FLAGS[@]}" \
-  --user-data-dir="$PROFILE" \
-  --class=chromium \
-  --no-first-run \
-  --no-default-browser-check \
-  --disable-session-crashed-bubble \
-  --hide-crash-restore-bubble \
-  --disable-features=InfiniteSessionRestore,Translate \
-  --disable-background-mode \
-  --disable-backgrounding-occluded-windows \
-  --disable-renderer-backgrounding \
-  --remote-debugging-port=9222 \
-  --remote-debugging-address=127.0.0.1 \
-  --start-maximized \
-  --window-position=0,0 \
-  about:blank
+FLAGS=(
+  --user-data-dir="$PROFILE"
+  --class=chromium
+  # Automation marker: disables consumer behaviors inappropriate for driving by tools.
+  --enable-automation
+  # Startup determinism: no first-run UX, no default-browser prompt, no crash-restore UI.
+  --no-first-run
+  --no-default-browser-check
+  --disable-session-crashed-bubble
+  --hide-crash-restore-bubble
+  # No background work: component updates, safe-browsing pings, variations fetches.
+  --disable-background-networking
+  --disable-component-update
+  --disable-field-trial-config
+  # Anti-throttling: timers and process priority must not depend on occlusion/focus.
+  --disable-background-mode
+  --disable-background-timer-throttling
+  --disable-backgrounding-occluded-windows
+  --disable-renderer-backgrounding
+  # Features that inject nondeterminism or surprise UI into automation.
+  --disable-features=InfiniteSessionRestore,Translate,Prewarm,OptimizationHints,MediaRouter,InterestFeedContentSuggestions
+  # Quiet chrome: no info bars or modal error dialogs stealing input focus from xdotool.
+  --noerrdialogs
+  --disable-infobars
+  # Predictable auth/password plumbing (no OS keyring probe at startup).
+  --password-store=basic
+  # CDP, loopback only (observation-only per spec 008).
+  --remote-debugging-port=9222
+  --remote-debugging-address=127.0.0.1
+  # Geometry: openbox + watchdog own the window; ask for max as a hint.
+  --start-maximized
+  --window-position=0,0
+)
+
+exec chromium "${SANDBOX_FLAGS[@]}" "${FLAGS[@]}" about:blank

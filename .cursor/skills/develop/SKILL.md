@@ -55,7 +55,17 @@ The s6 tree defines `svc-xvfb`, `svc-openbox`, `svc-x11vnc`, `svc-novnc`,
 `svc-valkey`, `svc-llama`, `svc-chromium`, `svc-chromium-watchdog`,
 `svc-controller`, `svc-tts`, and `svc-mailq`. Chromium's run script sources
 `/usr/local/lib/virtualme/chromium-sandbox.sh`; its finish script gives the
-profile time to flush before watchdog or container restarts.
+profile time to flush before watchdog or container restarts. Its launch flag
+rationales are canonical inline comments in `svc-chromium/run`; preserve them
+with the flag order.
+
+The documented future 2×2 browser path is to replace Openbox with i3, preset a
+fixed splitv/splith grid through `i3-msg`, run one Chromium instance per cell
+with separate profiles and CDP ports 9222–9225, and select one or four windows
+with `VM_BROWSER_GRID=1|4`. i3 is preferred over matchbox or dwm because its
+layout is runtime-scriptable over IPC. This is only a design seam: installing
+i3, adding profile/port fan-out, or implementing the environment switch
+requires a new spec.
 
 ## Controller
 

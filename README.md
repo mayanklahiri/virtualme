@@ -230,7 +230,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [013](specs/013-job-queue-scheduler.md) | Valkey job queue, time-bucket scheduler, and initiator-bound cancellation |
 | [014](specs/014-projects.md) | Projects: periodic natural-language tasks with schedules and scratch dirs |
 | [015](specs/015-jobs-page.md) | Jobs page: activity ledger and queue peek with details pane |
-| [016](specs/016-chromium-determinism.md) | Chromium determinism flags and single full-screen window (draft) |
+| [016](specs/016-chromium-determinism.md) | Chromium determinism flags and single full-screen window |
 | [017](specs/017-jiggler.md) | Jiggler: humanlike OS-level mouse motion with a Status switch (draft) |
 | [018](specs/018-gpu-observability.md) | Multi-vendor GPU detection, status widget, and usage series (draft) |
 | [019](specs/019-chart-overhaul.md) | Chart ticks, titles, lookback control, and uniform series color (draft) |

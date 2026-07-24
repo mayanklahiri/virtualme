@@ -127,7 +127,7 @@ private key mode at 0600.
 4. RAM: 8 GB minimum (Pi 5 or Pi 4 8GB). The LLM alone needs ~4 GB.
 5. Trust model: prototype has NO auth/TLS — only run on a trusted private network.
 6. Metrics history: persisted multi-resolution files live under `~/.virtualme/metrics/`.
-7. Browser window: closing Chromium auto-restarts it with one blank tab; the watchdog also re-maximizes a drifted window so the remote desktop never shows black dead space.
+7. Browser window: Chromium is undecorated and full-screen; closing it auto-restarts one blank tab, and the watchdog restores exact screen geometry. Popups cover the browser full-screen instead of tiling or overlapping it; close the popup to return to the main window.
 8. Browser profile: settings persist under `~/.virtualme/chromium/`.
 9. Browser sandbox: namespace sandboxing is automatic when supported; use `--no-browser-sandbox` to force the warning-suppressed fallback.
 10. Data location: all persistent state is under `~/.virtualme/`; see `specs/007-persistence-locality.md` §1a plus its amendments.

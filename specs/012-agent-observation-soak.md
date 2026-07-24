@@ -96,3 +96,13 @@ New `soak` subcommand (`src/commands/soak.js`, registered in `src/main.js` + hel
 - [ ] Desktop page shows Chromium covering the full remote framebuffer after container restart, and after a forced un-maximize the watchdog re-fits it within ~6 s.
 - [ ] `/opt/agent` contains only `system-manifest.json` (no `node_modules`/`playwright-core`), `npm` is gone from the image, and `/opt/agent/system-manifest.json` is still valid JSON. (A bare `nodejs` binary remains: the Debian `novnc` package from layer 004 depends on it transitively; removing noVNC is out of scope.)
 - [ ] `steps.jsonl` lines for observation tools contain a non-empty `text` field.
+
+## Amendments
+
+### 2026-07-23 — Full-screen policy superseded by spec 016
+
+Spec 016 supersedes §3's maximized Openbox posture with an undecorated,
+full-screen rule and an empty WM keyboard map. The watchdog now enforces exact
+screen position and dimensions on the most recently mapped Chromium surface,
+rather than applying the prior approximate size threshold to the first visible
+window. No numbered Docker layer changed.

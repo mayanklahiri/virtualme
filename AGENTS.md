@@ -50,7 +50,8 @@ actuation, and bounded bash execution. DOM observations carry the page URL
 and title, omit layout-only noise, and always fit the model's context;
 `navigate` waits for the page to settle. CDP never performs input or
 navigation; agent screenshots and step logs (including observation text)
-persist under `$VM_DATA_DIR/agent/`.
+persist under `$VM_DATA_DIR/agent/`. Chromium uses documented deterministic
+automation flags and one undecorated full-screen virtual-desktop surface.
 The loopback-only `ttsd` service wraps pinned sherpa-onnx and Piper Lessac
 artifacts; the controller streams its audio to the Speech tab, OpenAI-compatible
 speech clients, and the agent's `speak` tool without persistent TTS state.
@@ -93,7 +94,7 @@ fed by LLM, agent-tool, speech, and mail lifecycle events.
 | [013](specs/013-job-queue-scheduler.md) | Valkey job queue, time-bucket scheduler, initiator-bound cancellation |
 | [014](specs/014-projects.md) | Projects: periodic natural-language tasks with schedules and scratch dirs |
 | [015](specs/015-jobs-page.md) | Jobs page: activity ledger and queue peek with details pane |
-| [016](specs/016-chromium-determinism.md) | Chromium determinism flags and single full-screen window (draft) |
+| [016](specs/016-chromium-determinism.md) | Chromium determinism flags and single full-screen window |
 | [017](specs/017-jiggler.md) | Jiggler: humanlike OS-level mouse motion with a Status switch (draft) |
 | [018](specs/018-gpu-observability.md) | Multi-vendor GPU detection, status widget, and usage series (draft) |
 | [019](specs/019-chart-overhaul.md) | Chart ticks, titles, lookback control, and uniform series color (draft) |

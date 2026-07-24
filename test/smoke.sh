@@ -64,6 +64,85 @@ chromium_cmdline() {
   '
 }
 
+cdp_page_counts() {
+  local payload page_count blank_title_count
+  payload=$(docker exec "$NAME" curl -fsS http://127.0.0.1:9222/json 2>/dev/null) \
+    || return 1
+  page_count=$(printf '%s\n' "$payload" \
+    | awk '/"type"[[:space:]]*:[[:space:]]*"page"/ { count++ } END { print count + 0 }')
+  blank_title_count=$(printf '%s\n' "$payload" \
+    | awk '/"title"[[:space:]]*:[[:space:]]*"about:blank"/ { count++ } END { print count + 0 }')
+  printf '%s %s\n' "$page_count" "$blank_title_count"
+}
+
+check_chromium_posture() {
+  local resolution window_ids windows geometry active page_count blank_title_count
+  local attempt
+
+  resolution=$(docker exec "$NAME" printenv VM_RESOLUTION)
+  resolution="${resolution%x*}"
+
+  window_ids=$(docker exec -e DISPLAY=:99 "$NAME" \
+    xdotool search --onlyvisible --class chromium)
+  windows=$(printf '%s\n' "$window_ids" | sed '/^$/d' | wc -l)
+  [ "$windows" = "1" ] \
+    || fail "expected one mapped chromium-class window, found $windows"
+
+  active=""
+  for attempt in $(seq 1 25); do
+    active=$(docker exec -e DISPLAY=:99 "$NAME" xdotool getactivewindow 2>/dev/null || true)
+    [ "$active" = "$window_ids" ] && break
+    sleep 0.2
+  done
+  [ "$active" = "$window_ids" ] \
+    || fail "active X window $active is not mapped Chromium window $window_ids"
+
+  geometry=$(docker exec -e DISPLAY=:99 "$NAME" bash -c \
+    'xdotool getactivewindow getwindowgeometry --shell') \
+    || fail "could not read active Chromium geometry"
+  printf '%s\n' "$geometry" | grep -qx 'X=0' \
+    || fail "active chromium window is not at X=0: $geometry"
+  printf '%s\n' "$geometry" | grep -qx 'Y=0' \
+    || fail "active chromium window is not at Y=0: $geometry"
+  printf '%s\n' "$geometry" | grep -qx "WIDTH=${resolution%x*}" \
+    || fail "active chromium width does not match $resolution: $geometry"
+  printf '%s\n' "$geometry" | grep -qx "HEIGHT=${resolution#*x}" \
+    || fail "active chromium height does not match $resolution: $geometry"
+
+  read -r page_count blank_title_count < <(cdp_page_counts)
+  [ "$page_count" = "1" ] && [ "$blank_title_count" = "1" ] \
+    || fail "expected one about:blank CDP page target, found pages=$page_count blank_titles=$blank_title_count"
+}
+
+check_chromium_restart_timing() {
+  local iteration old_pid new_pid started_ms now_ms elapsed_ms
+  local page_count blank_title_count
+
+  for iteration in 1 2 3; do
+    old_pid=$(chromium_pid) \
+      || fail "could not find chromium before timed restart $iteration"
+    started_ms=$(date +%s%3N)
+    docker exec "$NAME" /command/s6-svc -r /run/service/svc-chromium \
+      || fail "could not restart svc-chromium on timed restart $iteration"
+    while true; do
+      new_pid=$(chromium_pid 2>/dev/null || true)
+      read -r page_count blank_title_count < <(cdp_page_counts || printf '0 0\n')
+      if [ -n "$new_pid" ] && [ "$new_pid" != "$old_pid" ] &&
+         [ "$page_count" = "1" ] && [ "$blank_title_count" = "1" ]; then
+        elapsed_ms=$(( $(date +%s%3N) - started_ms ))
+        [ "$elapsed_ms" -lt 15000 ] \
+          || fail "timed chromium restart $iteration took ${elapsed_ms}ms"
+        echo "smoke: chromium restart $iteration exposed one page in ${elapsed_ms}ms"
+        break
+      fi
+      now_ms=$(date +%s%3N)
+      [ "$now_ms" -lt $((started_ms + 15000)) ] \
+        || fail "timed chromium restart $iteration did not expose one page within 15s"
+      sleep 0.2
+    done
+  done
+}
+
 echo "smoke: building image"
 docker build -f docker/Dockerfile -t "$IMAGE_TAG" . || { echo "smoke: FAIL: build" >&2; exit 1; }
 
@@ -93,8 +172,6 @@ echo "smoke: checking vision projector pin and read-only CDP endpoint"
 docker exec "$NAME" sh -c \
   'echo "140be8d7849741f88c50757d529b84373ee8e27052cc2236855b537f4a8215fa  /opt/models/mmproj-gemma-4-E2B-F16.gguf" | sha256sum -c -' \
   >/dev/null || fail "vision projector checksum mismatch"
-docker exec "$NAME" curl -fsS http://127.0.0.1:9222/json \
-  | grep -q '"webSocketDebuggerUrl"' || fail "Chromium CDP endpoint unavailable"
 
 echo "smoke: checking llama vision completion"
 tiny_png="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
@@ -104,14 +181,11 @@ docker exec "$NAME" curl -fsS --max-time "$TIMEOUT" \
   http://127.0.0.1:8081/v1/chat/completions \
   | grep -q '"choices"' || fail "llama vision completion failed"
 
-echo "smoke: checking for visible chromium window"
-docker exec -e DISPLAY=:99 "$NAME" xdotool search --onlyvisible --class chromium >/dev/null \
-  || fail "no visible chromium window on :99"
-
-echo "smoke: checking exactly one chromium window"
-window_count=$(docker exec -e DISPLAY=:99 "$NAME" bash -c \
-  'xdotool search --onlyvisible --class chromium 2>/dev/null | wc -l')
-[ "$window_count" = "1" ] || fail "expected one visible chromium window, found $window_count"
+echo "smoke: checking full-screen single-window chromium posture"
+check_chromium_posture
+echo "smoke: checking three bounded chromium restarts"
+check_chromium_restart_timing
+check_chromium_posture
 
 echo "smoke: checking chromium sandbox flags"
 cmdline=$(chromium_cmdline) || fail "could not read chromium command line"
@@ -200,6 +274,10 @@ docker run -d --name "$NAME" --shm-size=1g \
   -v "${DATA_DIR}:/home/virtualme/.virtualme" \
   "$IMAGE_TAG" >/dev/null
 wait_green
+echo "smoke: checking forced-fallback chromium posture and startup timing"
+check_chromium_posture
+check_chromium_restart_timing
+check_chromium_posture
 cmdline=$(chromium_cmdline) || fail "could not read forced-fallback command line"
 case "$cmdline" in
   *--no-sandbox*--test-type*|*--test-type*--no-sandbox*) ;;

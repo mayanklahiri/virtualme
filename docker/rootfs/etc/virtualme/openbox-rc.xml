@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Kiosk-posture Openbox config (spec 012 §3): the virtual desktop exists to
-     show one maximized browser. Unspecified sections use Openbox defaults. -->
+<!-- Full-screen Openbox policy (spec 016 §3): the virtual desktop exists to
+     show one undecorated browser surface. Unspecified sections use defaults. -->
 <openbox_config xmlns="http://openbox.org/3.4/rc">
   <theme>
     <name>Clearlooks</name>
   </theme>
+  <keyboard/>
   <applications>
     <application class="*">
-      <maximized>yes</maximized>
+      <decor>no</decor>
+      <fullscreen>yes</fullscreen>
+      <focus>yes</focus>
+      <layer>normal</layer>
       <position force="no">
         <x>0</x>
         <y>0</y>

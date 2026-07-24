@@ -232,3 +232,12 @@ contains the user bundle only under `user-bundles.d/` (not the root-owned
 tmpfs, `S6_READ_ONLY_ROOT=1` stages s6 runtime state there, and the container
 root filesystem remains mounted read-write. No numbered Docker layer was
 edited.
+
+### 2026-07-23 — Superseded by spec 016
+
+Spec 016 supersedes §2's Chromium launch arguments with the documented
+deterministic automation flag array. It also supersedes §3's first-visible
+window selection with most-recent mapped Chromium-window selection so
+full-screen popups become the active surface. Hidden Chromium-class X clients
+are filtered out, preserving this spec's live-process/no-visible-window
+restart guarantee. No numbered Docker layer changed.
