@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/013-job-queue-scheduler.md` (queue, `queue-state`, `job-push`), `specs/014-projects.md` (project-run envelopes exist) |
 | Produces | A "Jobs" nav entry and `/jobs` page showing (a) a reverse-chronological ledger of what the machine is actually doing (browser, LLM, and other tool calls) and (b) a queue peek (upcoming / one currently-executing / recently finished, in time order); a right details pane (desktop) or slide-in sheet (mobile) tailored to job type; a Valkey-backed activity ledger fed from tool dispatch and LLM lifecycle; a soak flow proving the page's data path with basic queued jobs |
 | Followed by | `specs/021-agent-cdp-tools-console.md` |
@@ -131,3 +131,18 @@ Because this flow needs no model, it must run in well under 30 s; give it `SOAK_
 - [ ] Mobile viewport (375 px): pane slides in over content, Escape closes, focus is restored.
 - [ ] `./cli.sh soak --no-build` (against a running dev container) passes `jobs-queue-probe` hard assertions.
 - [ ] Ledger survives a container restart (Valkey AOF): activity from before the restart still lists.
+
+## Amendments
+
+### 2026-07-23 — Execution details
+
+- Queue envelopes gain `startedTs` when execution begins so the running timer
+  and finished durations use actual execution time rather than enqueue time.
+- Project-run payloads include the project name for bounded queue summaries;
+  project identity and selector remain authoritative envelope fields.
+- Agent tool activity is emitted immediately after artifact recording rather
+  than inside `localTools.Execute`, because that is the first point where the
+  exact bounded thumbnail broadcast in `agent-step` is available.
+- Activity thumbnails are rejected when the complete data URL exceeds 32 KiB.
+  Producers otherwise remain dumb: `Activity.Record` owns argument, result,
+  summary, and thumbnail caps.

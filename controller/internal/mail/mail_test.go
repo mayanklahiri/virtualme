@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"image/png"
@@ -16,6 +17,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 )
 
 func fixtureMessage(t *testing.T) []byte {
@@ -171,6 +174,15 @@ type fakeRunner struct {
 	err   error
 }
 
+type fakeActivity struct {
+	events chan jobs.ActivityEvent
+}
+
+func (activity *fakeActivity) Record(event jobs.ActivityEvent) error {
+	activity.events <- event
+	return nil
+}
+
 func (runner *fakeRunner) Run(_ context.Context, path string, args []string, input []byte) error {
 	runner.path, runner.args, runner.input = path, append([]string(nil), args...), append([]byte(nil), input...)
 	return runner.err
@@ -215,10 +227,12 @@ func TestServiceFrames(t *testing.T) {
 		t.Fatal(err)
 	}
 	runner := new(fakeRunner)
+	activity := &fakeActivity{events: make(chan jobs.ActivityEvent, 1)}
 	service, err := NewService(Config{
 		DataDir: dataDir, SendmailPath: "/sendmail", Mailname: "example.test",
 		From: "virtualme@example.test", Smarthost: "relay", Runner: runner,
-		Now: func() time.Time { return time.Unix(1700000000, 0) },
+		Now:      func() time.Time { return time.Unix(1700000000, 0) },
+		Activity: activity,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -231,6 +245,11 @@ func TestServiceFrames(t *testing.T) {
 	result := <-replies
 	if !strings.Contains(string(result), `"ok":true`) || !bytes.Contains(runner.input, []byte("multipart/related")) {
 		t.Fatalf("result=%s input=%s", result, runner.input)
+	}
+	event := <-activity.events
+	encodedEvent, _ := json.Marshal(event)
+	if event.Detail.RecipientDomain != "example.test" || bytes.Contains(encodedEvent, []byte("user@example.test")) {
+		t.Fatalf("mail activity leaked recipient: %s", encodedEvent)
 	}
 	if !service.Handle([]byte(`{"type":"mail-status-req"}`), write) {
 		t.Fatal("status request not handled")

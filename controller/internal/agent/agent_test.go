@@ -15,12 +15,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 	"github.com/mayanklahiri/virtualme/controller/internal/tts"
 )
 
 type fakeExecutor struct {
 	mu    sync.Mutex
 	calls []string
+}
+
+type activityRecorder struct {
+	events []jobs.ActivityEvent
+}
+
+func (recorder *activityRecorder) Record(event jobs.ActivityEvent) error {
+	recorder.events = append(recorder.events, event)
+	return nil
 }
 
 func TestSpeakToolDefinitionAndExecution(t *testing.T) {
@@ -31,9 +41,11 @@ func TestSpeakToolDefinitionAndExecution(t *testing.T) {
 	}))
 	defer server.Close()
 	var frames [][]byte
+	activity := new(activityRecorder)
 	tools := NewLocalTools(Config{
 		DataDir: t.TempDir(), TTS: &tts.Client{URL: server.URL},
 		Broadcast: func(payload []byte) { frames = append(frames, append([]byte(nil), payload...)) },
+		Activity:  activity,
 	}).(*localTools)
 	tools.resetTask("task-1")
 	found := false
@@ -54,6 +66,9 @@ func TestSpeakToolDefinitionAndExecution(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Errorf("frames missing %s: %s", want, joined)
 		}
+	}
+	if len(activity.events) != 1 || activity.events[0].Kind != "tts" || activity.events[0].Detail.Chars != 11 {
+		t.Fatalf("tts activity = %+v", activity.events)
 	}
 }
 
@@ -97,10 +112,12 @@ func TestToolLoopThenFinalReply(t *testing.T) {
 	}))
 	defer server.Close()
 	executor := &fakeExecutor{}
+	activity := new(activityRecorder)
 	var events [][]byte
 	agent := New(Config{
 		LlamaURL: server.URL, DataDir: t.TempDir(), Executor: executor,
 		Broadcast: func(payload []byte) { events = append(events, append([]byte(nil), payload...)) },
+		Activity:  activity,
 	})
 	result, err := agent.Handle(context.Background(), "do it")
 	if err != nil {
@@ -115,6 +132,11 @@ func TestToolLoopThenFinalReply(t *testing.T) {
 	}
 	if len(executor.calls) != 1 || executor.calls[0] != `echo:{"value":"ok"}` {
 		t.Fatalf("calls = %v", executor.calls)
+	}
+	if len(activity.events) != 1 || activity.events[0].Kind != "tool" ||
+		activity.events[0].Name != "echo" || activity.events[0].Detail.ResultText != "tool result" ||
+		!activity.events[0].Detail.OK {
+		t.Fatalf("activity = %+v", activity.events)
 	}
 	joined := string(bytesJoin(events))
 	if !strings.Contains(joined, `"type":"agent-step"`) || !strings.Contains(joined, `"phase":"done"`) {

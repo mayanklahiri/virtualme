@@ -49,6 +49,7 @@ type Service struct {
 	retryDelay time.Duration
 	agent      *agent.Agent
 	jobs       *jobs.Manager
+	activity   jobs.ActivityRecorder
 
 	mu             sync.Mutex
 	history        []Message
@@ -84,6 +85,11 @@ func New(valkeyAddr, llamaURL string, broadcast func([]byte)) *Service {
 // SetJobManager routes interactive generation through manager.
 func (s *Service) SetJobManager(manager *jobs.Manager) {
 	s.jobs = manager
+}
+
+// SetActivity installs the machine activity recorder.
+func (s *Service) SetActivity(activity jobs.ActivityRecorder) {
+	s.activity = activity
 }
 
 // NewWithAgent creates the production chat service with browser-agent routing.
@@ -487,7 +493,10 @@ func (s *Service) RunTask(ctx context.Context, text string) (string, error) {
 	if s.agent == nil {
 		return "", fmt.Errorf("agent is unavailable")
 	}
+	started := time.Now()
+	s.recordLLMStart(ctx, text)
 	result, err := s.agent.HandleFresh(ctx, text)
+	s.recordLLMFinish(ctx, result.PromptTokens, result.CompletionTokens, time.Since(started), result.Stopped, err == nil && !result.Failed)
 	if err != nil && result.Reply == "" {
 		return "", err
 	}
@@ -508,20 +517,27 @@ func (s *Service) RunTask(ctx context.Context, text string) (string, error) {
 
 func (s *Service) generate(ctx context.Context, env jobs.Envelope) (string, error) {
 	started := time.Now()
+	var prompt struct {
+		Text string `json:"text"`
+	}
+	_ = json.Unmarshal(env.Payload, &prompt)
+	s.recordLLMStart(ctx, prompt.Text)
+	llmFinished := false
 	statusCtx, stopStatus := context.WithCancel(context.Background())
 	f := &flight{phase: "sending", started: started}
 	go s.runStatus(statusCtx, f)
 	defer func() {
 		stopStatus()
 		s.broadcast(marshalEvent(llmStatus{Type: "llm-status", Phase: "idle"}))
+		if !llmFinished {
+			s.recordLLMFinish(ctx, 0, 0, time.Since(started), ctx.Err() != nil, false)
+		}
 	}()
 
 	if s.agent != nil {
-		var payload struct {
-			Text string `json:"text"`
-		}
-		_ = json.Unmarshal(env.Payload, &payload)
-		return s.generateAgent(ctx, started, payload.Text)
+		summary, err := s.generateAgent(ctx, started, prompt.Text)
+		llmFinished = true
+		return summary, err
 	}
 
 	body := marshalEvent(map[string]any{"stream": true, "messages": s.contextMessages(env.EnqueuedTs)})
@@ -534,7 +550,8 @@ func (s *Service) generate(ctx context.Context, env jobs.Envelope) (string, erro
 	response, err := s.client.Do(request)
 	if err != nil {
 		if ctx.Err() != nil {
-			s.finishReply("", true, 0, 0, time.Since(started))
+			s.finishReply(ctx, "", true, 0, 0, time.Since(started))
+			llmFinished = true
 			return "stopped", nil
 		} else {
 			s.broadcast(errorEvent("llama request failed: " + err.Error()))
@@ -615,7 +632,8 @@ func (s *Service) generate(ctx context.Context, env jobs.Envelope) (string, erro
 	if completionTokens == 0 {
 		completionTokens = fallbackTokens
 	}
-	s.finishReply(reply.String(), stopped, promptTokens, completionTokens, time.Since(started))
+	s.finishReply(ctx, reply.String(), stopped, promptTokens, completionTokens, time.Since(started))
+	llmFinished = true
 	return "chat reply completed", nil
 }
 
@@ -624,10 +642,12 @@ func (s *Service) generateAgent(ctx context.Context, started time.Time, userText
 	if err != nil {
 		s.broadcast(errorEvent("agent failed: " + err.Error()))
 		if result.Reply == "" {
+			s.recordLLMFinish(ctx, result.PromptTokens, result.CompletionTokens, time.Since(started), result.Stopped, false)
 			return "", err
 		}
 	}
 	s.finishReply(
+		ctx,
 		result.Reply,
 		result.Stopped,
 		result.PromptTokens,
@@ -637,7 +657,7 @@ func (s *Service) generateAgent(ctx context.Context, started time.Time, userText
 	return "chat reply completed", nil
 }
 
-func (s *Service) finishReply(text string, stopped bool, promptTokens, completionTokens int, elapsed time.Duration) {
+func (s *Service) finishReply(ctx context.Context, text string, stopped bool, promptTokens, completionTokens int, elapsed time.Duration) {
 	assistantMessage := Message{Role: "assistant", Text: text, Ts: time.Now().UnixMilli()}
 	s.append(assistantMessage)
 	s.broadcast(marshalEvent(struct {
@@ -646,4 +666,43 @@ func (s *Service) finishReply(text string, stopped bool, promptTokens, completio
 		Message
 	}{Type: "chat-done", Stopped: stopped, Message: assistantMessage}))
 	s.updateStats(promptTokens, completionTokens, elapsed)
+	s.recordLLMFinish(ctx, promptTokens, completionTokens, elapsed, stopped, !stopped)
+}
+
+func (s *Service) recordLLMStart(ctx context.Context, prompt string) {
+	if s.activity == nil {
+		return
+	}
+	excerpt := truncateRunes(strings.TrimSpace(prompt), 120)
+	_ = s.activity.Record(jobs.ActivityEvent{
+		Kind: "llm", Name: "generate", JobID: jobs.JobID(ctx), Summary: "prompt: " + excerpt,
+		Detail: jobs.ActivityDetail{Phase: "start", OK: true},
+	})
+}
+
+func (s *Service) recordLLMFinish(ctx context.Context, promptTokens, completionTokens int, elapsed time.Duration, stopped, ok bool) {
+	if s.activity == nil {
+		return
+	}
+	summary := "Generation completed"
+	if stopped {
+		summary = "Generation stopped"
+	} else if !ok {
+		summary = "Generation failed"
+	}
+	_ = s.activity.Record(jobs.ActivityEvent{
+		Kind: "llm", Name: "generate", JobID: jobs.JobID(ctx), Summary: summary,
+		Detail: jobs.ActivityDetail{
+			Phase: "finish", DurationMS: elapsed.Milliseconds(), OK: ok, Stopped: stopped,
+			PromptTokens: promptTokens, CompletionTokens: completionTokens,
+		},
+	})
+}
+
+func truncateRunes(value string, limit int) string {
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit])
 }

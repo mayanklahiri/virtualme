@@ -42,6 +42,7 @@ type Envelope struct {
 	Priority             string          `json:"priority"`
 	EnqueuedTs           int64           `json:"enqueuedTs"`
 	NotBeforeTs          int64           `json:"notBeforeTs"`
+	StartedTs            int64           `json:"startedTs,omitempty"`
 	Attempts             int             `json:"attempts"`
 	MaxRetries           int             `json:"maxRetries"`
 	VisibilityTimeoutSec int             `json:"visibilityTimeoutSec"`
@@ -299,6 +300,7 @@ func (m *Manager) sweep() {
 }
 
 func (m *Manager) runOne(env Envelope) {
+	env.StartedTs = m.now().UnixMilli()
 	m.mu.Lock()
 	fn := m.executors[env.Type]
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -310,7 +312,7 @@ func (m *Manager) runOne(env Envelope) {
 	if fn == nil {
 		err = fmt.Errorf("unknown job type %q", env.Type)
 	} else {
-		summary, err = fn(ctx, env)
+		summary, err = fn(withJobID(ctx, env.ID), env)
 	}
 	cause := context.Cause(ctx)
 	m.mu.Lock()

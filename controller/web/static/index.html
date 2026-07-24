@@ -38,6 +38,7 @@
       <div class="nav-links">
         <a href="/" data-nav><svg class="icon"><use href="/icons.svg#i-house"/></svg>Home</a>
         <a href="/projects" data-nav><svg class="icon"><use href="/icons.svg#i-folder-kanban"/></svg>Projects</a>
+        <a href="/jobs" data-nav><svg class="icon"><use href="/icons.svg#i-list-checks"/></svg>Jobs</a>
         <a href="/status" data-nav><svg class="icon"><use href="/icons.svg#i-activity"/></svg>Status</a>
         <a href="/chat" data-nav><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg>Chat</a>
         <a href="/speech" data-nav><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg>Speech</a>
@@ -79,6 +80,7 @@
         </div>
         <div class="quick-links">
           <a href="/projects" data-nav><svg class="icon"><use href="/icons.svg#i-folder-kanban"/></svg><strong>Projects</strong><span>Recurring background tasks</span></a>
+          <a href="/jobs" data-nav><svg class="icon"><use href="/icons.svg#i-list-checks"/></svg><strong>Jobs</strong><span>See what the machine is doing</span></a>
           <a href="/status" data-nav><svg class="icon"><use href="/icons.svg#i-activity"/></svg><strong>Status</strong><span>Inspect services and metrics</span></a>
           <a href="/chat" data-nav><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg><strong>Chat</strong><span>Talk to the local model</span></a>
           <a href="/speech" data-nav><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg><strong>Speech</strong><span>Speak with the local voice</span></a>
@@ -113,6 +115,26 @@
         <p class="project-error" role="alert"></p>
         <div id="project-detail"></div>
         <p id="project-detail-missing" class="empty-note" hidden>Project not found. <a href="/projects" data-nav>Return to Projects</a>.</p>
+      </section>
+
+      <section data-page="jobs" hidden class="jobs-page" aria-labelledby="jobs-title">
+        <div class="page-heading"><h1 id="jobs-title">Jobs</h1></div>
+        <div class="jobs-grid">
+          <div class="jobs-main">
+            <article class="jobs-card"><h2>Queue</h2>
+              <ol id="queue-upcoming" class="queue-block" aria-label="Upcoming"></ol>
+              <ol id="queue-running" class="queue-block running" aria-label="Executing"></ol>
+              <ol id="queue-finished" class="queue-block" aria-label="Recently finished"></ol>
+              <p id="queue-empty" class="empty-note" hidden>Queue idle. Nothing upcoming.</p>
+            </article>
+            <article class="jobs-card"><h2>Activity</h2>
+              <ol id="activity-list" class="activity-list" aria-live="polite"></ol>
+              <p id="activity-empty" class="empty-note" hidden>No recorded activity yet.</p>
+            </article>
+          </div>
+          <aside id="job-detail" class="job-detail" hidden aria-label="Details"></aside>
+        </div>
+        <div id="job-detail-curtain" class="job-detail-curtain" hidden></div>
       </section>
 
       <section data-page="status" hidden aria-labelledby="status-page-title">

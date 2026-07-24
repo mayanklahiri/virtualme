@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 	"github.com/mayanklahiri/virtualme/controller/internal/tts"
 )
 
@@ -80,6 +81,7 @@ type Config struct {
 	Runner        Runner
 	Executor      Executor
 	TTS           *tts.Client
+	Activity      jobs.ActivityRecorder
 }
 
 // Result describes how an agent task terminated.
@@ -255,6 +257,7 @@ func (a *Agent) handle(ctx context.Context, userText string, includeHistory bool
 			if local, ok := a.tools.(*localTools); ok {
 				local.stepID = fmt.Sprintf("%s-%d", a.taskID, a.step)
 			}
+			toolStarted := time.Now()
 			result, toolErr := a.tools.Execute(ctx, call.Function.Name, json.RawMessage(call.Function.Arguments))
 			if toolErr != nil {
 				result.Text = "tool error: " + toolErr.Error()
@@ -262,7 +265,20 @@ func (a *Agent) handle(ctx context.Context, userText string, includeHistory bool
 			if result.Summary == "" {
 				result.Summary = call.Function.Name
 			}
-			a.recordStep(ctx, call, result, toolErr)
+			thumbnail := a.recordStep(ctx, call, result, toolErr)
+			if a.cfg.Activity != nil {
+				var args any
+				if json.Unmarshal([]byte(call.Function.Arguments), &args) != nil {
+					args = call.Function.Arguments
+				}
+				_ = a.cfg.Activity.Record(jobs.ActivityEvent{
+					Kind: "tool", Name: call.Function.Name, JobID: jobs.JobID(ctx), Summary: result.Summary,
+					Detail: jobs.ActivityDetail{
+						Args: args, ResultText: result.Text, DurationMS: time.Since(toolStarted).Milliseconds(),
+						OK: toolErr == nil, ScreenshotThumb: thumbnail,
+					},
+				})
+			}
 			toolContent := truncatePromptText(result.Text, toolTextCap)
 			if result.Observe {
 				toolContent = "Observation captured; use the following observation message."

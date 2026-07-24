@@ -179,3 +179,9 @@ reserves the persistence lane without adding agent runtime behavior.
 |---|---|---|---|
 | `virtualme:projects*` project records and run summaries | `$VM_DATA_DIR/valkey/` (AOF) | `internal/projects` via `svc-valkey` | 014 |
 | Project scratch space | `$VM_DATA_DIR/projects/<id>/` | `internal/projects`, created on first run and retained after project deletion | 014 |
+
+### 2026-07-23 — Persistent activity ledger
+
+| State | Path | Owner / mechanism | Introduced |
+|---|---|---|---|
+| `virtualme:activity` bounded machine-activity ledger | `$VM_DATA_DIR/valkey/` (AOF) | `internal/jobs.Activity` via `svc-valkey` | 015 |

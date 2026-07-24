@@ -9,6 +9,7 @@ import { initAgent } from "./agent.js";
 import { initTTS } from "./tts.js";
 import { initMail } from "./mail.js";
 import { initProjects } from "./projects.js";
+import { initJobs } from "./jobs.js";
 
 initTheme();
 initNav();
@@ -17,11 +18,8 @@ const chat = initChat((value) => socket.send(value));
 const speech = initTTS((value) => socket.send(value));
 const mail = initMail((value) => socket.send(value));
 const projects = initProjects((value) => socket.send(value));
+const jobs = initJobs((value) => socket.send(value));
 const agent = initAgent(chat.log, (text) => chat.setStatus(text));
-initRouter((page) => {
-  if (page === "status") charts.draw();
-  if (page === "projects" || page === "project-detail") projects.render(page);
-});
 
 function onStatus(status) {
   renderStatus(status);
@@ -87,8 +85,19 @@ function onMessage(message) {
       break;
     case "queue-state":
       projects.queue(message);
+      jobs.frame(message);
+      break;
+    case "activity":
+    case "activity-event":
+      jobs.frame(message);
       break;
   }
 }
 
 const socket = connect(onMessage, onStatus);
+initRouter((page) => {
+  if (page === "status") charts.draw();
+  if (page === "projects" || page === "project-detail") projects.render(page);
+  if (page === "jobs") jobs.enter();
+  else jobs.close();
+});

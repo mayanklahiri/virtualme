@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"log"
 	"mime"
@@ -79,6 +80,10 @@ func spaHandler(staticFS fs.FS) http.Handler {
 }
 
 func newMux(cfg health.Config, hub *ws.Hub, desktopURL *url.URL, clients ...*tts.Client) *http.ServeMux {
+	return newMuxWithActivity(cfg, hub, desktopURL, nil, clients...)
+}
+
+func newMuxWithActivity(cfg health.Config, hub *ws.Hub, desktopURL *url.URL, activity *jobs.Activity, clients ...*tts.Client) *http.ServeMux {
 	client := &tts.Client{URL: "http://127.0.0.1:" + envOr("VM_TTS_PORT", "8082")}
 	if len(clients) > 0 && clients[0] != nil {
 		client = clients[0]
@@ -93,7 +98,7 @@ func newMux(cfg health.Config, hub *ws.Hub, desktopURL *url.URL, clients ...*tts
 		_ = json.NewEncoder(w).Encode(report)
 	})
 	mux.HandleFunc("/ws", hub.HandleUpgrade)
-	mux.HandleFunc("/v1/audio/speech", speechHandler(client))
+	mux.HandleFunc("/v1/audio/speech", speechHandler(client, activity))
 	mux.Handle("/desktop/", http.StripPrefix("/desktop/", httputil.NewSingleHostReverseProxy(desktopURL)))
 	staticFS, err := fs.Sub(assets.WebFS, "web/dist")
 	if err != nil {
@@ -111,7 +116,11 @@ func openAIError(w http.ResponseWriter, status int, message string) {
 	}})
 }
 
-func speechHandler(client *tts.Client) http.HandlerFunc {
+func speechHandler(client *tts.Client, activities ...jobs.ActivityRecorder) http.HandlerFunc {
+	var activity jobs.ActivityRecorder
+	if len(activities) > 0 {
+		activity = activities[0]
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -143,6 +152,7 @@ func speechHandler(client *tts.Client) http.HandlerFunc {
 			return
 		}
 		w.Header().Set("X-VM-Voice", tts.Voice)
+		startedAt := time.Now()
 		started := false
 		_, err := client.Synthesize(r.Context(), tts.Request{Text: input.Input, Speed: input.Speed}, func(event tts.Event) error {
 			switch event.Type {
@@ -177,14 +187,25 @@ func speechHandler(client *tts.Client) http.HandlerFunc {
 		if err != nil && !started {
 			openAIError(w, http.StatusBadGateway, err.Error())
 		}
+		if activity != nil {
+			_ = activity.Record(jobs.ActivityEvent{
+				Kind: "tts", Name: "synthesize",
+				Summary: fmt.Sprintf("Synthesized %d characters with %s", len([]rune(input.Input)), tts.Voice),
+				Detail: jobs.ActivityDetail{
+					DurationMS: time.Since(startedAt).Milliseconds(), OK: err == nil,
+					Chars: len([]rune(input.Input)), Voice: tts.Voice,
+				},
+			})
+		}
 	}
 }
 
 type ttsWS struct {
-	client *tts.Client
-	mu     sync.Mutex
-	next   uint64
-	active map[*ws.Conn]ttsFlight
+	client   *tts.Client
+	activity jobs.ActivityRecorder
+	mu       sync.Mutex
+	next     uint64
+	active   map[*ws.Conn]ttsFlight
 }
 
 type ttsFlight struct {
@@ -193,8 +214,12 @@ type ttsFlight struct {
 	cancel context.CancelFunc
 }
 
-func newTTSWS(client *tts.Client) *ttsWS {
-	return &ttsWS{client: client, active: make(map[*ws.Conn]ttsFlight)}
+func newTTSWS(client *tts.Client, activities ...jobs.ActivityRecorder) *ttsWS {
+	var activity jobs.ActivityRecorder
+	if len(activities) > 0 {
+		activity = activities[0]
+	}
+	return &ttsWS{client: client, activity: activity, active: make(map[*ws.Conn]ttsFlight)}
 }
 
 func (t *ttsWS) start(conn *ws.Conn, id string) (context.Context, context.CancelFunc, uint64, string) {
@@ -255,6 +280,7 @@ func (t *ttsWS) handle(conn *ws.Conn, payload []byte) bool {
 		t.write(conn, map[string]any{"type": "tts-status", "id": oldID, "origin": "console", "phase": "stopped"})
 	}
 	go func() {
+		startedAt := time.Now()
 		defer cancel()
 		defer t.done(conn, token)
 		t.write(conn, map[string]any{"type": "tts-status", "id": request.ID, "origin": "console", "phase": "queued"})
@@ -280,6 +306,16 @@ func (t *ttsWS) handle(conn *ws.Conn, payload []byte) bool {
 			t.write(conn, map[string]any{"type": "tts-error", "id": request.ID, "origin": "console", "error": err.Error()})
 			t.write(conn, map[string]any{"type": "tts-status", "id": request.ID, "origin": "console", "phase": "failed"})
 		}
+		if t.activity != nil {
+			_ = t.activity.Record(jobs.ActivityEvent{
+				Kind: "tts", Name: "synthesize",
+				Summary: fmt.Sprintf("Synthesized %d characters with %s", len([]rune(request.Text)), tts.Voice),
+				Detail: jobs.ActivityDetail{
+					DurationMS: time.Since(startedAt).Milliseconds(), OK: err == nil,
+					Chars: len([]rune(request.Text)), Voice: tts.Voice,
+				},
+			})
+		}
 	}()
 	return true
 }
@@ -294,8 +330,9 @@ func main() {
 	log.SetFlags(0)
 	cfg := health.FromEnv()
 	hub := ws.NewHub()
+	activity := jobs.NewActivity(valkey.New(cfg.ValkeyAddr), hub.Broadcast)
 	ttsClient := &tts.Client{URL: "http://127.0.0.1:" + envOr("VM_TTS_PORT", "8082")}
-	ttsSocket := newTTSWS(ttsClient)
+	ttsSocket := newTTSWS(ttsClient, activity)
 	desktopURL, err := url.Parse("http://127.0.0.1:6080")
 	if err != nil {
 		log.Fatal(err)
@@ -317,6 +354,7 @@ func main() {
 		DKIMDomain:   os.Getenv("VM_MAIL_DKIM_DOMAIN"),
 		DKIMSelector: envOr("VM_MAIL_DKIM_SELECTOR", "virtualme"),
 		Broadcast:    hub.Broadcast,
+		Activity:     activity,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -340,8 +378,10 @@ func main() {
 			KeepTasks:     envInt("VM_AGENT_KEEP_TASKS", 20),
 			ContextTokens: envInt("VM_LLAMA_CTX", 16384),
 			TTS:           ttsClient,
+			Activity:      activity,
 		},
 	)
+	chatService.SetActivity(activity)
 	jobManager := jobs.New(valkey.New(cfg.ValkeyAddr), hub.Broadcast)
 	chatService.SetJobManager(jobManager)
 	jobManager.Register("chat", chatService.Execute)
@@ -395,6 +435,9 @@ func main() {
 		if projectService.HandleMessage(conn, payload) {
 			return
 		}
+		if activity.HandleMessage(conn, payload) {
+			return
+		}
 		chatService.HandleClientMessage(conn, payload)
 	})
 	hub.SetOnConnect(func(conn *ws.Conn) {
@@ -403,6 +446,7 @@ func main() {
 		_ = conn.WriteText(mailService.StatusMessage())
 		_ = conn.WriteText(jobManager.StateMessage())
 		_ = conn.WriteText(projectService.Message())
+		_ = conn.WriteText(activity.Message())
 	})
 	hub.SetOnDisconnect(jobManager.DropInitiator)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -428,7 +472,7 @@ func main() {
 	log.Println("state: collector started (2s, tiered metrics)")
 	log.Println("desktop: proxying", desktopURL)
 	log.Println("controller: listening on", addr)
-	server := &http.Server{Addr: addr, Handler: newMux(cfg, hub, desktopURL, ttsClient), ReadHeaderTimeout: 5 * time.Second}
+	server := &http.Server{Addr: addr, Handler: newMuxWithActivity(cfg, hub, desktopURL, activity, ttsClient), ReadHeaderTimeout: 5 * time.Second}
 	errs := make(chan error, 1)
 	go func() { errs <- server.ListenAndServe() }()
 	select {

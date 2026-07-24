@@ -39,8 +39,9 @@ const excerpt = (text, n = 160) =>
 /**
  * @typedef {{ tool: string, summary: string, text: string, error?: string,
  *             args: unknown, screenshot?: string, n: number }} Step
- * @typedef {{ steps: Step[], reply: string, chatError: string }} FlowResult
- * @typedef {{ name: string, prompt: string,
+ * @typedef {{ steps: Step[], reply: string, chatError: string, probeProblems?: string[] }} FlowResult
+ * @typedef {{ name: string, prompt?: string,
+ *             run?: (ws: WebSocket, log: (message: string) => void) => Promise<FlowResult>,
  *             hard: (r: FlowResult) => string[],
  *             soft: (r: FlowResult) => string[] }} Flow
  */
@@ -147,6 +148,67 @@ const flows = [
       return /example domain/i.test(r.reply) ? [] : ['final reply does not mention "Example Domain"'];
     },
   },
+  {
+    name: "jobs-queue-probe",
+    run(ws, flowLog) {
+      return new Promise((resolve, reject) => {
+        /** @type {string[]} */
+        const ids = [];
+        /** @type {any[]} */
+        const states = [];
+        let requestedActivity = false;
+        const timer = setTimeout(() => reject(new Error("jobs queue probe timed out after 60s")), 60000);
+        onFrame = (frame) => {
+          if (frame.type === "job-pushed") {
+            ids.push(String(frame.id ?? ""));
+            flowLog(`pushed ${ids.length}: ${frame.id}`);
+            if (ids.length === 1) {
+              ws.send(JSON.stringify({ type: "job-push", job: { type: "soak-probe", payload: { echo: "soak-2" } } }));
+            }
+            return;
+          }
+          if (frame.type === "queue-state") {
+            states.push(frame);
+            const bothFinished = ids.length === 2 && ids.every((id) =>
+              (/** @type {any[]} */ (frame.finished ?? [])).some((job) => job.id === id && job.result?.ok === true),
+            );
+            if (bothFinished && !requestedActivity) {
+              requestedActivity = true;
+              ws.send(JSON.stringify({ type: "activity-req" }));
+            }
+            return;
+          }
+          if (frame.type === "activity" && requestedActivity) {
+            clearTimeout(timer);
+            const problems = [];
+            if (!Array.isArray(frame.events)) problems.push("activity reply events is not an array");
+            const ordered = states.some((state) =>
+              state.running?.id === ids[0] &&
+              (/** @type {any[]} */ (state.upcoming ?? [])).some((job) => job.id === ids[1]),
+            );
+            if (!ordered) problems.push("never saw soak-1 running while soak-2 was upcoming");
+            const final = states.findLast((state) =>
+              ids.every((id) => (/** @type {any[]} */ (state.finished ?? [])).some((job) => job.id === id)),
+            );
+            const first = (/** @type {any[]} */ (final?.finished ?? [])).find((job) => job.id === ids[0]);
+            const second = (/** @type {any[]} */ (final?.finished ?? [])).find((job) => job.id === ids[1]);
+            if (!first?.result?.ok || !second?.result?.ok) problems.push("both probes did not finish successfully");
+            if (Number(first?.result?.finishedTs) >= Number(second?.result?.finishedTs)) {
+              problems.push("soak-1 did not finish before soak-2");
+            }
+            resolve({ steps: [], reply: "", chatError: "", probeProblems: problems });
+          }
+        };
+        ws.send(JSON.stringify({ type: "job-push", job: { type: "soak-probe", payload: { echo: "soak-1" } } }));
+      });
+    },
+    hard(r) {
+      return r.probeProblems ?? [];
+    },
+    soft() {
+      return [];
+    },
+  },
 ];
 
 /** One shared socket; frames are dispatched to the active flow. */
@@ -244,8 +306,8 @@ function runFlow(flow) {
           break;
       }
     };
-    log(flow.name, `prompt: ${dim(flow.prompt)}`);
-    socket.send(JSON.stringify({ type: "chat", text: flow.prompt }));
+    log(flow.name, `prompt: ${dim(flow.prompt ?? "")}`);
+    socket.send(JSON.stringify({ type: "chat", text: flow.prompt ?? "" }));
   });
 }
 
@@ -260,8 +322,13 @@ const outcomes = [];
 for (const flow of selected) {
   log("soak", bold(`=== flow ${flow.name} ===`));
   try {
-    await clearChat();
-    const result = await runFlow(flow);
+    let result;
+    if (flow.run) {
+      result = await flow.run(socket, (message) => log(flow.name, message));
+    } else {
+      await clearChat();
+      result = await runFlow(flow);
+    }
     const hardFails = flow.hard(result);
     const softFails = flow.soft(result);
     if (result.chatError) hardFails.unshift(`chat-error during flow: ${result.chatError}`);

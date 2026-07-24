@@ -37,6 +37,7 @@ also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 - `http://localhost:8080/` — console home
 - `http://localhost:8080/projects` — recurring projects and schedules
 - `http://localhost:8080/projects/<id>` — project task, runs, and scratch details
+- `http://localhost:8080/jobs` — queue timeline, machine activity, and details
 - `http://localhost:8080/status` — service status, active time selectors, and tiered metrics
 - `http://localhost:8080/chat` — shared local-model chat
 - `http://localhost:8080/speech` — streaming local text-to-speech
@@ -56,6 +57,11 @@ The home page live-updates controller health, hostname, uptime, CPU cores/load,
 memory, and disk capacity. The theme button in the sidebar footer opens the
 eight-theme picker and its automatic/light/dark variant controls; selections
 persist in the browser.
+
+Use `/jobs` to see what the machine is actually doing. Queue time flows from
+upcoming at the top through the single executing job to recently finished
+jobs; the activity list below is newest-first and records finer-grained LLM,
+tool, speech, and mail actions.
 
 ## Browser-agent tasks
 
@@ -130,3 +136,4 @@ private key mode at 0600.
 13. Mail not arriving: check the `mail` health entry, last result, and queue; confirm relay credentials/port or direct-path outbound port 25, publish the displayed DKIM TXT record and SPF, and verify sending-IP PTR/reputation. Residential/dynamic IPs should use a smarthost.
 14. Job queue: `queue-peek` on `/ws` returns upcoming, running, and finished jobs; durable queue keys are in the Valkey AOF under `~/.virtualme/valkey/`.
 15. Projects: records and run summaries are in the Valkey AOF; scratch files are under `~/.virtualme/projects/<id>/` and survive project deletion.
+16. Activity ledger: `/jobs` replays the newest 100 entries from the bounded `virtualme:activity` Valkey list; queue rows are separate envelope state.

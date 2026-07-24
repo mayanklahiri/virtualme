@@ -48,7 +48,7 @@ func (a *Agent) pruneTasks() error {
 	return nil
 }
 
-func (a *Agent) recordStep(ctx context.Context, call ToolCall, result ToolResult, toolErr error) {
+func (a *Agent) recordStep(ctx context.Context, call ToolCall, result ToolResult, toolErr error) string {
 	var args any
 	if json.Unmarshal([]byte(call.Function.Arguments), &args) != nil {
 		args = call.Function.Arguments
@@ -86,6 +86,8 @@ func (a *Agent) recordStep(ctx context.Context, call ToolCall, result ToolResult
 		_ = logFile.Close()
 	}
 	a.cfg.Broadcast(encoded)
+	thumbnail, _ := event["screenshot"].(string)
+	return thumbnail
 }
 
 func (a *Agent) thumbnail(ctx context.Context, source string) []byte {

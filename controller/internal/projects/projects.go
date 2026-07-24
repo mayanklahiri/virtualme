@@ -275,11 +275,12 @@ func (s *Service) HandleMessage(conn *ws.Conn, payload []byte) bool {
 		}
 		s.publish()
 	case "project-run":
-		if _, err := s.get(request.ID); err != nil {
+		project, err := s.get(request.ID)
+		if err != nil {
 			writeError(conn, err)
 			return true
 		}
-		body, _ := json.Marshal(map[string]any{"id": request.ID, "manual": true})
+		body, _ := json.Marshal(map[string]any{"id": request.ID, "name": project.Name, "manual": true})
 		if _, err := s.jobs.Enqueue(jobs.Envelope{
 			ID: jobs.NewID(), Type: "project-run", Payload: body,
 			Priority: "interactive", InitiatorConn: conn.ID(),
@@ -317,7 +318,7 @@ func (s *Service) Source(now time.Time) []jobs.Envelope {
 		if s.save(project) != nil {
 			continue
 		}
-		body, _ := json.Marshal(map[string]any{"id": project.ID, "manual": false})
+		body, _ := json.Marshal(map[string]any{"id": project.ID, "name": project.Name, "manual": false})
 		result = append(result, jobs.Envelope{
 			ID: jobs.NewID(), Type: "project-run", Payload: body,
 			Priority: "scheduled", ProjectID: project.ID, Selector: project.Selector,

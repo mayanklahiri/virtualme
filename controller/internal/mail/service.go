@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 )
 
 // Config configures outbound mail and its persistent state.
@@ -23,6 +25,7 @@ type Config struct {
 	Now                       func() time.Time
 	Broadcast                 func([]byte)
 	Key                       *rsa.PrivateKey
+	Activity                  jobs.ActivityRecorder
 }
 
 // DKIMStatus describes signing and the DNS record to publish.
@@ -114,6 +117,7 @@ func (service *Service) Handle(payload []byte, reply func([]byte) error) bool {
 }
 
 func (service *Service) send(id, recipient, subject, body string, includeImage bool, reply func([]byte) error) {
+	started := time.Now()
 	result := map[string]any{"type": "mail-result", "id": id}
 	address, err := mail.ParseAddress(strings.TrimSpace(recipient))
 	if err == nil && address.Address != strings.TrimSpace(recipient) {
@@ -144,6 +148,16 @@ func (service *Service) send(id, recipient, subject, body string, includeImage b
 		err = Submit(context.Background(), service.config.Runner, service.config.SendmailPath,
 			service.config.From, []string{address.Address}, composed)
 	}
+	domain := recipientDomain(address)
+	if service.config.Activity != nil {
+		_ = service.config.Activity.Record(jobs.ActivityEvent{
+			Kind: "mail", Name: "submit", Summary: fmt.Sprintf("Submitted %d bytes to %s", len(composed), domain),
+			Detail: jobs.ActivityDetail{
+				DurationMS: time.Since(started).Milliseconds(), OK: err == nil,
+				RecipientDomain: domain, Size: len(composed),
+			},
+		})
+	}
 	last := &LastResult{TS: service.config.Now().UTC().Format(time.RFC3339), To: recipient, OK: err == nil}
 	result["ok"] = err == nil
 	if err != nil {
@@ -156,6 +170,17 @@ func (service *Service) send(id, recipient, subject, body string, includeImage b
 	encoded, _ := json.Marshal(result)
 	_ = reply(encoded)
 	service.broadcastStatus()
+}
+
+func recipientDomain(address *mail.Address) string {
+	if address == nil {
+		return ""
+	}
+	_, domain, ok := strings.Cut(address.Address, "@")
+	if !ok {
+		return ""
+	}
+	return strings.ToLower(domain)
 }
 
 func paragraphs(body string) string {

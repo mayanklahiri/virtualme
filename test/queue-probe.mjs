@@ -8,6 +8,7 @@ if (!url) {
 const echo = `queue-${Date.now()}`;
 let id = "";
 let runningSeen = false;
+let finishedSeen = false;
 const timer = setTimeout(() => {
   console.error("queue-probe: FAIL: timeout after 30s");
   process.exit(1);
@@ -39,6 +40,15 @@ socket.addEventListener("message", (event) => {
     socket.send(JSON.stringify({ type: "queue-peek" }));
     return;
   }
+  if (message.type === "activity" && finishedSeen) {
+    if (!Array.isArray(message.events)) {
+      console.error("queue-probe: FAIL: activity reply omitted events array");
+      process.exit(1);
+    }
+    clearTimeout(timer);
+    console.log(`queue-probe: OK id=${id}`);
+    process.exit(0);
+  }
   if (message.type !== "queue-state" || !id) return;
   if (message.running?.id === id) runningSeen = true;
   let finished;
@@ -50,7 +60,8 @@ socket.addEventListener("message", (event) => {
     console.error(`queue-probe: FAIL: invalid lifecycle ${JSON.stringify({ runningSeen, finished })}`);
     process.exit(1);
   }
-  clearTimeout(timer);
-  console.log(`queue-probe: OK id=${id}`);
-  process.exit(0);
+  if (!finishedSeen) {
+    finishedSeen = true;
+    socket.send(JSON.stringify({ type: "activity-req" }));
+  }
 });

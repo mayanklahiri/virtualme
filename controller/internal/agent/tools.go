@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 	"github.com/mayanklahiri/virtualme/controller/internal/tts"
 )
 
@@ -311,11 +312,24 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 	}
 }
 
-func (t *localTools) speak(ctx context.Context, raw json.RawMessage) (ToolResult, error) {
+func (t *localTools) speak(ctx context.Context, raw json.RawMessage) (result ToolResult, resultErr error) {
+	started := time.Now()
 	var args struct {
 		Text  string  `json:"text"`
 		Speed float64 `json:"speed"`
 	}
+	defer func() {
+		if t.cfg.Activity != nil {
+			_ = t.cfg.Activity.Record(jobs.ActivityEvent{
+				Kind: "tts", Name: "synthesize", JobID: jobs.JobID(ctx),
+				Summary: fmt.Sprintf("Synthesized %d characters with %s", len([]rune(args.Text)), tts.Voice),
+				Detail: jobs.ActivityDetail{
+					DurationMS: time.Since(started).Milliseconds(), OK: resultErr == nil,
+					Chars: len([]rune(args.Text)), Voice: tts.Voice,
+				},
+			})
+		}
+	}()
 	if err := decodeArgs(raw, &args); err != nil {
 		return ToolResult{}, err
 	}
@@ -369,8 +383,8 @@ func (t *localTools) speak(ctx context.Context, raw json.RawMessage) (ToolResult
 	}
 	done, _ := json.Marshal(map[string]any{"type": "tts-status", "id": id, "origin": origin, "phase": "done", "sentences": sentenceCount, "rtf": summary.RTF})
 	t.cfg.Broadcast(done)
-	result, _ := json.Marshal(map[string]any{"ok": true, "audioSec": summary.AudioSec})
-	return ToolResult{Text: string(result), Summary: "Spoke text aloud"}, nil
+	encoded, _ := json.Marshal(map[string]any{"ok": true, "audioSec": summary.AudioSec})
+	return ToolResult{Text: string(encoded), Summary: "Spoke text aloud"}, nil
 }
 
 func (t *localTools) action(ctx context.Context, summary string, args ...string) (ToolResult, error) {

@@ -70,11 +70,13 @@ profile time to flush before watchdog or container restarts.
 | `controller/internal/chat` | Shared streaming chat, controls, stats, and LLM status |
 | `controller/internal/valkey` | Shared dependency-free RESP2 client |
 | `controller/internal/jobs` | Reliable priority queue, sequential worker, scheduler, and cancellation |
+| `controller/internal/jobs/activity.go` | Persistent activity ledger and websocket replay/broadcast |
 | `controller/internal/projects` | Persistent recurring tasks, scheduler source, executor, run summaries, and scratch directories |
 | `controller/internal/agent` | Tool-call loop, read-only CDP/DOM observations, OS-level actions, bash, and artifacts |
 | `controller/cmd/ttsd`, `controller/internal/tts` | Serialized sherpa subprocess synthesis, WAV parsing, NDJSON client, and streaming helpers |
 | `controller/internal/mail` | Stdlib MIME/CID composition, DKIM signing, dma submission, and spool status |
 | `controller/web/static` | Hand-written multi-page SPA, themes, charts, markdown, agent hooks |
+| `controller/web/static/js/jobs.js` | Queue timeline, live activity, and type-specific job details |
 | `controller/web/dist` | Gitignored minified SPA + generated icon sprite |
 | `controller/tools/fetch-assets.sh` | Pinned fonts, selected Lucide SVGs, and hero image fetch |
 | `scripts/build-icons.mjs` | Deterministic Lucide SVG sprite generation |
@@ -99,6 +101,10 @@ It maps `projects-req`, `project-create`, `project-update`, `project-delete`,
 and `project-run` to `projects` snapshots or sender-only `project-error`
 frames. Project records and summaries use Valkey; agent scratch space lives
 under `$VM_DATA_DIR/projects/<id>/`.
+It maps `activity-req` to sender-only `activity` frames and broadcasts
+`activity-event` frames after durable writes. Activity feed points are agent
+tool completion, chat/project LLM start and finish, each TTS synthesis, and
+each mail submission.
 
 ## How to add things
 
