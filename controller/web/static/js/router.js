@@ -2,6 +2,7 @@ const routes = new Map([
   ["/", ["home", "Home"]],
   ["/projects", ["projects", "Projects"]],
   ["/jobs", ["jobs", "Jobs"]],
+  ["/tools", ["tools", "Tools"]],
   ["/status", ["status", "Status"]],
   ["/chat", ["chat", "Chat"]],
   ["/speech", ["speech", "Speech"]],

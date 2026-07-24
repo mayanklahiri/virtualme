@@ -226,3 +226,13 @@ read-only `document.readyState` until the page settles and returns an
 observation with `{url,title,ready}`. `recordStep` persists capped
 observation text in `steps.jsonl` and `agent-step` frames. The CDP websocket
 reader reassembles fragmented frames.
+
+### 2026-07-23 — CDP observation tools and centralized policy (spec 021)
+
+Spec 021 adds `dom_query`, `dom_validate`, `page_eval`, and `layout_debug`.
+They return plain bounded tool results and use only `Runtime.evaluate`.
+The CDP transport now centrally allowlists `Runtime.evaluate` and
+`DOMSnapshot.captureSnapshot`; all other methods are rejected before network
+traffic. `page_eval` combines its static mutation tripwires with Chromium's
+`throwOnSideEffect` guard. Agent and manual executions share the same tool
+definitions and executor.

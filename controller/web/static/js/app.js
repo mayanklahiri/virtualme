@@ -10,6 +10,7 @@ import { initTTS } from "./tts.js";
 import { initMail } from "./mail.js";
 import { initProjects } from "./projects.js";
 import { initJobs } from "./jobs.js";
+import { initTools } from "./tools.js";
 
 initTheme();
 initNav();
@@ -19,6 +20,7 @@ const speech = initTTS((value) => socket.send(value));
 const mail = initMail((value) => socket.send(value));
 const projects = initProjects((value) => socket.send(value));
 const jobs = initJobs((value) => socket.send(value));
+const tools = initTools((value) => socket.send(value));
 const agent = initAgent(chat.log, (text) => chat.setStatus(text));
 const jigglerSwitch = document.querySelector("#jiggler-switch");
 jigglerSwitch.addEventListener("click", () => {
@@ -101,6 +103,10 @@ function onMessage(message) {
     case "activity-event":
       jobs.frame(message);
       break;
+    case "tools-list":
+    case "tool-result":
+      tools.frame(message);
+      break;
   }
 }
 
@@ -110,4 +116,5 @@ initRouter((page) => {
   if (page === "projects" || page === "project-detail") projects.render(page);
   if (page === "jobs") jobs.enter();
   else jobs.close();
+  if (page === "tools") tools.enter();
 });

@@ -162,6 +162,7 @@ func buildSystemPrompt(cfg Config) string {
 	return fmt.Sprintf(`You are Virtual Me, a concise private assistant running locally for one trusted user.
 You can operate the visible Chromium window. Act only through the provided OS-input tools; CDP/DOM tools are observation-only.
 Prefer DOM refs with click_element/type_into for precision. Use coordinate clicks only as fallback. Screenshots use %dx%d API coordinates mapped to a %dx%d display.
+Use dom_query for precise CSS extraction, dom_validate for assertions, page_eval only for read-only extraction, and layout_debug for geometry or occlusion diagnosis.
 Use tools when the user asks you to operate or inspect the browser/system. For ordinary questions, answer directly without tools.
 Use speak only when the user explicitly asks to hear something or an audible response is clearly better; otherwise answer in text.
 Stop as soon as the task is complete and report the result. Never claim an action succeeded unless an observation confirms it.
@@ -439,10 +440,13 @@ func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta 
 			},
 		})
 	}
-	body, _ := json.Marshal(map[string]any{
+	body, err := json.Marshal(map[string]any{
 		"stream": true, "messages": messages, "tools": definitions, "tool_choice": "auto",
 		"max_tokens": max(1, min(1024, a.cfg.ContextTokens/4)),
 	})
+	if err != nil {
+		return "", nil, tokenUsage{}, fmt.Errorf("encode llama request: %w", err)
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, a.cfg.LlamaURL, bytes.NewReader(body))
 	if err != nil {
 		return "", nil, tokenUsage{}, err

@@ -91,6 +91,7 @@ requires a new spec.
 | `controller/internal/mail` | Stdlib MIME/CID composition, DKIM signing, dma submission, and spool status |
 | `controller/web/static` | Hand-written multi-page SPA, themes, charts, markdown, agent hooks |
 | `controller/web/static/js/jobs.js` | Queue timeline, live activity, and type-specific job details |
+| `controller/web/static/js/tools.js` | Server-manifest tool list, schema-generated forms, and typed manual results |
 | `controller/web/dist` | Gitignored minified SPA + generated icon sprite |
 | `controller/tools/fetch-assets.sh` | Pinned fonts, selected Lucide SVGs, and hero image fetch |
 | `scripts/build-icons.mjs` | Deterministic Lucide SVG sprite generation |
@@ -129,6 +130,29 @@ each mail submission or jiggler burst.
 It maps `jiggler-set` to the Valkey-backed ambient-motion setting exposed in
 each state snapshot. Jiggler bursts yield to the job manager and the shared
 `internal/actuation` lock.
+It maps `tools-list-req`/`tool-invoke` to sender-only `tools-list`/`tool-result`
+frames. Tool manifests come directly from `localTools.Definitions()`; manual
+calls use `manual-tool` queue envelopes and enter the activity ledger.
+
+| Tools WS type | Direction | Purpose |
+|---|---|---|
+| `tools-list-req` | client → server | Request the authoritative manifest |
+| `tools-list` | server → client | Full ordered definitions; also pushed on connect |
+| `tool-invoke` | client → server | Enqueue one named tool with JSON arguments |
+| `tool-result` | server → initiating client | Bounded text/image/error result and duration |
+
+Agent CDP observation tools:
+
+| Tool | Purpose |
+|---|---|
+| `dom_query` | Precise CSS extraction of bounded text and requested attributes |
+| `dom_validate` | Full-batch structure/content assertions |
+| `page_eval` | Bounded expression extraction with tripwires and Chromium side-effect rejection |
+| `layout_debug` | Ref/selector geometry, visibility, occlusion, and scroll state |
+
+The CDP transport allowlists only `Runtime.evaluate` and
+`DOMSnapshot.captureSnapshot`. Never weaken that boundary or use CDP for
+browser input/navigation.
 
 The reusable console switch is `.switch` with a child `.knob`; use this markup
 for boolean controls and render `aria-checked` only from server state.
@@ -147,7 +171,9 @@ cached at startup; absence is normal and never affects health.
   `controller/internal/agent/tools.go`, inject command execution through
   `Runner`, and add hermetic tests. Browser action tools must use `xdotool`
   OS input; CDP is observation-only and must never call `Input.*`,
-  `Page.navigate`, or another state-changing method.
+  `Page.navigate`, or another state-changing method. Every definition
+  automatically appears on `/tools` through `Manifest()`; do not duplicate it
+  in the SPA.
 - **Job type**: register an `internal/jobs` executor in controller `main.go`;
   use an interactive envelope for client work or a `RegisterSource` provider
   for scheduled work, and cover retries/cancellation with the hermetic RESP

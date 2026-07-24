@@ -46,7 +46,7 @@ func TestSpeakToolDefinitionAndExecution(t *testing.T) {
 		DataDir: t.TempDir(), TTS: &tts.Client{URL: server.URL},
 		Broadcast: func(payload []byte) { frames = append(frames, append([]byte(nil), payload...)) },
 		Activity:  activity,
-	}).(*localTools)
+	})
 	tools.resetTask("task-1")
 	found := false
 	for _, definition := range tools.Definitions() {
@@ -362,7 +362,7 @@ func TestBashDenylistAndCwdEnvironmentPersistence(t *testing.T) {
 		}
 	}
 	dataDir := t.TempDir()
-	tools := NewLocalTools(Config{DataDir: dataDir, BashPath: "bash"}).(*localTools)
+	tools := NewLocalTools(Config{DataDir: dataDir, BashPath: "bash"})
 	if _, err := tools.Execute(context.Background(), "bash", json.RawMessage(`{"command":"mkdir sub && cd sub && export VM_TEST_VALUE=kept"}`)); err != nil {
 		t.Fatal(err)
 	}
@@ -390,7 +390,7 @@ func TestXdotoolInvocationUsesScreenCoordinates(t *testing.T) {
 	runner := &recordingRunner{}
 	tools := NewLocalTools(Config{
 		Runner: runner, XdotoolPath: "/bin/xdotool", Display: ":77", Resolution: "1600x900x24",
-	}).(*localTools)
+	})
 	if _, err := tools.Execute(context.Background(), "click", json.RawMessage(`{"x":512,"y":288}`)); err != nil {
 		t.Fatal(err)
 	}

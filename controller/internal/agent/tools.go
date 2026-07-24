@@ -24,6 +24,8 @@ import (
 const (
 	outputCap        = 64 * 1024
 	domCap           = 12 * 1024
+	pageEvalCap      = 8 * 1024
+	layoutDebugCap   = 4 * 1024
 	navigateSettleMs = 15000
 )
 
@@ -133,7 +135,7 @@ func (t *localTools) resetTask(taskID string) {
 }
 
 // NewLocalTools constructs all built-in observation and action tools.
-func NewLocalTools(cfg Config) Executor {
+func NewLocalTools(cfg Config) *localTools {
 	runner := cfg.Runner
 	if runner == nil {
 		runner = processRunner{}
@@ -164,11 +166,22 @@ func NewLocalTools(cfg Config) Executor {
 
 func schema(value string) json.RawMessage { return json.RawMessage(value) }
 
+// ToolManifest is the server-driven description consumed by the Tools page.
+type ToolManifest struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Schema      json.RawMessage `json:"schema"`
+}
+
 func (t *localTools) Definitions() []Tool {
 	return []Tool{
 		{Name: "screenshot", Description: "Capture the visible browser screen with an API-coordinate grid.", Schema: schema(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "dom", Description: "Read rendered visible DOM elements with stable refs for click_element/type_into. selectorHint is a case-insensitive substring matched against tag/text/attributes - NOT a CSS selector. Large pages paginate; pass page to continue.", Schema: schema(`{"type":"object","properties":{"selectorHint":{"type":"string","description":"substring filter (not CSS)"},"page":{"type":"integer","minimum":0}},"additionalProperties":false}`)},
 		{Name: "read_page", Description: "Read the current page URL, title, and visible text.", Schema: schema(`{"type":"object","properties":{},"additionalProperties":false}`)},
+		{Name: "dom_query", Description: "Extract structured text and attributes from elements matching a precise CSS selector.", Schema: schema(`{"type":"object","properties":{"selector":{"type":"string","description":"CSS selector evaluated in the page"},"attributes":{"type":"array","items":{"type":"string"},"description":"attribute names to return; default: text only"},"limit":{"type":"integer","minimum":1,"maximum":50,"default":10}},"required":["selector"],"additionalProperties":false}`)},
+		{Name: "dom_validate", Description: "Evaluate page structure and content assertions without short-circuiting.", Schema: schema(`{"type":"object","properties":{"assertions":{"type":"array","maxItems":10,"items":{"type":"object","properties":{"selector":{"type":"string"},"exists":{"type":"boolean"},"minCount":{"type":"integer"},"textContains":{"type":"string"},"attribute":{"type":"string"},"attributeEquals":{"type":"string"}},"required":["selector"],"additionalProperties":false}}},"required":["assertions"],"additionalProperties":false}`)},
+		{Name: "page_eval", Description: "Evaluate one bounded read-only JavaScript expression and return its JSON value.", Schema: schema(`{"type":"object","properties":{"expression":{"type":"string","maxLength":2000,"description":"A single JavaScript expression evaluated read-only in the page; its JSON-stringified value is returned (max 8 KiB). Mutation attempts fail."}},"required":["expression"],"additionalProperties":false}`)},
+		{Name: "layout_debug", Description: "Inspect geometry, computed visibility, occlusion, and scroll state for exactly one DOM ref or CSS selector.", Schema: schema(`{"type":"object","properties":{"ref":{"type":"string"},"selector":{"type":"string"}},"additionalProperties":false}`)},
 		{Name: "click", Description: "Click API-space screenshot coordinates via OS input.", Schema: schema(`{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"],"additionalProperties":false}`)},
 		{Name: "click_element", Description: "Click the center of a DOM ref via OS input.", Schema: schema(`{"type":"object","properties":{"ref":{"type":"integer"}},"required":["ref"],"additionalProperties":false}`)},
 		{Name: "type", Description: "Type text into the focused control via OS input.", Schema: schema(`{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}`)},
@@ -180,6 +193,28 @@ func (t *localTools) Definitions() []Tool {
 		{Name: "system_info", Description: "Probe the local OS, packages, environment, paths, disk, and services.", Schema: schema(`{"type":"object","properties":{"topic":{"type":"string","enum":["os","packages","env","paths","all"]}},"additionalProperties":false}`)},
 		{Name: "speak", Description: "Speak text aloud to the user through the console (local text-to-speech). Use when the user asks to hear something or an audible response is clearly better.", Schema: schema(`{"type":"object","properties":{"text":{"type":"string","maxLength":4096},"speed":{"type":"number","minimum":0.5,"maximum":2},"voice":{"type":"string","enum":["en_US-lessac-medium","en_US-ryan-medium"]}},"required":["text"],"additionalProperties":false}`)},
 	}
+}
+
+// Manifest directly re-serializes Definitions for the authoritative Tools page.
+func (t *localTools) Manifest() []ToolManifest {
+	definitions := t.Definitions()
+	manifest := make([]ToolManifest, 0, len(definitions))
+	for _, definition := range definitions {
+		manifest = append(manifest, ToolManifest{
+			Name: definition.Name, Description: definition.Description, Schema: definition.Schema,
+		})
+	}
+	return manifest
+}
+
+// Has reports whether name is present in the authoritative tool definitions.
+func (t *localTools) Has(name string) bool {
+	for _, definition := range t.Definitions() {
+		if definition.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func decodeArgs(raw json.RawMessage, target any) error {
@@ -218,6 +253,14 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 	case "read_page":
 		text, err := t.cdp.ReadPage(ctx)
 		return ToolResult{Text: text, Summary: "Read current page", Observe: true}, err
+	case "dom_query":
+		return t.domQuery(ctx, raw)
+	case "dom_validate":
+		return t.domValidate(ctx, raw)
+	case "page_eval":
+		return t.pageEval(ctx, raw)
+	case "layout_debug":
+		return t.layoutDebug(ctx, raw)
 	case "click":
 		var args struct{ X, Y float64 }
 		if err := decodeArgs(raw, &args); err != nil {
@@ -320,6 +363,162 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 	default:
 		return ToolResult{}, fmt.Errorf("unknown tool %q", name)
 	}
+}
+
+func capToolText(text string, limit int) string {
+	if len(text) <= limit {
+		return text
+	}
+	const suffix = "\n…[truncated]"
+	return text[:limit-len(suffix)] + suffix
+}
+
+func (t *localTools) domQuery(ctx context.Context, raw json.RawMessage) (ToolResult, error) {
+	var args struct {
+		Selector   string   `json:"selector"`
+		Attributes []string `json:"attributes"`
+		Limit      int      `json:"limit"`
+	}
+	if err := decodeArgs(raw, &args); err != nil {
+		return ToolResult{}, err
+	}
+	if strings.TrimSpace(args.Selector) == "" {
+		return ToolResult{}, errors.New("selector is empty")
+	}
+	if args.Limit == 0 {
+		args.Limit = 10
+	}
+	if args.Limit < 1 || args.Limit > 50 {
+		return ToolResult{}, errors.New("limit must be between 1 and 50")
+	}
+	selector, _ := json.Marshal(args.Selector)
+	attributes, _ := json.Marshal(args.Attributes)
+	expression := fmt.Sprintf(`JSON.stringify([...document.querySelectorAll(%s)].slice(0,%d).map(n=>({tag:n.tagName.toLowerCase(),text:(n.innerText||"").slice(0,200),attrs:Object.fromEntries(%s.map(a=>[a,n.getAttribute(a)]).filter(([,v])=>v!=null))})))`,
+		selector, args.Limit, attributes)
+	value, err := t.cdp.evaluate(ctx, expression, false)
+	if err != nil {
+		return ToolResult{}, err
+	}
+	text, ok := value.(string)
+	if !ok {
+		encoded, marshalErr := json.Marshal(value)
+		if marshalErr != nil {
+			return ToolResult{}, marshalErr
+		}
+		text = string(encoded)
+	}
+	return ToolResult{Text: capToolText(text, domCap), Summary: "Queried rendered DOM"}, nil
+}
+
+func (t *localTools) domValidate(ctx context.Context, raw json.RawMessage) (ToolResult, error) {
+	var args struct {
+		Assertions []struct {
+			Selector        string  `json:"selector"`
+			Exists          *bool   `json:"exists"`
+			MinCount        *int    `json:"minCount"`
+			TextContains    *string `json:"textContains"`
+			Attribute       *string `json:"attribute"`
+			AttributeEquals *string `json:"attributeEquals"`
+		} `json:"assertions"`
+	}
+	if err := decodeArgs(raw, &args); err != nil {
+		return ToolResult{}, err
+	}
+	if len(args.Assertions) == 0 || len(args.Assertions) > 10 {
+		return ToolResult{}, errors.New("assertions must contain 1-10 items")
+	}
+	for _, assertion := range args.Assertions {
+		if strings.TrimSpace(assertion.Selector) == "" {
+			return ToolResult{}, errors.New("assertion selector is empty")
+		}
+	}
+	assertions, _ := json.Marshal(args.Assertions)
+	expression := fmt.Sprintf(`(()=>{const assertions=%s;const results=assertions.map(a=>{const nodes=[...document.querySelectorAll(a.selector)];const checks=[];if("exists"in a)checks.push([(nodes.length>0)===a.exists,"exists"]);if("minCount"in a)checks.push([nodes.length>=a.minCount,"minCount"]);if("textContains"in a)checks.push([nodes.some(n=>(n.innerText||"").includes(a.textContains)),"textContains"]);if("attribute"in a){const values=nodes.map(n=>n.getAttribute(a.attribute));checks.push(["attributeEquals"in a?values.some(v=>v===a.attributeEquals):values.some(v=>v!==null),"attribute"]);}const pass=checks.every(([ok])=>ok);return{selector:a.selector,pass,count:nodes.length,detail:checks.length?(pass?"all assertions passed":checks.filter(([ok])=>!ok).map(([,name])=>name+" failed").join(", ")):"selector evaluated"};});return{pass:results.every(r=>r.pass),results};})()`, assertions)
+	value, err := t.cdp.evaluate(ctx, expression, false)
+	if err != nil {
+		return ToolResult{}, err
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return ToolResult{}, err
+	}
+	return ToolResult{Text: capToolText(string(encoded), domCap), Summary: "Validated rendered DOM"}, nil
+}
+
+var pageEvalTripwires = []string{
+	"document.write", "location=", "location.href=", "localstorage", "sessionstorage",
+	"fetch(", "xmlhttprequest", "history.", "submit(", "click(",
+}
+
+func (t *localTools) pageEval(ctx context.Context, raw json.RawMessage) (ToolResult, error) {
+	var args struct {
+		Expression string `json:"expression"`
+	}
+	if err := decodeArgs(raw, &args); err != nil {
+		return ToolResult{}, err
+	}
+	if strings.TrimSpace(args.Expression) == "" || len(args.Expression) > 2000 {
+		return ToolResult{}, errors.New("expression must be 1-2000 characters")
+	}
+	normalized := strings.ToLower(args.Expression)
+	for _, denied := range pageEvalTripwires {
+		if strings.Contains(normalized, denied) {
+			return ToolResult{}, fmt.Errorf("expression rejected by read-only policy: contains %q", denied)
+		}
+	}
+	value, err := t.cdp.evaluate(ctx, "("+args.Expression+")", false, true)
+	if err != nil {
+		return ToolResult{}, err
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return ToolResult{}, err
+	}
+	return ToolResult{Text: capToolText(string(encoded), pageEvalCap), Summary: "Evaluated read-only page expression"}, nil
+}
+
+func (t *localTools) layoutDebug(ctx context.Context, raw json.RawMessage) (ToolResult, error) {
+	var args struct {
+		Ref      string `json:"ref"`
+		Selector string `json:"selector"`
+	}
+	if err := decodeArgs(raw, &args); err != nil {
+		return ToolResult{}, err
+	}
+	hasRef := strings.TrimSpace(args.Ref) != ""
+	hasSelector := strings.TrimSpace(args.Selector) != ""
+	if hasRef == hasSelector {
+		return ToolResult{}, errors.New("exactly one of ref or selector is required")
+	}
+	var expression string
+	if hasRef {
+		ref, err := strconv.Atoi(args.Ref)
+		if err != nil {
+			return ToolResult{}, errors.New("ref must be an integer string")
+		}
+		t.boxMu.Lock()
+		box, ok := t.boxes[ref]
+		t.boxMu.Unlock()
+		if !ok {
+			return ToolResult{}, fmt.Errorf("unknown DOM ref %d; call dom again", ref)
+		}
+		boxJSON, _ := json.Marshal(box)
+		expression = fmt.Sprintf(`(()=>{const serverBox=%s;const ox=screenX+(outerWidth-innerWidth)/2,oy=screenY+(outerHeight-innerHeight);const cx=serverBox[0]+serverBox[2]/2-ox,cy=serverBox[1]+serverBox[3]/2-oy;const n=document.elementFromPoint(cx,cy);return n?{ref:%d,serverBox,box:Object.fromEntries(["x","y","width","height","top","right","bottom","left"].map(k=>[k,n.getBoundingClientRect()[k]])),style:Object.fromEntries(["display","visibility","opacity","zIndex","pointerEvents"].map(k=>[k,getComputedStyle(n)[k]])),elementFromPoint:n.tagName.toLowerCase(),scroll:{x:scrollX,y:scrollY}}:{ref:%d,serverBox,error:"no element at ref center",scroll:{x:scrollX,y:scrollY}};})()`,
+			boxJSON, ref, ref)
+	} else {
+		selector, _ := json.Marshal(args.Selector)
+		expression = fmt.Sprintf(`(()=>{const n=document.querySelector(%s);if(!n)return{selector:%s,error:"selector matched nothing",scroll:{x:scrollX,y:scrollY}};const r=n.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,hit=document.elementFromPoint(cx,cy);return{selector:%s,box:Object.fromEntries(["x","y","width","height","top","right","bottom","left"].map(k=>[k,r[k]])),style:Object.fromEntries(["display","visibility","opacity","zIndex","pointerEvents"].map(k=>[k,getComputedStyle(n)[k]])),elementFromPoint:hit?hit.tagName.toLowerCase():null,scroll:{x:scrollX,y:scrollY}};})()`,
+			selector, selector, selector)
+	}
+	value, err := t.cdp.evaluate(ctx, expression, false)
+	if err != nil {
+		return ToolResult{}, err
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return ToolResult{}, err
+	}
+	return ToolResult{Text: capToolText(string(encoded), layoutDebugCap), Summary: "Inspected element layout"}, nil
 }
 
 func usesXdotool(name string) bool {

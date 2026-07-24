@@ -327,6 +327,28 @@ func (h *Hub) Broadcast(payload []byte) {
 	}
 }
 
+// SendTo sends a text frame only to the connection with connID.
+func (h *Hub) SendTo(connID string, payload []byte) bool {
+	h.mu.Lock()
+	var target *Conn
+	for conn := range h.conns {
+		if conn.id == connID {
+			target = conn
+			break
+		}
+	}
+	h.mu.Unlock()
+	if target == nil {
+		return false
+	}
+	if err := target.WriteText(payload); err != nil {
+		h.remove(target)
+		_ = target.Close()
+		return false
+	}
+	return true
+}
+
 // Count returns the current number of registered clients.
 func (h *Hub) Count() int {
 	h.mu.Lock()

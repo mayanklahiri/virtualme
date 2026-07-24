@@ -178,7 +178,7 @@ func TestRootServesEmbeddedSPA(t *testing.T) {
 func TestSPAFallbackAndMissingAsset(t *testing.T) {
 	desktopURL, _ := url.Parse("http://127.0.0.1:1")
 	handler := newMux(redConfig(t), ws.NewHub(), desktopURL)
-	for _, route := range []string{"/status", "/desktop-view"} {
+	for _, route := range []string{"/status", "/tools", "/desktop-view"} {
 		request := httptest.NewRequest(http.MethodGet, route, nil)
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
@@ -191,6 +191,27 @@ func TestSPAFallbackAndMissingAsset(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("missing asset status = %d, want 404", response.Code)
+	}
+}
+
+func TestManualToolPayloadValidationAndCap(t *testing.T) {
+	for _, test := range []struct {
+		raw  string
+		want bool
+	}{
+		{`{}`, true},
+		{`{"topic":"os"}`, true},
+		{`[]`, false},
+		{`null`, false},
+		{``, false},
+	} {
+		if got := jsonObject(json.RawMessage(test.raw)); got != test.want {
+			t.Fatalf("jsonObject(%q) = %v, want %v", test.raw, got, test.want)
+		}
+	}
+	text := capText(strings.Repeat("x", 20000), 16*1024)
+	if len(text) != 16*1024 || !strings.HasSuffix(text, "…[truncated]") {
+		t.Fatalf("capped text length/suffix = %d, %q", len(text), text[len(text)-20:])
 	}
 }
 

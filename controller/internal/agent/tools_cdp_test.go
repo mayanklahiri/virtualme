@@ -1,0 +1,178 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"sync/atomic"
+	"testing"
+)
+
+func TestManifestMatchesDefinitions(t *testing.T) {
+	tools := NewLocalTools(Config{})
+	definitions := tools.Definitions()
+	manifest := tools.Manifest()
+	if len(manifest) != len(definitions) {
+		t.Fatalf("manifest has %d tools, definitions has %d", len(manifest), len(definitions))
+	}
+	for index, definition := range definitions {
+		entry := manifest[index]
+		if !json.Valid(definition.Schema) {
+			t.Fatalf("definition %q has invalid schema: %s", definition.Name, definition.Schema)
+		}
+		if entry.Name != definition.Name || entry.Description != definition.Description ||
+			string(entry.Schema) != string(definition.Schema) {
+			t.Fatalf("manifest[%d] = %+v, definition = %+v", index, entry, definition)
+		}
+	}
+	if _, err := json.Marshal(manifest); err != nil {
+		t.Fatalf("manifest does not marshal: %v", err)
+	}
+}
+
+func TestDOMQueryQuotesSelectorAndCapsResult(t *testing.T) {
+	selector := `a[data-value="quoted\value"]`
+	server := fakeCDPServer(t, false, func(method string, params json.RawMessage) any {
+		if method != "Runtime.evaluate" {
+			t.Fatalf("method = %q", method)
+		}
+		var request struct {
+			Expression string `json:"expression"`
+		}
+		if err := json.Unmarshal(params, &request); err != nil {
+			t.Fatal(err)
+		}
+		quoted, _ := json.Marshal(selector)
+		if !strings.Contains(request.Expression, string(quoted)) {
+			t.Fatalf("selector was not JSON-quoted in expression: %s", request.Expression)
+		}
+		if strings.Contains(request.Expression, "querySelectorAll("+selector+")") {
+			t.Fatalf("raw selector was concatenated into expression: %s", request.Expression)
+		}
+		return evaluateResult(strings.Repeat("x", domCap+100))
+	})
+	defer server.Close()
+	tools := NewLocalTools(Config{CDPURL: server.URL, Client: server.Client()})
+	raw, _ := json.Marshal(map[string]any{"selector": selector, "attributes": []string{"href"}})
+	result, err := tools.Execute(context.Background(), "dom_query", raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Text) != domCap || !strings.HasSuffix(result.Text, "…[truncated]") {
+		t.Fatalf("capped result length/suffix = %d, %q", len(result.Text), result.Text[len(result.Text)-20:])
+	}
+	if result.Observe {
+		t.Fatal("dom_query must return a plain tool result")
+	}
+}
+
+func TestDOMValidateReturnsEveryResult(t *testing.T) {
+	server := fakeCDPServer(t, false, func(method string, params json.RawMessage) any {
+		var request struct {
+			Expression string `json:"expression"`
+		}
+		_ = json.Unmarshal(params, &request)
+		if method != "Runtime.evaluate" || !strings.Contains(request.Expression, "assertions.map") {
+			t.Fatalf("validation must evaluate all assertions with map: %s", request.Expression)
+		}
+		return evaluateResult(map[string]any{
+			"pass": false,
+			"results": []any{
+				map[string]any{"selector": "h1", "pass": true, "count": 1, "detail": "all assertions passed"},
+				map[string]any{"selector": "main", "pass": false, "count": 1, "detail": "textContains failed"},
+			},
+		})
+	})
+	defer server.Close()
+	tools := NewLocalTools(Config{CDPURL: server.URL, Client: server.Client()})
+	result, err := tools.Execute(context.Background(), "dom_validate", json.RawMessage(
+		`{"assertions":[{"selector":"h1","textContains":"Example"},{"selector":"main","textContains":"Missing"}]}`,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(result.Text, `"selector"`) != 2 || !strings.Contains(result.Text, `"pass":false`) {
+		t.Fatalf("validation result = %s", result.Text)
+	}
+}
+
+func TestPageEvalTripwireRejectsBeforeCDP(t *testing.T) {
+	var calls atomic.Int32
+	server := fakeCDPServer(t, false, func(_ string, params json.RawMessage) any {
+		calls.Add(1)
+		var request map[string]any
+		_ = json.Unmarshal(params, &request)
+		if request["throwOnSideEffect"] != true || request["awaitPromise"] != false ||
+			request["returnByValue"] != true {
+			t.Errorf("page_eval safety params = %v", request)
+		}
+		return evaluateResult(nil)
+	})
+	defer server.Close()
+	tools := NewLocalTools(Config{CDPURL: server.URL, Client: server.Client()})
+	if _, err := tools.Execute(context.Background(), "page_eval",
+		json.RawMessage(`{"expression":"fetch('/private')"}`)); err == nil {
+		t.Fatal("fetch expression was accepted")
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("tripwire made %d CDP calls", calls.Load())
+	}
+	result, err := tools.Execute(context.Background(), "page_eval",
+		json.RawMessage(`{"expression":"document.title"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 1 || result.Text != "null" {
+		t.Fatalf("safe evaluation calls/result = %d, %q", calls.Load(), result.Text)
+	}
+}
+
+func TestLayoutDebugValidatesExactlyOneTarget(t *testing.T) {
+	tools := NewLocalTools(Config{})
+	for _, raw := range []string{`{}`, `{"ref":"1","selector":"h1"}`} {
+		if _, err := tools.Execute(context.Background(), "layout_debug", json.RawMessage(raw)); err == nil ||
+			!strings.Contains(err.Error(), "exactly one") {
+			t.Fatalf("layout_debug(%s) error = %v", raw, err)
+		}
+	}
+}
+
+func TestLayoutDebugUsesStoredRefAndFreshEvaluation(t *testing.T) {
+	server := fakeCDPServer(t, false, func(method string, params json.RawMessage) any {
+		var request struct {
+			Expression string `json:"expression"`
+		}
+		_ = json.Unmarshal(params, &request)
+		if method != "Runtime.evaluate" ||
+			!strings.Contains(request.Expression, "elementFromPoint") ||
+			!strings.Contains(request.Expression, "serverBox=[10,20,30,40]") {
+			t.Fatalf("layout expression = %s", request.Expression)
+		}
+		return evaluateResult(map[string]any{
+			"ref": 7, "serverBox": []any{10, 20, 30, 40},
+			"box":              map[string]any{"x": 10, "y": 20, "width": 30, "height": 40},
+			"style":            map[string]any{"display": "block", "visibility": "visible"},
+			"elementFromPoint": "button", "scroll": map[string]any{"x": 0, "y": 100},
+		})
+	})
+	defer server.Close()
+	tools := NewLocalTools(Config{CDPURL: server.URL, Client: server.Client()})
+	tools.boxes[7] = [4]float64{10, 20, 30, 40}
+	result, err := tools.Execute(context.Background(), "layout_debug", json.RawMessage(`{"ref":"7"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"serverBox":[10,20,30,40]`, `"display":"block"`, `"elementFromPoint":"button"`} {
+		if !strings.Contains(result.Text, want) {
+			t.Fatalf("layout result %s missing %s", result.Text, want)
+		}
+	}
+}
+
+func TestCDPRejectsNonObservationMethod(t *testing.T) {
+	cdp := NewCDP("http://127.0.0.1:1", nil)
+	if err := cdp.call(context.Background(), "Page."+"navigate", map[string]any{"url": "https://example.com"}, &struct{}{}); err == nil ||
+		!strings.Contains(err.Error(), "observation-only") {
+		t.Fatalf("state-changing method error = %v", err)
+	}
+}

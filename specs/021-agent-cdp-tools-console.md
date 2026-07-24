@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/008-browser-agent.md` (tool loop, read-only CDP client), `specs/012-agent-observation-soak.md` (dense DOM), `specs/013-job-queue-scheduler.md` (`manual-tool` envelopes), `specs/015-jobs-page.md` (activity ledger) |
 | Produces | Four new observation-only agent tools abstracting the major CDP operations (`dom_query`, `dom_validate`, `page_eval`, `layout_debug`); a "Tools" nav page at `/tools` with a server-driven authoritative tool list, schema-generated input forms, queue-backed manual invocation, and a typed output pane |
 | Followed by | Future specs |
@@ -98,3 +98,19 @@ Add to `test/soak.mjs` (raw-WS `run()` flow like `jobs-queue-probe`): **`tools-r
 - [ ] `layout_debug` on a ref from a prior `dom` call reports box + computed visibility + elementFromPoint.
 - [ ] Invoking a tool while a chat generation runs shows `queued…` and completes after — never interleaves.
 - [ ] Soak `tools-roundtrip` passes.
+
+## Amendments
+
+### 2026-07-23 — Execution details
+
+- The CDP transport now rejects every method except `Runtime.evaluate` and
+  `DOMSnapshot.captureSnapshot`, making the observation-only contract a
+  centralized allowlist. `page_eval` also sets Chromium's
+  `throwOnSideEffect:true` in addition to the specified static tripwires.
+- Production constructs one `localTools` instance shared by the agent and
+  `manual-tool` executor. Sequential queue execution therefore preserves DOM
+  refs between manual `dom` and `layout_debug` calls without racing an agent.
+- Manual tool failures are terminal tool outcomes (`tool-result.ok:false`) and
+  successful queue dispatches, rather than retried infrastructure failures.
+  Their failed status, arguments, text, and duration remain authoritative in
+  the persistent activity ledger.

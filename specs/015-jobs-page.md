@@ -146,3 +146,10 @@ Because this flow needs no model, it must run in well under 30 s; give it `SOAK_
 - Activity thumbnails are rejected when the complete data URL exceeds 32 KiB.
   Producers otherwise remain dumb: `Activity.Record` owns argument, result,
   summary, and thumbnail caps.
+
+### 2026-07-23 — Manual tool activity (spec 021)
+
+Queue-backed manual calls record the same `tool` activity detail as agent
+calls: tool name, arguments, bounded result text, duration, status, and the
+`manual-tool` job ID. The Tools page keeps only in-memory per-tool output;
+the activity ledger remains the durable operator record.

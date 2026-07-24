@@ -88,6 +88,39 @@ func TestOnConnect(t *testing.T) {
 	}
 }
 
+func TestSendToTargetsOneConnection(t *testing.T) {
+	hub := NewHub()
+	connected := make(chan string, 2)
+	hub.SetOnConnect(func(c *Conn) { connected <- c.ID() })
+	server := httptest.NewServer(http.HandlerFunc(hub.HandleUpgrade))
+	defer server.Close()
+	first, firstReader, _ := dialWebsocket(t, server.URL)
+	defer first.Close()
+	firstID := <-connected
+	second, secondReader, _ := dialWebsocket(t, server.URL)
+	defer second.Close()
+	<-connected
+	waitForCount(t, hub, 2)
+
+	if !hub.SendTo(firstID, []byte("only")) {
+		t.Fatal("SendTo did not find first connection")
+	}
+	frame := make([]byte, 6)
+	if _, err := io.ReadFull(firstReader, frame); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(frame); got != "\x81\x04only" {
+		t.Fatalf("target frame = %q", got)
+	}
+	_ = second.SetReadDeadline(time.Now().Add(25 * time.Millisecond))
+	if _, err := secondReader.ReadByte(); err == nil {
+		t.Fatal("non-target connection received a frame")
+	}
+	if hub.SendTo("missing", []byte("no")) {
+		t.Fatal("SendTo found a missing connection")
+	}
+}
+
 func TestStableIDsAndDisconnectHook(t *testing.T) {
 	hub := NewHub()
 	connected := make(chan string, 2)

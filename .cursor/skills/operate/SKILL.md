@@ -39,6 +39,7 @@ also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 - `http://localhost:8080/projects` — recurring projects and schedules
 - `http://localhost:8080/projects/<id>` — project task, runs, and scratch details
 - `http://localhost:8080/jobs` — queue timeline, machine activity, and details
+- `http://localhost:8080/tools` — agent definitions and queue-backed manual invocation
 - `http://localhost:8080/status` — service/GPU status, active time selectors, opt-in jiggler, and tiered metrics
 - `http://localhost:8080/chat` — shared local-model chat
 - `http://localhost:8080/speech` — streaming local text-to-speech
@@ -46,7 +47,7 @@ also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 - `http://localhost:8080/desktop-view` — embedded noVNC desktop
 - `http://localhost:8080/healthz` — aggregate JSON health
 - `http://localhost:8080/v1/audio/speech` — OpenAI-compatible local speech API
-- `ws://localhost:8080/ws` — live state, metrics, queue, chat, agent, TTS, and mail frames
+- `ws://localhost:8080/ws` — live state, metrics, queue, tools, chat, agent, TTS, and mail frames
 - `http://localhost:8080/desktop/` — proxied noVNC and websockify
 
 The desktop UI opens `/desktop/vnc.html` with autoconnect, scaling, and the
@@ -63,6 +64,12 @@ Use `/jobs` to see what the machine is actually doing. Queue time flows from
 upcoming at the top through the single executing job to recently finished
 jobs; the activity list below is newest-first and records finer-grained LLM,
 tool, speech, and mail actions.
+
+Use `/tools` to inspect every definition available to the local model and
+invoke it with a schema-generated form. Manual calls wait in the same
+sequential queue and their results appear in Jobs activity. The page can run
+`bash` and browser-input tools; it has no additional authentication under the
+v1 trust model, so use it only on a trusted private network.
 
 The Jiggler switch on `/status` is off by default. When enabled it moves the
 virtual desktop cursor in occasional short, humanlike bursts, yields whenever

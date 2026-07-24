@@ -39,6 +39,7 @@
         <a href="/" data-nav><svg class="icon"><use href="/icons.svg#i-house"/></svg>Home</a>
         <a href="/projects" data-nav><svg class="icon"><use href="/icons.svg#i-folder-kanban"/></svg>Projects</a>
         <a href="/jobs" data-nav><svg class="icon"><use href="/icons.svg#i-list-checks"/></svg>Jobs</a>
+        <a href="/tools" data-nav><svg class="icon"><use href="/icons.svg#i-wrench"/></svg>Tools</a>
         <a href="/status" data-nav><svg class="icon"><use href="/icons.svg#i-activity"/></svg>Status</a>
         <a href="/chat" data-nav><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg>Chat</a>
         <a href="/speech" data-nav><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg>Speech</a>
@@ -136,6 +137,17 @@
           <aside id="job-detail" class="job-detail" hidden aria-label="Details"></aside>
         </div>
         <div id="job-detail-curtain" class="job-detail-curtain" hidden></div>
+      </section>
+
+      <section data-page="tools" hidden class="tools-page" aria-labelledby="tools-title">
+        <div class="page-heading">
+          <div><h1 id="tools-title">Tools</h1><p class="page-caption">Every tool available to the local model, invocable by hand. Calls join the job queue.</p></div>
+        </div>
+        <div class="tools-grid">
+          <nav id="tools-list" class="tools-list" aria-label="Tools"></nav>
+          <form id="tool-form" class="tools-form" hidden></form>
+          <aside id="tool-output" class="tool-output" hidden aria-live="polite"></aside>
+        </div>
       </section>
 
       <section data-page="status" hidden aria-labelledby="status-page-title">

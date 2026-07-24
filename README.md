@@ -106,13 +106,14 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/projects` | Recurring natural-language tasks, schedules, manual runs, and recent results |
 | `/projects/<id>` | Project task, schedule, status, run history, and scratch-directory details |
 | `/jobs` | Queue timeline, fine-grained machine activity, and type-specific details |
+| `/tools` | Authoritative agent-tool list, schema-generated forms, and queue-backed manual invocation |
 | `/status` | Service health, system/GPU meters, active time selectors, opt-in jiggler, and persistent per-core/process/GPU metrics |
 | `/chat` | Markdown chat, generation controls, LLM progress, and conversation totals |
 | `/speech` | Two-voice streaming local speech with seeds, persistent history/replay, and disk cache |
 | `/mail` | Outbound-mail composer, queue status, and DKIM DNS record |
 | `/desktop-view` | Embedded private noVNC desktop |
 | `/healthz` | Aggregate JSON health for all eight services |
-| `/ws` | Websocket: live state, metrics, queued jobs, activity, chat, agent, TTS, and mail frames |
+| `/ws` | Websocket: live state, metrics, queued jobs, activity, tool manifests/invocation, chat, agent, TTS, and mail frames |
 | `POST /v1/audio/speech` | OpenAI-compatible local speech API (`wav` or raw `pcm`) |
 | `/desktop/` | Reverse proxy to noVNC and websockify |
 
@@ -136,10 +137,20 @@ Closing Chromium in `/desktop-view` automatically brings back one blank tab. Chr
 
 Messages in `/chat` can ask Virtual Me to operate Chromium. The local model can
 observe a gridded screenshot, compact rendered DOM, page URL/title/text, and
-system information; it acts through `xdotool` OS mouse/keyboard input or a
-bounded bash tool. CDP is read-only and never performs input or navigation.
+system information. Precise CSS extraction, multi-assertion validation,
+side-effect-guarded page evaluation, and layout/occlusion debugging provide
+additional read-only CDP observations; it acts through `xdotool` OS
+mouse/keyboard input or a bounded bash tool. CDP is method-allowlisted and
+never performs input or navigation.
 The console shows each tool step and its screenshot; Stop cancels the active
 model call or tool process.
+
+Use `/tools` to inspect the exact definitions available to the local model and
+invoke any tool manually. Forms are generated from the server schemas, calls
+join the same sequential queue as chat/project work, and results are retained
+in the Jobs activity ledger. This can invoke `bash` and browser actuation;
+under the v1 trust model it has no additional authentication, so expose the
+console only on a trusted private network.
 
 All LLM work runs through a Valkey-backed sequential queue with interactive
 priority, retries, visibility recovery, and a dead-letter list. Chat messages
@@ -253,7 +264,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [018](specs/018-gpu-observability.md) | Multi-vendor GPU detection, status widget, and usage series |
 | [019](specs/019-chart-overhaul.md) | Chart ticks, titles, lookback control, and uniform series color |
 | [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, second voice, and audio hygiene |
-| [021](specs/021-agent-cdp-tools-console.md) | CDP observation tools and the Tools console page (draft) |
+| [021](specs/021-agent-cdp-tools-console.md) | CDP observation tools and the Tools console page |
 | [022](specs/022-system-prompt.md) | On-disk embedded system prompts, SLM-optimized rewrite (draft) |
 | [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing (draft) |
 | [024](specs/024-brand-chrome-polish.md) | Brand wordmark, wristwatch live indicator, and console polish (draft) |

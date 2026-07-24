@@ -51,6 +51,19 @@ func envOr(name, fallback string) string {
 	return fallback
 }
 
+func capText(text string, limit int) string {
+	if len(text) <= limit {
+		return text
+	}
+	const suffix = "\n…[truncated]"
+	return text[:limit-len(suffix)] + suffix
+}
+
+func jsonObject(raw json.RawMessage) bool {
+	var value map[string]any
+	return len(raw) > 0 && json.Unmarshal(raw, &value) == nil && value != nil
+}
+
 func envResolution() (int, int) {
 	parts := strings.Split(envOr("VM_RESOLUTION", "1600x900x24"), "x")
 	if len(parts) < 2 {
@@ -385,26 +398,30 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	agentConfig := agent.Config{
+		CDPURL:        "http://127.0.0.1:9222",
+		Display:       envOr("VM_DISPLAY", ":99"),
+		Resolution:    envOr("VM_RESOLUTION", "1600x900x24"),
+		XdotoolPath:   "xdotool",
+		ScrotPath:     "scrot",
+		ConvertPath:   "convert",
+		BashPath:      "bash",
+		DataDir:       path.Join(dataDir, "agent"),
+		Manifest:      "/opt/agent/system-manifest.json",
+		MaxSteps:      envInt("VM_AGENT_MAX_STEPS", 25),
+		KeepTasks:     envInt("VM_AGENT_KEEP_TASKS", 20),
+		ContextTokens: envInt("VM_LLAMA_CTX", 16384),
+		TTS:           ttsClient,
+		Activity:      activity,
+		Broadcast:     hub.Broadcast,
+	}
+	localTools := agent.NewLocalTools(agentConfig)
+	agentConfig.Executor = localTools
 	chatService := chat.NewWithAgent(
 		cfg.ValkeyAddr,
 		"http://127.0.0.1:8081/v1/chat/completions",
 		hub.Broadcast,
-		agent.Config{
-			CDPURL:        "http://127.0.0.1:9222",
-			Display:       envOr("VM_DISPLAY", ":99"),
-			Resolution:    envOr("VM_RESOLUTION", "1600x900x24"),
-			XdotoolPath:   "xdotool",
-			ScrotPath:     "scrot",
-			ConvertPath:   "convert",
-			BashPath:      "bash",
-			DataDir:       path.Join(dataDir, "agent"),
-			Manifest:      "/opt/agent/system-manifest.json",
-			MaxSteps:      envInt("VM_AGENT_MAX_STEPS", 25),
-			KeepTasks:     envInt("VM_AGENT_KEEP_TASKS", 20),
-			ContextTokens: envInt("VM_LLAMA_CTX", 16384),
-			TTS:           ttsClient,
-			Activity:      activity,
-		},
+		agentConfig,
 	)
 	chatService.SetActivity(activity)
 	jobManager := jobs.New(valkey.New(cfg.ValkeyAddr), hub.Broadcast)
@@ -420,6 +437,55 @@ func main() {
 	projectService := projects.New(
 		valkey.New(cfg.ValkeyAddr), jobManager, chatService, dataDir, hub.Broadcast,
 	)
+	toolsList, err := json.Marshal(map[string]any{"type": "tools-list", "tools": localTools.Manifest()})
+	if err != nil {
+		log.Fatal("tools: invalid manifest:", err)
+	}
+	jobManager.Register("manual-tool", func(ctx context.Context, env jobs.Envelope) (string, error) {
+		var request struct {
+			ID   string          `json:"id"`
+			Tool string          `json:"tool"`
+			Args json.RawMessage `json:"args"`
+		}
+		if err := json.Unmarshal(env.Payload, &request); err != nil {
+			return "", err
+		}
+		started := time.Now()
+		result, toolErr := localTools.Execute(ctx, request.Tool, request.Args)
+		duration := time.Since(started).Milliseconds()
+		text := capText(result.Text, 16*1024)
+		errorText := ""
+		if toolErr != nil {
+			errorText = toolErr.Error()
+		}
+		image := ""
+		if len(result.ImageJPEG) > 0 {
+			image = "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(result.ImageJPEG)
+		}
+		reply, _ := json.Marshal(map[string]any{
+			"type": "tool-result", "id": request.ID, "ok": toolErr == nil,
+			"durationMs": duration, "text": text, "image": image, "error": errorText,
+		})
+		hub.SendTo(env.InitiatorConn, reply)
+		summary := result.Summary
+		if summary == "" {
+			summary = request.Tool
+		}
+		var args any
+		if json.Unmarshal(request.Args, &args) != nil {
+			args = string(request.Args)
+		}
+		_ = activity.Record(jobs.ActivityEvent{
+			Kind: "tool", Name: request.Tool, JobID: env.ID, Summary: summary,
+			Detail: jobs.ActivityDetail{
+				Args: args, ResultText: text, DurationMS: duration, OK: toolErr == nil,
+			},
+		})
+		if toolErr != nil {
+			return "Tool failed: " + toolErr.Error(), nil
+		}
+		return summary, nil
+	})
 	jobManager.Register("soak-probe", func(ctx context.Context, env jobs.Envelope) (string, error) {
 		var payload struct {
 			Echo string `json:"echo"`
@@ -464,6 +530,42 @@ func main() {
 		if mailService.Handle(payload, conn.WriteText) {
 			return
 		}
+		if json.Unmarshal(payload, &request) == nil && request.Type == "tools-list-req" {
+			_ = conn.WriteText(toolsList)
+			return
+		}
+		if json.Unmarshal(payload, &request) == nil && request.Type == "tool-invoke" {
+			var invoke struct {
+				ID   string          `json:"id"`
+				Tool string          `json:"tool"`
+				Args json.RawMessage `json:"args"`
+			}
+			if err := json.Unmarshal(payload, &invoke); err != nil || invoke.ID == "" ||
+				!localTools.Has(invoke.Tool) || !jsonObject(invoke.Args) {
+				message := "invalid tool invocation"
+				if invoke.Tool != "" && !localTools.Has(invoke.Tool) {
+					message = "unknown tool " + strconv.Quote(invoke.Tool)
+				}
+				reply, _ := json.Marshal(map[string]any{
+					"type": "tool-result", "id": invoke.ID, "ok": false,
+					"durationMs": 0, "text": "", "image": "", "error": message,
+				})
+				_ = conn.WriteText(reply)
+				return
+			}
+			jobPayload, _ := json.Marshal(map[string]any{"id": invoke.ID, "tool": invoke.Tool, "args": invoke.Args})
+			if _, err := jobManager.Enqueue(jobs.Envelope{
+				ID: jobs.NewID(), Type: "manual-tool", Payload: jobPayload, Priority: "interactive",
+				InitiatorConn: conn.ID(), VisibilityTimeoutSec: 300,
+			}); err != nil {
+				reply, _ := json.Marshal(map[string]any{
+					"type": "tool-result", "id": invoke.ID, "ok": false,
+					"durationMs": 0, "text": "", "image": "", "error": "tool enqueue failed: " + err.Error(),
+				})
+				_ = conn.WriteText(reply)
+			}
+			return
+		}
 		if jobManager.HandleMessage(conn, payload) {
 			return
 		}
@@ -486,6 +588,7 @@ func main() {
 		_ = conn.WriteText(projectService.Message())
 		_ = conn.WriteText(activity.Message())
 		_ = conn.WriteText(speechLog.Message())
+		_ = conn.WriteText(toolsList)
 	})
 	hub.SetOnDisconnect(jobManager.DropInitiator)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

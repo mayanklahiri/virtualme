@@ -11,6 +11,8 @@
 //      SOAK_TIMEOUT per-flow seconds (default 600)
 //      SOAK_FLOW    regex selecting flows by name (default: all)
 
+import { randomUUID } from "node:crypto";
+
 const URL_WS = process.env.SOAK_URL ?? "ws://127.0.0.1:8080/ws";
 const FLOW_TIMEOUT_MS = Number(process.env.SOAK_TIMEOUT ?? 600) * 1000;
 const FLOW_FILTER = new RegExp(process.env.SOAK_FLOW ?? ".");
@@ -146,6 +148,53 @@ const flows = [
     },
     soft(r) {
       return /example domain/i.test(r.reply) ? [] : ['final reply does not mention "Example Domain"'];
+    },
+  },
+  {
+    name: "tools-roundtrip",
+    run(ws, flowLog) {
+      return new Promise((resolve, reject) => {
+        const required = [
+          "screenshot", "dom", "read_page", "click", "click_element", "type",
+          "type_into", "key", "scroll", "navigate", "bash", "system_info", "speak",
+          "dom_query", "dom_validate", "page_eval", "layout_debug",
+        ];
+        const id = randomUUID();
+        /** @type {string[]} */
+        const problems = [];
+        let invoked = false;
+        const timer = setTimeout(() => reject(new Error("tools roundtrip timed out after 60s")), 60000);
+        onFrame = (frame) => {
+          if (frame.type === "tools-list" && !invoked) {
+            invoked = true;
+            const names = Array.isArray(frame.tools)
+              ? frame.tools.map((/** @type {any} */ tool) => tool.name)
+              : [];
+            flowLog(`received ${names.length} tool definitions`);
+            if (names.length < 15) problems.push(`tool list has ${names.length} entries, want >= 15`);
+            for (const name of required) {
+              if (!names.includes(name)) problems.push(`tool list is missing ${name}`);
+            }
+            ws.send(JSON.stringify({
+              type: "tool-invoke", id, tool: "system_info", args: { topic: "os" },
+            }));
+            return;
+          }
+          if (frame.type === "tool-result" && frame.id === id) {
+            clearTimeout(timer);
+            if (frame.ok !== true) problems.push(`manual system_info failed: ${frame.error || "unknown error"}`);
+            if (!String(frame.text ?? "").trim()) problems.push("manual system_info returned empty text");
+            resolve({ steps: [], reply: "", chatError: "", probeProblems: problems });
+          }
+        };
+        ws.send(JSON.stringify({ type: "tools-list-req" }));
+      });
+    },
+    hard(r) {
+      return r.probeProblems ?? [];
+    },
+    soft() {
+      return [];
     },
   },
   {

@@ -188,3 +188,14 @@ Server → client broadcast `queue-state`, sent on every enqueue/acquire/ack/nac
 - [ ] `queue-peek` over `websocat`/probe returns well-formed `queue-state`.
 - [ ] Status page shows the Active-time-selectors card with the server-local clock in the host's timezone (verify `TZ` passthrough by starting with `TZ=Australia/Sydney`).
 - [ ] Restart the container with a job mid-flight: after restart the job re-runs (attempts=1) or dead-letters per `maxRetries` — never silently vanishes.
+
+## Amendments
+
+### 2026-07-23 — Queue-backed manual tools (spec 021)
+
+`tool-invoke` creates an interactive `manual-tool` envelope tied to the
+initiating WebSocket connection with a 300-second visibility timeout. The
+single worker executes the shared agent tool executor, so manual calls wait
+behind active chat/project work and never interleave with an agent task.
+Disconnect handling cancels or drops these envelopes under the existing
+initiator policy.

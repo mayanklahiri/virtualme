@@ -67,6 +67,9 @@ func (c *CDP) target(ctx context.Context) (string, error) {
 }
 
 func (c *CDP) call(ctx context.Context, method string, params any, result any) error {
+	if method != "Runtime.evaluate" && method != "DOMSnapshot.captureSnapshot" {
+		return fmt.Errorf("CDP method %q is not allowed by the observation-only policy", method)
+	}
 	endpoint, err := c.target(ctx)
 	if err != nil {
 		return err
@@ -126,6 +129,51 @@ func (c *CDP) call(ctx context.Context, method string, params any, result any) e
 		}
 		return json.Unmarshal(envelope.Result, result)
 	}
+}
+
+type evaluateResponse struct {
+	Result struct {
+		Type        string `json:"type"`
+		Subtype     string `json:"subtype"`
+		Value       any    `json:"value"`
+		Description string `json:"description"`
+	} `json:"result"`
+	ExceptionDetails *struct {
+		Text      string `json:"text"`
+		Exception struct {
+			Description string `json:"description"`
+		} `json:"exception"`
+	} `json:"exceptionDetails"`
+}
+
+func (c *CDP) evaluate(ctx context.Context, expression string, awaitPromise bool, throwOnSideEffect ...bool) (any, error) {
+	var response evaluateResponse
+	params := map[string]any{
+		"expression": expression, "returnByValue": true, "awaitPromise": awaitPromise,
+	}
+	if len(throwOnSideEffect) > 0 && throwOnSideEffect[0] {
+		params["throwOnSideEffect"] = true
+	}
+	if err := c.call(ctx, "Runtime.evaluate", params, &response); err != nil {
+		return nil, err
+	}
+	if response.ExceptionDetails != nil {
+		detail := response.ExceptionDetails.Exception.Description
+		if detail == "" {
+			detail = response.ExceptionDetails.Text
+		}
+		if detail == "" {
+			detail = "JavaScript evaluation failed"
+		}
+		return nil, errors.New(detail)
+	}
+	if response.Result.Subtype == "error" {
+		if response.Result.Description == "" {
+			return nil, errors.New("JavaScript evaluation returned an error")
+		}
+		return nil, errors.New(response.Result.Description)
+	}
+	return response.Result.Value, nil
 }
 
 func dialWebSocket(ctx context.Context, rawURL string) (net.Conn, *bufio.Reader, error) {
