@@ -22,6 +22,7 @@ Your data (browser profile, chat history, projects, mail queue) lives in
 ## Good to know
 
 - Needs about 8 GB of RAM; the local model alone uses ~4 GB.
+- With an NVIDIA GPU and the NVIDIA Container Toolkit installed, `npx virtualme start` passes the GPU through automatically and runs the model on it (`--no-gpu` opts out).
 - First start is slow while the model loads. Give it a few minutes.
 - Prototype trust model: no auth or TLS. Run it on a trusted private network only.
 
