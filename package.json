@@ -29,9 +29,13 @@
   "homepage": "https://github.com/mayanklahiri/virtualme#readme",
   "keywords": [
     "agent",
-    "docker",
     "local-llm",
-    "automation"
+    "docker",
+    "automation",
+    "self-hosted",
+    "llama-cpp",
+    "browser-automation",
+    "privacy"
   ],
   "author": "Mayank Lahiri",
   "license": "MIT",

@@ -197,3 +197,9 @@ Commit as `spec 004: immutable release versions, registry pre-checks, GitHub Rel
 ### 2026-07-22 — Docker Hub rehearsal before the first published image
 
 Acceptance item 4 is conditional on `mayanklahiri/virtualme:latest` already existing. At execution time Docker Hub returned `no such manifest`; this does not affect the release pre-check because absence is its success path. Items 7 and 8 remain production observations for the next real release and an optional throwaway-version replay, respectively.
+
+### 2026-07-24 — Curated release notes
+
+Spec 025 supersedes §2's `github-release` invocation. Releases now use the
+committed `release-notes/vX.Y.Z.md`, then append GitHub's generated commit list
+below it; the immutable tag and registry pre-checks remain unchanged.

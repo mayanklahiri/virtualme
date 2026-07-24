@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft |
+| Status | Executed (2026-07-24) |
 | Depends on | `specs/004-release-hardening.md` (immutable versions, pre-checks, `github-release` job) |
 | Produces | Curated per-release notes written by "Marvin the Release Bot" and required by the release workflow; a casual user-facing Docker Hub repository overview pushed automatically on release; filled-in GitHub repo and Docker Hub metadata; verified npm readme; a single AI skill `/do-release` that executes the entire npm + Docker release end to end |
 | Followed by | Future specs |
@@ -148,3 +148,13 @@ Register the skill in `AGENTS.md`'s Skills table and the README skills table dur
 - [ ] `npm pack --dry-run` lists `README.md`; `package.json` keywords updated.
 - [ ] `.cursor/skills/do-release/SKILL.md` exists, is listed in AGENTS.md and README, and contains the Marvin tone-only self-check step verbatim.
 - [ ] First post-spec release: GitHub Release shows curated Marvin notes + appended commit list; Docker Hub overview updated; npm page renders the readme. (Deferred to the next real release; record under `## Amendments`.)
+
+## Amendments
+
+### 2026-07-24 — Execution
+
+The GitHub repository description, homepage, and topics were applied with the
+required idempotent command. The first post-spec release verification remains
+deferred because executing a release is outside this implementation; record
+its GitHub Release, Docker Hub overview, and npm readme outcomes here after it
+ships.

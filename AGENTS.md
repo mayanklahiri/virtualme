@@ -97,6 +97,7 @@ the theme-defined `--p1` through `--p8` series ramp.
 |---|---|---|
 | `operate` | `.cursor/skills/operate/SKILL.md` | Run and troubleshoot Virtual Me |
 | `develop` | `.cursor/skills/develop/SKILL.md` | Contribute within repository rules |
+| `do-release` | `.cursor/skills/do-release/SKILL.md` | Execute and verify a full npm and Docker release |
 | `master-update` | `.cursor/skills/master-update/SKILL.md` | Reconcile docs and skills with the tree |
 
 ## Specs
@@ -127,4 +128,4 @@ the theme-defined `--p1` through `--p8` series ramp.
 | [022](specs/022-system-prompt.md) | On-disk embedded system prompts and SLM-optimized rewrite |
 | [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing |
 | [024](specs/024-brand-chrome-polish.md) | Brand wordmark, wristwatch live indicator, and console polish |
-| [025](specs/025-release-presentation.md) | Marvin release notes, registry metadata, and the /do-release skill (draft) |
+| [025](specs/025-release-presentation.md) | Marvin release notes, registry metadata, and the /do-release skill |

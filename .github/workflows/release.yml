@@ -35,6 +35,8 @@ jobs:
             echo "refusing to release: virtualme@$VERSION already exists on npm" >&2
             exit 1
           fi
+      - name: Release notes present
+        run: test -s "release-notes/$GITHUB_REF_NAME.md" || { echo "missing release-notes/$GITHUB_REF_NAME.md" >&2; exit 1; }
 
   docker-arch:
     needs: verify
@@ -62,6 +64,7 @@ jobs:
     needs: docker-arch
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v4
       - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -71,6 +74,15 @@ jobs:
           VERSION=${GITHUB_REF_NAME#v}
           docker buildx imagetools create -t "$IMAGE:$VERSION" -t "$IMAGE:latest" \
             "$IMAGE:$VERSION-amd64" "$IMAGE:$VERSION-arm64"
+      - name: Update Docker Hub overview
+        run: |
+          TOKEN=$(curl -fsS -H 'Content-Type: application/json' \
+            -d '{"username":"'"${{ secrets.DOCKERHUB_USERNAME }}"'","password":"'"${{ secrets.DOCKERHUB_TOKEN }}"'"}' \
+            https://hub.docker.com/v2/users/login/ | jq -r .token)
+          jq -n --rawfile body docker/DOCKERHUB.md \
+            '{full_description:$body, description:"Private local background agent: local LLM, virtual browser, speech, mail. No cloud."}' \
+          | curl -fsS -X PATCH -H "Authorization: JWT $TOKEN" -H 'Content-Type: application/json' \
+              -d @- "https://hub.docker.com/v2/repositories/$IMAGE/"
 
   npm-publish:
     needs: verify
@@ -94,11 +106,12 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Create GitHub Release with generated notes
+      - name: Create GitHub Release with Marvin notes
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --verify-tag \
             --title "$GITHUB_REF_NAME" \
-            --generate-notes
+            --notes-file "release-notes/$GITHUB_REF_NAME.md"
+          gh release edit "$GITHUB_REF_NAME" --notes "$(cat "release-notes/$GITHUB_REF_NAME.md"; echo; echo '---'; gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$GITHUB_REF_NAME" --jq .body)"
