@@ -43,7 +43,7 @@ function icon(name) {
 
 /** @param {number} ts @param {Intl.DateTimeFormat} [formatter] */
 function time(ts, formatter = shortTime) {
-  return ts ? formatter.format(new Date(Number(ts))) : "—";
+  return ts ? formatter.format(new Date(Number(ts))) : "…";
 }
 
 /** @param {string} type */
@@ -73,7 +73,7 @@ function definitionList(rows) {
     const dd = document.createElement("dd");
     dt.textContent = term;
     if (value instanceof Node) dd.append(value);
-    else dd.textContent = String(value ?? "—");
+    else dd.textContent = String(value ?? "…");
     row.append(dt, dd);
     list.append(row);
   }
@@ -167,14 +167,14 @@ export function initJobs(send) {
         ["Project", link],
         ["Grounding", grounding],
         ["Result", job.result?.summary || job.lastError || "Pending"],
-        ["Duration", job.result ? formatDuration(job.result.finishedTs - (job.startedTs || job.enqueuedTs)) : "—"],
+        ["Duration", job.result ? formatDuration(job.result.finishedTs - (job.startedTs || job.enqueuedTs)) : "…"],
       ]));
     } else {
       const heading = document.createElement("h3");
       heading.textContent = "Payload";
       fragment.append(heading, pre(payload), definitionList([
         ["Result", job.result?.summary || job.lastError || "Pending"],
-        ["Duration", job.result ? formatDuration(job.result.finishedTs - (job.startedTs || job.enqueuedTs)) : "—"],
+        ["Duration", job.result ? formatDuration(job.result.finishedTs - (job.startedTs || job.enqueuedTs)) : "…"],
       ]));
     }
     return fragment;
@@ -205,25 +205,25 @@ export function initJobs(send) {
       fragment.append(definitionList([
         ["Status", data.ok ? "OK" : "Error"],
         ["Duration", formatDuration(data.durationMs)],
-        ["Job", event.jobId || "—"],
+        ["Job", event.jobId || "…"],
       ]));
     } else if (event.kind === "llm") {
       fragment.append(definitionList([
-        ["Phase", data.phase || "—"],
+        ["Phase", data.phase || "…"],
         ["Prompt", event.summary],
         ["Prompt tokens", data.promptTokens ?? 0],
         ["Completion tokens", data.completionTokens ?? 0],
         ["Duration", formatDuration(data.durationMs)],
         ["Stopped", data.stopped ? "Yes" : "No"],
-        ["Job", event.jobId || "—"],
+        ["Job", event.jobId || "…"],
       ]));
     } else {
       fragment.append(definitionList([
         ["Status", data.ok ? "OK" : "Error"],
-        ["Characters", data.chars || "—"],
-        ["Voice", data.voice || "—"],
-        ["Recipient domain", data.recipientDomain || "—"],
-        ["Size", data.size ? `${data.size} bytes` : "—"],
+        ["Characters", data.chars || "…"],
+        ["Voice", data.voice || "…"],
+        ["Recipient domain", data.recipientDomain || "…"],
+        ["Size", data.size ? `${data.size} bytes` : "…"],
         ["Duration", formatDuration(data.durationMs)],
       ]));
     }

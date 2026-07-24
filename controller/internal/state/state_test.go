@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/json"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -46,6 +47,8 @@ func TestSnapshotJSON(t *testing.T) {
 		Ts:        123,
 		UptimeSec: 5,
 		Hostname:  "virtualme",
+		Version:   "0.1.0",
+		Net:       Network{Port: 8080, Addrs: []string{"192.168.1.20", "2001:db8::20"}},
 		OK:        true,
 		Services:  []health.Service{{Name: "xvfb", OK: true}},
 		System:    System{Load1: 0.5, MemUsedMB: 1, MemTotalMB: 2, DiskFreeMB: 3, DiskTotalMB: 4, GPUUtil: 25, GPUMemMB: 512, GPUMemTotalMB: 1024},
@@ -65,6 +68,8 @@ func TestSnapshotJSON(t *testing.T) {
 		`"ts":123`,
 		`"uptimeSec":5`,
 		`"hostname":"virtualme"`,
+		`"version":"0.1.0"`,
+		`"net":{"port":8080,"addrs":["192.168.1.20","2001:db8::20"]}`,
 		`"ok":true`,
 		`"services":[`,
 		`"system":{`,
@@ -80,6 +85,30 @@ func TestSnapshotJSON(t *testing.T) {
 		if !strings.Contains(text, field) {
 			t.Errorf("JSON %q missing %q", text, field)
 		}
+	}
+}
+
+type testAddr string
+
+func (a testAddr) Network() string { return "ip" }
+func (a testAddr) String() string  { return string(a) }
+
+func TestNetworkFacts(t *testing.T) {
+	if got := listenerPort("127.0.0.1:9090"); got != 9090 {
+		t.Fatalf("listenerPort = %d", got)
+	}
+	if got := listenerPort(":bad"); got != 8080 {
+		t.Fatalf("listenerPort fallback = %d", got)
+	}
+	addrs := usableAddrs([]net.Addr{
+		testAddr("127.0.0.1/8"),
+		testAddr("fe80::1/64"),
+		testAddr("2001:db8::20/64"),
+		testAddr("192.168.1.20/24"),
+		testAddr("10.0.0.8/8"),
+	})
+	if got := strings.Join(addrs, ","); got != "192.168.1.20,10.0.0.8" {
+		t.Fatalf("usableAddrs = %q", got)
 	}
 }
 

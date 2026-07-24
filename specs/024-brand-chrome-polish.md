@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft |
+| Status | Executed (2026-07-24) |
 | Depends on | `specs/011-ui-refresh.md` (brand, themes, home page), `specs/018-gpu-observability.md` (GPU data hooks), `specs/019-chart-overhaul.md` (chart polish is there, not here) |
 | Produces | Home-page layout/alignment fixes, server IP:port facts, GPU line, a more assertive quick-link bar, copy scrubbed of em-dashes and AI cliches; a redesigned Virtual Me wordmark grounded in typographic practice; a wristwatch-style live-connection infographic replacing the plain "live" pill; per-tab visual fixes from the 2026-07-23 live inspection |
 | Followed by | Future specs |

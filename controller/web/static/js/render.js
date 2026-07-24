@@ -1,3 +1,5 @@
+import { updateConnectionSnapshot } from "./conn.js";
+
 const iconForService = {
   xvfb: "monitor",
   openbox: "monitor",
@@ -57,6 +59,10 @@ function gpuName(gpu) {
   return [vendor, gpu?.model].filter(Boolean).join(" ");
 }
 
+function addressWithPort(address, port) {
+  return address.includes(":") ? `[${address}]:${port}` : `${address}:${port}`;
+}
+
 export function renderState(snapshot) {
   if (snapshot?.type !== "state" || !Array.isArray(snapshot.services)) {
     return;
@@ -64,10 +70,22 @@ export function renderState(snapshot) {
   const status = document.querySelector("#status-summary");
   status.className = `overall ${snapshot.ok ? "ok" : "error"}`;
   document.querySelector("#status-title").textContent = snapshot.ok ? "All systems operational" : "Service attention required";
-  document.querySelector("#status-detail").textContent = snapshot.ok ? "All six supervised services are healthy." : "One or more supervised services are unavailable.";
+  document.querySelector("#status-detail").textContent = snapshot.ok ? `All ${snapshot.services.length} supervised services are healthy.` : "One or more supervised services are unavailable.";
   document.querySelector("#uptime").textContent = formatUptime(snapshot.uptimeSec);
   document.querySelector("#home-uptime").textContent = formatUptime(snapshot.uptimeSec);
-  document.querySelector("#home-host").textContent = snapshot.hostname || "—";
+  document.querySelector("#home-host").textContent = snapshot.hostname || "…";
+  const port = Number(snapshot.net?.port) || 8080;
+  const containerAddresses = (snapshot.net?.addrs ?? []).map((address) => addressWithPort(address, port));
+  const homeAddress = document.querySelector("#home-address");
+  homeAddress.textContent = location.host;
+  homeAddress.title = containerAddresses.join(", ");
+  document.querySelector("#home-container-address").textContent = containerAddresses.length
+    ? `container: ${containerAddresses.join(", ")}`
+    : "container: unavailable";
+  const buildVersion = String(snapshot.version || "").trim();
+  document.querySelector("#home-version").textContent = buildVersion
+    ? `Virtual Me ${buildVersion === "dev" ? "dev" : `v${buildVersion}`}`
+    : "Virtual Me";
   const homeHealth = document.querySelector("#home-health");
   homeHealth.className = `health-pill ${snapshot.ok ? "ok" : "error"}`;
   homeHealth.textContent = snapshot.ok ? "All systems operational" : "Service attention required";
@@ -159,11 +177,5 @@ export function renderState(snapshot) {
     "aria-checked",
     String(snapshot.jiggler?.enabled === true),
   );
-}
-
-export function renderStatus(status) {
-  for (const pill of document.querySelectorAll("[data-connection]")) {
-    pill.className = `connection ${status}`;
-    pill.textContent = status === "live" ? "live" : `${status}…`;
-  }
+  updateConnectionSnapshot(snapshot);
 }

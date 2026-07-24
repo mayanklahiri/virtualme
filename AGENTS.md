@@ -75,6 +75,11 @@ run through that queue without modifying chat history, and own scratch
 directories under `$VM_DATA_DIR/projects/`.
 The Jobs console combines queue envelopes with a Valkey-backed activity ledger
 fed by LLM, agent-tool, speech, and mail lifecycle events.
+The console home separates health from an aligned host/address/capacity grid,
+shows browser-reachable and container-network addresses plus the controller
+build version, and uses committed outlined-path wordmark/monogram assets. Its
+connection watch combines server uptime, current websocket duration, and
+motion/reduced-motion-aware live state.
 The opt-in jiggler produces bursty humanlike mouse trajectories through
 `xdotool`, yields to queued work and agent actuation, persists its Status-page
 switch in Valkey, and records each completed burst in the activity ledger.
@@ -121,5 +126,5 @@ the theme-defined `--p1` through `--p8` series ramp.
 | [021](specs/021-agent-cdp-tools-console.md) | CDP observation tools and the Tools console page |
 | [022](specs/022-system-prompt.md) | On-disk embedded system prompts and SLM-optimized rewrite |
 | [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing |
-| [024](specs/024-brand-chrome-polish.md) | Brand wordmark, wristwatch live indicator, and console polish (draft) |
+| [024](specs/024-brand-chrome-polish.md) | Brand wordmark, wristwatch live indicator, and console polish |
 | [025](specs/025-release-presentation.md) | Marvin release notes, registry metadata, and the /do-release skill (draft) |

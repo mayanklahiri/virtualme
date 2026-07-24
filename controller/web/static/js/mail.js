@@ -70,7 +70,7 @@ export function initMail(send) {
     const term = document.createElement("dt");
     term.textContent = label;
     const detail = document.createElement("dd");
-    detail.textContent = value || "—";
+    detail.textContent = value || "…";
     if (className) detail.className = className;
     list.append(term, detail);
   }
@@ -113,7 +113,7 @@ export function initMail(send) {
         addDefinition(definitions, "From", item.from);
         addDefinition(definitions, "Recipients", (item.recipients ?? []).join(", ") || item.to);
         addDefinition(definitions, "Submitted", item.submittedTs
-          ? new Date(item.submittedTs).toLocaleString() : "—");
+          ? new Date(item.submittedTs).toLocaleString() : "…");
         addDefinition(definitions, "Last error", item.lastError, "mail-last-error");
         content.append(definitions);
         const contentsTitle = document.createElement("h3");
@@ -138,7 +138,7 @@ export function initMail(send) {
     empty.hidden = queue.children.length > 0;
     const cadence = Number(message.flushEverySec);
     empty.textContent = Number.isFinite(cadence)
-      ? `Queue empty — messages deliver on submit or wait here between flush runs (every ${cadence}s).`
+      ? `Queue empty. Messages deliver on submit or wait here between flush runs (every ${cadence}s).`
       : "Queue empty";
     updateCountdowns();
   }
@@ -169,7 +169,7 @@ export function initMail(send) {
         time.dateTime = eventDate.toISOString();
         time.textContent = eventDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
       } else {
-        time.textContent = "—";
+        time.textContent = "…";
       }
       const text = document.createElement("span");
       text.textContent = event.text;
@@ -186,7 +186,7 @@ export function initMail(send) {
 
   function status(message) {
     document.querySelector("#mail-mode").textContent = message.mode === "smarthost" ? "Smarthost relay" : "Direct MX";
-    document.querySelector("#mail-from").textContent = message.from ?? "—";
+    document.querySelector("#mail-from").textContent = message.from ?? "…";
     document.querySelector("#mail-dkim").textContent = message.dkim?.enabled
       ? `${message.dkim.domain} (${message.dkim.selector})`
       : (message.dkim?.note ?? "Disabled");

@@ -55,7 +55,7 @@ jobs:
       - name: Build and push per-arch image
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          docker build -f docker/Dockerfile -t "$IMAGE:$VERSION-${{ matrix.arch }}" .
+          docker build --build-arg VERSION="$VERSION" -f docker/Dockerfile -t "$IMAGE:$VERSION-${{ matrix.arch }}" .
           docker push "$IMAGE:$VERSION-${{ matrix.arch }}"
 
   docker-manifest:

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -43,12 +44,26 @@ type Jiggler struct {
 	Enabled bool `json:"enabled"`
 }
 
+// Network identifies the controller listener and its non-local interfaces.
+type Network struct {
+	Port  int      `json:"port"`
+	Addrs []string `json:"addrs"`
+}
+
+// Runtime contains build and listener facts supplied by the controller.
+type Runtime struct {
+	Version  string
+	HTTPAddr string
+}
+
 // Snapshot is the websocket state message consumed by the SPA.
 type Snapshot struct {
 	Type      string           `json:"type"`
 	Ts        int64            `json:"ts"`
 	UptimeSec int64            `json:"uptimeSec"`
 	Hostname  string           `json:"hostname"`
+	Version   string           `json:"version"`
+	Net       Network          `json:"net"`
 	OK        bool             `json:"ok"`
 	Services  []health.Service `json:"services"`
 	System    System           `json:"system"`
@@ -88,6 +103,8 @@ type Collector struct {
 	started   time.Time
 	period    time.Duration
 	hostname  string
+	version   string
+	network   Network
 	dataDir   string
 	jiggler   func() bool
 	gpu       gpu.Info
@@ -134,11 +151,21 @@ func ReadDisk(path string) (freeMB, totalMB int) {
 }
 
 // NewCollector creates a two-second state collector sampling procRoot.
-func NewCollector(cfg health.Config, procRoot string, store *metrics.Store, broadcast func([]byte), gpuInfo gpu.Info, jiggler ...func() bool) *Collector {
+func NewCollector(cfg health.Config, procRoot string, store *metrics.Store, broadcast func([]byte), gpuInfo gpu.Info, jiggler func() bool, runtime ...Runtime) *Collector {
 	hostname, _ := os.Hostname()
 	dataDir := os.Getenv("VM_DATA_DIR")
 	if dataDir == "" {
 		dataDir = "/home/virtualme/.virtualme"
+	}
+	buildVersion := "dev"
+	httpAddr := ":8080"
+	if len(runtime) > 0 {
+		if runtime[0].Version != "" {
+			buildVersion = runtime[0].Version
+		}
+		if runtime[0].HTTPAddr != "" {
+			httpAddr = runtime[0].HTTPAddr
+		}
 	}
 	collector := &Collector{
 		cfg:       cfg,
@@ -149,13 +176,65 @@ func NewCollector(cfg health.Config, procRoot string, store *metrics.Store, broa
 		started:   time.Now(),
 		period:    2 * time.Second,
 		hostname:  hostname,
+		version:   buildVersion,
+		network:   discoverNetwork(httpAddr),
 		dataDir:   dataDir,
+		jiggler:   jiggler,
 		gpu:       gpuInfo,
 	}
-	if len(jiggler) > 0 {
-		collector.jiggler = jiggler[0]
-	}
 	return collector
+}
+
+func listenerPort(addr string) int {
+	_, rawPort, err := net.SplitHostPort(addr)
+	if err != nil {
+		return 8080
+	}
+	port, err := strconv.Atoi(rawPort)
+	if err != nil || port < 1 || port > 65535 {
+		return 8080
+	}
+	return port
+}
+
+func usableAddrs(addrs []net.Addr) []string {
+	ipv4 := make([]string, 0, 2)
+	ipv6 := make([]string, 0, 2)
+	seen := make(map[string]bool)
+	for _, addr := range addrs {
+		ip, _, err := net.ParseCIDR(addr.String())
+		if err != nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			continue
+		}
+		value := ip.String()
+		if seen[value] {
+			continue
+		}
+		seen[value] = true
+		if ip.To4() != nil {
+			ipv4 = append(ipv4, value)
+		} else {
+			ipv6 = append(ipv6, value)
+		}
+	}
+	result := append(ipv4, ipv6...)
+	if len(result) > 2 {
+		result = result[:2]
+	}
+	return result
+}
+
+func discoverNetwork(httpAddr string) Network {
+	var addrs []net.Addr
+	ifaces, err := net.Interfaces()
+	if err == nil {
+		for _, iface := range ifaces {
+			if ifaceAddrs, addrErr := iface.Addrs(); addrErr == nil {
+				addrs = append(addrs, ifaceAddrs...)
+			}
+		}
+	}
+	return Network{Port: listenerPort(httpAddr), Addrs: usableAddrs(addrs)}
 }
 
 func readFile(path string) string {
@@ -188,6 +267,8 @@ func (c *Collector) collect() {
 		Ts:        now.UnixMilli(),
 		UptimeSec: int64(time.Since(c.started) / time.Second),
 		Hostname:  c.hostname,
+		Version:   c.version,
+		Net:       c.network,
 		OK:        report.OK,
 		Services:  report.Services,
 		System:    system,

@@ -222,7 +222,7 @@ export function initProjects(send) {
     run.append(icon("play"), document.createTextNode("Run now"));
     const queued = queuedProjects.has(id);
     run.disabled = queued;
-    run.title = queued ? "queued — will run when the current job finishes" : "Runs while this page stays open; otherwise schedule it";
+    run.title = queued ? "Queued. It will run when the current job finishes." : "Runs while this page stays open; otherwise schedule it";
     run.addEventListener("click", () => {
       send({ type: "project-run", id });
       queuedProjects.add(id);

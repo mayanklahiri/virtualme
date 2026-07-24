@@ -52,8 +52,8 @@ export function initAgent(log, setStatus) {
     status(message) {
       const labels = {
         planning: "agent planning…",
-        acting: `agent acting — step ${message.n ?? ""}`,
-        observing: `agent observing — step ${message.n ?? ""}`,
+        acting: `agent acting: step ${message.n ?? ""}`,
+        observing: `agent observing: step ${message.n ?? ""}`,
         done: "",
         failed: "agent failed",
         stopped: "agent stopped",

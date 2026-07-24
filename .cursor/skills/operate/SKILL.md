@@ -48,17 +48,27 @@ also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 - `http://localhost:8080/healthz` — aggregate JSON health
 - `http://localhost:8080/v1/audio/speech` — OpenAI-compatible local speech API
 - `ws://localhost:8080/ws` — live state, metrics, queue, tools, chat, agent, TTS, and mail frames
-- `http://localhost:8080/desktop/` — proxied noVNC and websockify
+- `http://localhost:8080/desktop/` — redirects to the noVNC client; child paths proxy noVNC and websockify
 
 The desktop UI opens `/desktop/vnc.html` with autoconnect, scaling, and the
 proxied `/desktop/websockify` websocket path.
 
 ## Console
 
-The home page live-updates controller health, hostname, uptime, CPU cores/load,
-memory, disk capacity, and any detected GPU. The theme button in the sidebar footer opens the
-eight-theme picker and its automatic/light/dark variant controls; selections
-persist in the browser.
+The home page live-updates controller health, hostname, browser-reachable
+address, up to two container-interface addresses, uptime, CPU cores/load,
+memory, disk capacity, controller build version, and any detected GPU. The
+browser address is the address used to open the console; `container:` values
+come from the container network namespace and may not be reachable from the
+LAN. The theme button in the sidebar footer opens the eight-theme picker and
+its automatic/light/dark variant controls; selections persist in the browser.
+
+The sidebar connection watch shows controller hostname and port. Its outer arc
+maps uptime onto the current 24-hour period, the hand advances while the
+websocket is live, and the center pip is green when live, red while
+reconnecting, or muted while connecting. The second line reports server uptime
+and the current browser-link duration. Reduced-motion mode freezes the hand and
+disables pulsing while preserving the state colors.
 
 Use `/jobs` to see what the machine is actually doing. Queue time flows from
 upcoming at the top through the single executing job to recently finished

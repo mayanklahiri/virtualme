@@ -27,11 +27,23 @@
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-menu"/></svg>
       </button>
       <strong id="page-title">Home</strong>
-      <span class="connection connecting" data-connection aria-live="polite">connecting…</span>
+      <div class="conn-watch connecting" data-connection role="status" aria-live="polite">
+        <svg class="conn-dial" viewBox="0 0 44 44" aria-hidden="true">
+          <circle class="dial-face" cx="22" cy="22" r="20"/>
+          <g class="dial-ticks"></g>
+          <circle class="dial-uptime" cx="22" cy="22" r="16"/>
+          <line class="dial-hand" x1="22" y1="22" x2="22" y2="8"/>
+          <circle class="dial-pip" cx="22" cy="22" r="2.5"/>
+        </svg>
+        <div class="conn-text"><strong class="conn-host">…</strong><span class="conn-meta">connecting…</span></div>
+      </div>
     </header>
     <div id="nav-curtain" class="nav-curtain" hidden></div>
     <nav id="sidebar" class="sidebar" aria-label="Primary">
-      <div class="brand"><svg class="icon brand-mark" aria-hidden="true"><use href="/icons.svg#i-virtualme-mark"/></svg><strong class="wordmark">Virtual&nbsp;Me</strong></div>
+      <div class="brand">
+        <svg class="icon brand-mark" aria-hidden="true"><use href="/icons.svg#i-virtualme-mark"/></svg>
+        <svg class="wordmark-svg" viewBox="0 0 130 25" role="img" aria-label="Virtual Me"><use href="/icons.svg#i-wordmark"/></svg>
+      </div>
       <button id="nav-close" class="icon-button nav-close" type="button" aria-label="Close navigation">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-x"/></svg>
       </button>
@@ -56,7 +68,16 @@
           <div id="theme-options" class="theme-options"></div>
           <div id="variant-options" class="variant-options" aria-label="Color variant"></div>
         </div>
-        <span class="connection connecting" data-connection aria-live="polite">connecting…</span>
+        <div class="conn-watch connecting" data-connection role="status" aria-live="polite">
+          <svg class="conn-dial" viewBox="0 0 44 44" aria-hidden="true">
+            <circle class="dial-face" cx="22" cy="22" r="20"/>
+            <g class="dial-ticks"></g>
+            <circle class="dial-uptime" cx="22" cy="22" r="16"/>
+            <line class="dial-hand" x1="22" y1="22" x2="22" y2="8"/>
+            <circle class="dial-pip" cx="22" cy="22" r="2.5"/>
+          </svg>
+          <div class="conn-text"><strong class="conn-host">…</strong><span class="conn-meta">connecting…</span></div>
+        </div>
       </div>
     </nav>
 
@@ -64,32 +85,36 @@
       <section data-page="home" aria-labelledby="home-title">
         <div class="hero">
           <div class="hero-copy">
-            <p class="eyebrow">Private personal background agent</p>
+            <p class="eyebrow">Private background agent</p>
             <h1 id="home-title">Good to see you.</h1>
-            <p><strong>Virtual Me</strong> is watching the desk so you don't have to — a private browser, local model, and agent loop, all on this machine.</p>
-            <div class="home-facts">
-              <span id="home-health" class="health-pill pending">Waiting for controller</span>
-              <span>Host <strong id="home-host">—</strong></span>
-              <span>Uptime <strong id="home-uptime">—</strong></span>
-              <span>CPU <strong id="home-cpu">—</strong></span>
-              <span>Memory <strong id="home-memory">—</strong></span>
-              <span>Disk <strong id="home-disk">—</strong></span>
-              <span id="home-gpu-row" hidden>GPU <strong id="home-gpu">—</strong></span>
-              <span>Model <strong>Gemma 4 E2B Q4_0</strong></span>
-            </div>
+            <p><strong>Virtual Me</strong> runs a private browser, a local model, and an agent loop on this machine. Nothing leaves the box.</p>
           </div>
           <figure class="hero-media" aria-hidden="true"><img src="/img/hero-earthrise.jpg" alt=""></figure>
         </div>
+        <section class="status-band" aria-label="Controller facts">
+          <div class="status-band-health"><span id="home-health" class="health-pill pending">Waiting for controller</span></div>
+          <dl class="fact-grid">
+            <div class="fact"><dt>Host</dt><dd id="home-host">…</dd></div>
+            <div class="fact"><dt>Address</dt><dd id="home-address">…</dd><small id="home-container-address"></small></div>
+            <div class="fact"><dt>Uptime</dt><dd id="home-uptime">…</dd></div>
+            <div class="fact"><dt>CPU</dt><dd id="home-cpu">…</dd></div>
+            <div class="fact"><dt>Memory</dt><dd id="home-memory">…</dd></div>
+            <div class="fact"><dt>Disk</dt><dd id="home-disk">…</dd></div>
+            <div id="home-gpu-row" class="fact" hidden><dt>GPU</dt><dd id="home-gpu">…</dd></div>
+            <div class="fact"><dt>Model</dt><dd>Gemma 4 E2B Q4_0</dd></div>
+          </dl>
+        </section>
         <div class="quick-links">
-          <a href="/projects" data-nav><svg class="icon"><use href="/icons.svg#i-folder-kanban"/></svg><strong>Projects</strong><span>Recurring background tasks</span></a>
-          <a href="/jobs" data-nav><svg class="icon"><use href="/icons.svg#i-list-checks"/></svg><strong>Jobs</strong><span>See what the machine is doing</span></a>
-          <a href="/status" data-nav><svg class="icon"><use href="/icons.svg#i-activity"/></svg><strong>Status</strong><span>Inspect services and metrics</span></a>
-          <a href="/chat" data-nav><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg><strong>Chat</strong><span>Talk to the local model</span></a>
-          <a href="/speech" data-nav><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg><strong>Speech</strong><span>Speak with the local voice</span></a>
-          <a href="/mail" data-nav><svg class="icon"><use href="/icons.svg#i-mail"/></svg><strong>Mail</strong><span>Compose and inspect delivery</span></a>
-          <a href="/desktop-view" data-nav><svg class="icon"><use href="/icons.svg#i-monitor"/></svg><strong>Desktop</strong><span>Open the private browser</span></a>
+          <a href="/projects" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-folder-kanban"/></svg></span><strong>Projects</strong><span>Recurring background tasks</span></a>
+          <a href="/jobs" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-list-checks"/></svg></span><strong>Jobs</strong><span>See what the machine is doing</span></a>
+          <a href="/tools" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-wrench"/></svg></span><strong>Tools</strong><span>Inspect and invoke local tools</span></a>
+          <a href="/status" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-activity"/></svg></span><strong>Status</strong><span>Inspect services and metrics</span></a>
+          <a href="/chat" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg></span><strong>Chat</strong><span>Talk to the local model</span></a>
+          <a href="/speech" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg></span><strong>Speech</strong><span>Speak with the local voice</span></a>
+          <a href="/mail" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-mail"/></svg></span><strong>Mail</strong><span>Compose and inspect delivery</span></a>
+          <a href="/desktop-view" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-monitor"/></svg></span><strong>Desktop</strong><span>Open the private browser</span></a>
         </div>
-        <footer><span>Virtual Me v0.1.0</span><a href="https://github.com/mayanklahiri/virtualme" target="_blank" rel="noopener noreferrer">GitHub</a></footer>
+        <footer><span id="home-version">Virtual Me</span><a href="https://github.com/mayanklahiri/virtualme" target="_blank" rel="noopener noreferrer">GitHub</a></footer>
       </section>
 
       <section data-page="projects" hidden aria-labelledby="projects-title">
@@ -154,7 +179,7 @@
         <h1 id="status-page-title">Status</h1>
         <div id="status-summary" class="overall pending">
           <div><h2 id="status-title">Waiting for controller</h2><p id="status-detail">Service state will appear when the live connection opens.</p></div>
-          <p>Uptime <strong id="uptime">—</strong></p>
+          <p>Uptime <strong id="uptime">…</strong></p>
         </div>
         <h2>Services</h2>
         <ul id="service-list" class="services" aria-live="polite"></ul>
@@ -220,7 +245,7 @@
         <h1 id="speech-title">Speech</h1>
         <div class="speech-card">
           <label for="speech-input">Text</label>
-          <div class="speech-seeds" role="group" aria-label="Seed texts"><span class="lookback-label">Seeds</span><button type="button" data-seed="if">Kipling — If</button><button type="button" data-seed="road">Road notes</button><button type="button" data-seed="bridge">Night bridge</button></div>
+          <div class="speech-seeds" role="group" aria-label="Seed texts"><span class="lookback-label">Seeds</span><button type="button" data-seed="if">Kipling: If</button><button type="button" data-seed="road">Road notes</button><button type="button" data-seed="bridge">Night bridge</button></div>
           <textarea id="speech-input" rows="8" maxlength="4096" placeholder="Enter text to speak aloud"></textarea>
           <div class="speech-controls">
             <span id="speech-count">0 / 4096</span>
@@ -253,18 +278,18 @@
             <label class="mail-checkbox"><input id="mail-image" type="checkbox"> Embed test image</label>
             <small class="mail-help">Attaches a small inline image to exercise multipart/CID composition.</small>
             <div class="mail-actions">
-              <button id="mail-gmail-test" class="secondary" type="button" title="Prefills a deliverability test addressed to a Gmail inbox — Gmail's headers show SPF/DKIM verdicts.">Send Gmail test</button>
+              <button id="mail-gmail-test" class="secondary" type="button" title="Prefills a deliverability test addressed to a Gmail inbox. Gmail's headers show SPF/DKIM verdicts.">Send Gmail test</button>
               <button id="mail-send" type="submit"><svg class="icon"><use href="/icons.svg#i-send"/></svg>Send</button>
             </div>
-            <small class="mail-help">Prefills a deliverability test addressed to a Gmail inbox — Gmail's headers show SPF/DKIM verdicts.</small>
+            <small class="mail-help">Prefills a deliverability test addressed to a Gmail inbox. Gmail's headers show SPF/DKIM verdicts.</small>
             <p id="mail-result" class="mail-result" aria-live="polite"></p>
           </form>
           <div class="mail-card">
             <h2>Status</h2>
             <dl class="mail-status">
-              <div><dt>Delivery mode</dt><dd id="mail-mode">—</dd></div>
-              <div><dt>From</dt><dd id="mail-from">—</dd></div>
-              <div><dt>DKIM</dt><dd id="mail-dkim">—</dd></div>
+              <div><dt>Delivery mode</dt><dd id="mail-mode">…</dd></div>
+              <div><dt>From</dt><dd id="mail-from">…</dd></div>
+              <div><dt>DKIM</dt><dd id="mail-dkim">…</dd></div>
             </dl>
             <div id="mail-dns" hidden>
               <label for="mail-dns-name">DNS TXT name</label>

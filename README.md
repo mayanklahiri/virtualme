@@ -1,5 +1,7 @@
 # Virtual Me
 
+![Virtual Me wordmark](controller/web/static/brand/wordmark.svg)
+
 [![CI](https://github.com/mayanklahiri/virtualme/actions/workflows/ci.yml/badge.svg)](https://github.com/mayanklahiri/virtualme/actions/workflows/ci.yml)
 [![Release](https://github.com/mayanklahiri/virtualme/actions/workflows/release.yml/badge.svg)](https://github.com/mayanklahiri/virtualme/actions/workflows/release.yml)
 [![npm](https://img.shields.io/npm/v/virtualme)](https://www.npmjs.com/package/virtualme)
@@ -104,7 +106,7 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 
 | Route | Purpose |
 |---|---|
-| `/` | Console home: host identity, live health/capacity, model, and links |
+| `/` | Console home: host and reachable/container addresses, live health/capacity, build version, model, and links |
 | `/projects` | Recurring natural-language tasks, schedules, manual runs, and recent results |
 | `/projects/<id>` | Project task, schedule, status, run history, and scratch-directory details |
 | `/jobs` | Queue timeline, fine-grained machine activity, and type-specific details |
@@ -117,9 +119,16 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/healthz` | Aggregate JSON health for all eight services |
 | `/ws` | Websocket: live state, metrics, queued jobs, activity, tool manifests/invocation, chat, agent, TTS, and mail frames |
 | `POST /v1/audio/speech` | OpenAI-compatible local speech API (`wav` or raw `pcm`) |
-| `/desktop/` | Reverse proxy to noVNC and websockify |
+| `/desktop/` | Redirect to the noVNC client; child paths reverse-proxy noVNC and websockify |
 
-History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status charts offer synchronized `15m` through `30d` lookbacks, boundary-aligned locale-aware time ticks, responsive titles and controls, and theme-consistent series colors; the page also shows the server-local scheduler clock and active selector tokens. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, uptime, CPU/load, memory, disk capacity, and a detected GPU beside a theme-tinted Earthrise image.
+History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status charts offer synchronized `15m` through `30d` lookbacks, boundary-aligned locale-aware time ticks, responsive titles and controls, and theme-consistent series colors; the page also shows the server-local scheduler clock and active selector tokens. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, the browser-reachable address, up to two container-interface addresses, uptime, CPU/load, memory, disk capacity, build version, and a detected GPU beside a theme-tinted Earthrise image.
+
+The sidebar connection watch shows the controller hostname and port. Its outer
+arc maps server uptime onto the current 24-hour period, the hand advances once
+per minute while linked, and the center pip is green when live, red while
+reconnecting, and muted while connecting. The text below reports server uptime
+and the current browser connection duration. Reduced-motion mode freezes the
+hand and disables pulsing without removing the color-coded state.
 
 The Status-page Jiggler switch is off by default. When enabled, the controller
 moves the virtual desktop's OS cursor in occasional short humanlike bursts,
@@ -275,7 +284,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [021](specs/021-agent-cdp-tools-console.md) | CDP observation tools and the Tools console page |
 | [022](specs/022-system-prompt.md) | On-disk embedded system prompts and SLM-optimized rewrite |
 | [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing |
-| [024](specs/024-brand-chrome-polish.md) | Brand wordmark, wristwatch live indicator, and console polish (draft) |
+| [024](specs/024-brand-chrome-polish.md) | Brand wordmark, wristwatch live indicator, and console polish |
 | [025](specs/025-release-presentation.md) | Marvin release notes, registry metadata, and the /do-release skill (draft) |
 
 ### CI/CD

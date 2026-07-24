@@ -106,6 +106,15 @@ Adding a theme also requires entries in the `theme.js` registry, the
 `index.html` boot registry, and the CSS swatch registry. Pinned web fonts and
 the Earthrise hero image are declared in `controller/tools/fetch-assets.sh`;
 the fetched image is copied by `scripts/build-web.sh` and never committed.
+Committed brand assets are `brand/wordmark.svg` (outlined Space Grotesk paths
+with gradient/monochrome modes), `brand/virtualme-mark.svg`, and
+`brand/favicon.svg`; `scripts/build-icons.mjs` preserves each asset's viewBox
+when creating the sprite. SPA-visible copy must not contain em dashes or any of
+these phrases: `so you don't have to`, `supercharge`, `seamless`, `effortless`,
+`unleash`, `empower`, `delve`, `elevate`, `game-changing`, `AI-powered`.
+The controller build version defaults to `dev`; Docker release builds pass
+`VERSION` into `-ldflags "-X main.version=..."`, and the state snapshot is the
+only source for the console footer version.
 Charts use the reusable `makeChart` path in `chart.js`: supply sample values,
 series names, units, and a maximum function while retaining the shared
 lookback/tick/hover behavior. Every chart series and legend swatch must use the

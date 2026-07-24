@@ -1,4 +1,5 @@
-import { renderState, renderStatus } from "./render.js";
+import { renderState } from "./render.js";
+import { initConnectionWatch } from "./conn.js";
 import { initCharts } from "./chart.js";
 import { initChat } from "./chat.js";
 import { connect } from "./ws.js";
@@ -14,6 +15,7 @@ import { initTools } from "./tools.js";
 
 initTheme();
 initNav();
+const connectionWatch = initConnectionWatch();
 const charts = initCharts((value) => socket.send(value));
 const chat = initChat((value) => socket.send(value));
 const speech = initTTS((value) => socket.send(value));
@@ -30,8 +32,8 @@ jigglerSwitch.addEventListener("click", () => {
   });
 });
 
-function onStatus(status) {
-  renderStatus(status);
+function onStatus(status, connectedSince) {
+  connectionWatch.status(status, connectedSince);
   chat.status(status);
   charts.status(status);
   speech.status(status);

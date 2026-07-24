@@ -196,7 +196,7 @@ export function initChat(send) {
         sending: "sending…",
         queued: message.detail ? `${message.detail}…` : "queued…",
         processing: `reading prompt (${message.promptN ?? 0}/${message.promptTotal ?? 0})…`,
-        generating: `generating — ${message.tokens ?? 0} tokens · ${Number(message.tokPerSec ?? 0).toFixed(1)} tok/s · ${elapsed}s`,
+        generating: `generating: ${message.tokens ?? 0} tokens · ${Number(message.tokPerSec ?? 0).toFixed(1)} tok/s · ${elapsed}s`,
       };
       statusLine.textContent = labels[message.phase] ?? "";
     },

@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
 FROM golang:1.26-trixie AS controller-build
+ARG VERSION=dev
 WORKDIR /src
 COPY package.json package-lock.json ./
 COPY scripts/build-web.sh scripts/build-web.sh
@@ -10,7 +11,7 @@ RUN if [ -f controller/tools/fetch-assets.sh ]; then \
       && bash controller/tools/fetch-assets.sh; \
     fi
 RUN if [ -f scripts/build-web.sh ]; then npm ci && bash scripts/build-web.sh; fi
-RUN cd controller && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/controller ./cmd/controller
+RUN cd controller && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/controller ./cmd/controller
 RUN cd controller && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ttsd ./cmd/ttsd
 
 FROM debian:stable-slim

@@ -2,12 +2,14 @@ export function connect(onMessage, onStatus) {
   let delay = 1000;
   let retryTimer;
   let socket = null;
+  let connectedSince = 0;
 
   const schedule = () => {
     if (retryTimer !== undefined) {
       return;
     }
-    onStatus("reconnecting");
+    connectedSince = 0;
+    onStatus("reconnecting", connectedSince);
     retryTimer = window.setTimeout(() => {
       retryTimer = undefined;
       open();
@@ -16,12 +18,14 @@ export function connect(onMessage, onStatus) {
   };
 
   const open = () => {
-    onStatus(delay === 1000 ? "connecting" : "reconnecting");
+    connectedSince = 0;
+    onStatus(delay === 1000 ? "connecting" : "reconnecting", connectedSince);
     const scheme = location.protocol === "https:" ? "wss://" : "ws://";
     socket = new WebSocket(scheme + location.host + "/ws");
     socket.addEventListener("open", () => {
       delay = 1000;
-      onStatus("live");
+      connectedSince = Date.now();
+      onStatus("live", connectedSince);
     });
     socket.addEventListener("message", (event) => {
       try {
@@ -40,6 +44,9 @@ export function connect(onMessage, onStatus) {
   open();
 
   return {
+    get connectedSince() {
+      return connectedSince;
+    },
     send(value) {
       if (socket === null || socket.readyState !== WebSocket.OPEN) {
         return false;

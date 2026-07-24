@@ -37,6 +37,8 @@ import (
 	"github.com/mayanklahiri/virtualme/controller/internal/ws"
 )
 
+var version = "dev"
+
 func envInt(name string, fallback int) int {
 	if value, err := strconv.Atoi(os.Getenv(name)); err == nil && value > 0 {
 		return value
@@ -127,7 +129,16 @@ func newMuxWithActivity(cfg health.Config, hub *ws.Hub, desktopURL *url.URL, act
 	})
 	mux.HandleFunc("/ws", hub.HandleUpgrade)
 	mux.HandleFunc("/v1/audio/speech", speechHandler(client, activity))
-	mux.Handle("/desktop/", http.StripPrefix("/desktop/", httputil.NewSingleHostReverseProxy(desktopURL)))
+	desktopProxy := http.StripPrefix("/desktop/", httputil.NewSingleHostReverseProxy(desktopURL))
+	redirectDesktop := func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && (r.URL.Path == "/desktop" || r.URL.Path == "/desktop/") {
+			http.Redirect(w, r, "/desktop/vnc.html?autoconnect=1&resize=scale&path=desktop/websockify", http.StatusFound)
+			return
+		}
+		desktopProxy.ServeHTTP(w, r)
+	}
+	mux.HandleFunc("/desktop", redirectDesktop)
+	mux.HandleFunc("/desktop/", redirectDesktop)
 	staticFS, err := fs.Sub(assets.WebFS, "web/dist")
 	if err != nil {
 		panic(err)
@@ -434,7 +445,11 @@ func main() {
 	jigglerService.SetJobManager(jobManager)
 	jigglerService.SetActivity(activity)
 	gpuInfo := gpu.Detect()
-	collector := state.NewCollector(cfg, "/proc", metricsStore, hub.Broadcast, gpuInfo, jigglerService.Enabled)
+	addr := envOr("VM_HTTP_ADDR", ":8080")
+	collector := state.NewCollector(
+		cfg, "/proc", metricsStore, hub.Broadcast, gpuInfo, jigglerService.Enabled,
+		state.Runtime{Version: version, HTTPAddr: addr},
+	)
 	projectService := projects.New(
 		valkey.New(cfg.ValkeyAddr), jobManager, chatService, dataDir, hub.Broadcast,
 	)
@@ -607,10 +622,6 @@ func main() {
 		metricsStore.RunPersist(ctx)
 		close(persistDone)
 	}()
-	addr := os.Getenv("VM_HTTP_ADDR")
-	if addr == "" {
-		addr = ":8080"
-	}
 	log.Println("health: eight concurrent probes configured")
 	log.Println("websocket: state hub ready (chat + metrics + tts + mail + jobs + projects wired)")
 	log.Println("chat: queued llama-backed shared conversation ready")

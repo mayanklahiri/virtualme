@@ -38,6 +38,22 @@ func TestDesktopProxyStripsPrefix(t *testing.T) {
 	}
 }
 
+func TestDesktopRootRedirectsToClient(t *testing.T) {
+	desktopURL, _ := url.Parse("http://127.0.0.1:1")
+	handler := newMux(redConfig(t), ws.NewHub(), desktopURL)
+	for _, route := range []string{"/desktop", "/desktop/"} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, route, nil))
+		if response.Code != http.StatusFound {
+			t.Fatalf("GET %s status = %d", route, response.Code)
+		}
+		want := "/desktop/vnc.html?autoconnect=1&resize=scale&path=desktop/websockify"
+		if got := response.Header().Get("Location"); got != want {
+			t.Fatalf("GET %s location = %q, want %q", route, got, want)
+		}
+	}
+}
+
 func fakeTTSServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

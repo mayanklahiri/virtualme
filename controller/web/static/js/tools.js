@@ -124,7 +124,7 @@ export function initTools(send) {
       let control;
       if (property.type === "string" && Array.isArray(property.enum)) {
         const select = document.createElement("select");
-        if (!required.has(name)) select.append(new Option("—", ""));
+        if (!required.has(name)) select.append(new Option("…", ""));
         for (const value of property.enum) select.append(new Option(String(value), String(value)));
         control = select;
       } else if (property.type === "string" &&
