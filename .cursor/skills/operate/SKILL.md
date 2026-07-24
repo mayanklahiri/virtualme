@@ -17,7 +17,7 @@ prompts or model requests are sent to external providers.
 | `npx virtualme help` | Show usage and every command |
 | `npx virtualme version` | Print the package version |
 | `npx virtualme doctor` | Verify node/docker/daemon (+ git hooks in a checkout) |
-| `npx virtualme start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>]` | Run unprivileged with tmpfs `/run`+`/tmp`, port 8080, and the host data dir mounted rw; optionally force Chromium's sandbox fallback or pass NVIDIA GPU access |
+| `npx virtualme start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>] [--no-gpu]` | Run unprivileged with tmpfs `/run`+`/tmp`, port 8080, and the host data dir mounted rw; a detected host NVIDIA stack is auto-passed through (`--no-gpu` opts out, `--gpus <spec>` overrides); optionally force Chromium's sandbox fallback |
 | `npx virtualme status` | Container state + `/healthz` per-service report |
 | `npx virtualme logs [-f\|--follow]` | Show or follow container logs |
 | `npx virtualme stop` | Stop and remove the container (data dir survives) |
@@ -41,7 +41,7 @@ also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 - `http://localhost:8080/projects/<id>` — project task, runs, and scratch details
 - `http://localhost:8080/jobs` — queue timeline, machine activity, and details
 - `http://localhost:8080/tools` — agent definitions and queue-backed manual invocation
-- `http://localhost:8080/status` — service/GPU status, active time selectors, opt-in jiggler, and tiered metrics
+- `http://localhost:8080/status` — service/GPU status, active time selectors, default-on jiggler switch, and tiered metrics
 - `http://localhost:8080/chat` — shared local-model chat
 - `http://localhost:8080/speech` — streaming local text-to-speech
 - `http://localhost:8080/mail` — outbound-mail composer, queue, and DKIM status
@@ -71,10 +71,11 @@ reconnecting, or muted while connecting. The second line reports server uptime
 and the current browser-link duration. Reduced-motion mode freezes the hand and
 disables pulsing while preserving the state colors.
 
-Use `/jobs` to see what the machine is actually doing. Queue time flows from
-upcoming at the top through the single executing job to recently finished
-jobs; the activity list below is newest-first and records finer-grained LLM,
-tool, speech, and mail actions.
+Use `/jobs` to see what the machine is actually doing. The queue card groups
+rows into Running now (at most one; only that row pulses), Up next, and
+Recently finished, with short type-derived names and kind pills; the activity
+list below is newest-first and records finer-grained LLM, tool, speech, and
+mail actions.
 
 Use `/tools` to inspect every definition available to the local model and
 invoke it with a schema-generated form. Manual calls wait in the same
@@ -82,15 +83,18 @@ sequential queue and their results appear in Jobs activity. The page can run
 `bash` and browser-input tools; it has no additional authentication under the
 v1 trust model, so use it only on a trusted private network.
 
-The Jiggler switch on `/status` is off by default. When enabled it moves the
-virtual desktop cursor in occasional short, humanlike bursts, yields whenever
-an agent or queued job may act, and records each burst on `/jobs`. The setting
-persists across page reloads and container restarts in Valkey.
+The Jiggler switch on `/status` is on by default. It moves the virtual desktop
+cursor in short humanlike bursts every 8 to 27 seconds, yields only while the
+agent holds the input-actuation lock, and records each burst on `/jobs`.
+Switching it off persists across page reloads and container restarts in
+Valkey.
 
 The GPU card on `/status` always reports presence, vendor, model, and available
 parameters. A utilization/memory chart appears only when sampling is supported.
-Use `--gpus all` for NVIDIA. AMD/Intel `/dev/dri` passthrough is host-specific
-and must be configured directly with Docker; the CLI has no `--device` option.
+NVIDIA passthrough is automatic when `start` detects `nvidia-smi` or Docker's
+`nvidia` runtime; `--no-gpu` opts out. AMD/Intel `/dev/dri` passthrough is
+host-specific and must be configured directly with Docker; the CLI has no
+`--device` option.
 
 ## Browser-agent tasks
 
@@ -119,13 +123,15 @@ an obsolete project directory manually after inspecting it.
 
 Full screenshots and `steps.jsonl` (tool arguments, summaries, and capped
 observation text) are retained under `~/.virtualme/agent/<taskId>/` for the
-most recent 20 tasks. CPU-only vision steps can take tens of seconds. `--gpus all`
-passes NVIDIA GPU devices, lights up GPU observability, and marks
-`VM_LLAMA_GPU=1`, but v1 still ships the pinned CPU llama.cpp build.
+most recent 20 tasks. CPU-only vision steps can take tens of seconds. With
+NVIDIA passthrough (automatic, or explicit `--gpus <spec>`), `svc-llama`
+selects the baked Vulkan llama.cpp build with full GPU offload; otherwise the
+CPU build runs. Check `virtualme logs` for the `svc-llama: runtime` line.
 
 ## Local speech
 
-Use `/speech` to synthesize with the baked Lessac or Ryan en-US voice. The seed
+Use `/speech` to synthesize with the baked Lessac (en-US) or Alba (en-GB)
+voice. The seed
 buttons fill the editor; Clear resets it. Completed console, chat, and API
 syntheses appear in the global Valkey-backed History list and can be replayed.
 Playback starts after the first sentence while later sentences generate; Stop
@@ -173,9 +179,9 @@ controller-memory-only. Keep the private key mode at 0600.
 9. Browser sandbox: namespace sandboxing is automatic when supported; use `--no-browser-sandbox` to force the warning-suppressed fallback.
 10. Data location: all persistent state is under `~/.virtualme/`; see `specs/007-persistence-locality.md` §1a plus its amendments.
 11. Agent artifacts: inspect `~/.virtualme/agent/<taskId>/steps.jsonl` and `step-*.jpg`; Stop cancels the current task.
-12. Speech: check the `tts` entry in `/healthz`; `ttsd` listens only on container loopback port 8082. Its startup log lists the found Lessac/Ryan voice directories; cache files are under `~/.virtualme/tts-cache/`.
+12. Speech: check the `tts` entry in `/healthz`; `ttsd` listens only on container loopback port 8082. Its startup log lists the found Lessac/Alba voice directories; cache files are under `~/.virtualme/tts-cache/`.
 13. Mail not arriving: check the `mail` health entry, queue row's last error and next-flush countdown, and `~/.virtualme/mail/flush.log`; confirm relay credentials/port or direct-path outbound port 25, publish the displayed DKIM TXT record and SPF, and verify sending-IP PTR/reputation. Residential/dynamic IPs should use a smarthost.
 14. Job queue: `queue-peek` on `/ws` returns upcoming, running, and finished jobs; durable queue keys are in the Valkey AOF under `~/.virtualme/valkey/`.
 15. Projects: records and run summaries are in the Valkey AOF; scratch files are under `~/.virtualme/projects/<id>/` and survive project deletion.
 16. Activity ledger: `/jobs` replays the newest 100 entries from the bounded `virtualme:activity` Valkey list; queue rows are separate envelope state.
-17. GPU absent: this is normal. NVIDIA requires `--gpus all`; AMD/Intel require host-specific `/dev/dri` device passthrough. GPU absence never changes `/healthz`.
+17. GPU absent: this is normal. NVIDIA is auto-passed through when detected (or use `--gpus <spec>`); if `docker run` fails on a host without the NVIDIA Container Toolkit, restart with `--no-gpu`. AMD/Intel require host-specific `/dev/dri` device passthrough. GPU absence never changes `/healthz`.

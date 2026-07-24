@@ -57,7 +57,7 @@ The first start loads a ~3 GB model; allow a few minutes for `/healthz` to becom
 | `virtualme help` | Show usage and every command |
 | `virtualme version` | Print the package version |
 | `virtualme doctor` | Check Node, Docker, daemon access, hooks, CPU, and RAM |
-| `virtualme start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>]` | Run unprivileged with port 8080 and the data dir mounted rw; optionally force Chromium's sandbox fallback or pass NVIDIA GPU access with observability |
+| `virtualme start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>] [--no-gpu]` | Run unprivileged with port 8080 and the data dir mounted rw; a detected host NVIDIA stack is passed through automatically (`--no-gpu` opts out, explicit `--gpus <spec>` overrides); optionally force Chromium's sandbox fallback |
 | `virtualme stop` | Stop and remove the container; the data directory survives |
 | `virtualme status` | Show container state and service health |
 | `virtualme logs [-f\|--follow]` | Show or follow container logs |
@@ -111,7 +111,7 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/projects/<id>` | Project task, schedule, status, run history, and scratch-directory details |
 | `/jobs` | Queue timeline, fine-grained machine activity, and type-specific details |
 | `/tools` | Authoritative agent-tool list, schema-generated forms, and queue-backed manual invocation |
-| `/status` | Service health, system/GPU meters, active time selectors, opt-in jiggler, and persistent per-core/process/GPU metrics |
+| `/status` | Service health, system/GPU meters, active time selectors, the default-on jiggler switch, and persistent per-process/GPU metrics |
 | `/chat` | Markdown chat, generation controls, LLM progress, and conversation totals |
 | `/speech` | Two-voice streaming local speech with seeds, persistent history/replay, and disk cache |
 | `/mail` | Outbound-mail composer, message-level queue contents/errors/next-flush timing, activity, and DKIM DNS record |
@@ -130,17 +130,20 @@ reconnecting, and muted while connecting. The text below reports server uptime
 and the current browser connection duration. Reduced-motion mode freezes the
 hand and disables pulsing without removing the color-coded state.
 
-The Status-page Jiggler switch is off by default. When enabled, the controller
-moves the virtual desktop's OS cursor in occasional short humanlike bursts,
-yields to queued jobs and agent actuation, and records each burst in Jobs
-activity. The Valkey-backed setting survives reloads and container restarts.
+The Status-page Jiggler switch is on by default. The controller moves the
+virtual desktop's OS cursor in short humanlike bursts every 8 to 27 seconds,
+yields only while the agent holds the input-actuation lock, and records each
+burst in Jobs activity. Switching it off persists in Valkey across reloads and
+container restarts.
 
 GPU detection is best-effort and multi-vendor. The Status card reports the
 first visible NVIDIA, AMD, or Intel GPU and available model/VRAM/driver
 parameters. NVIDIA and supported AMD sysfs devices also expose utilization and
 memory history; presence-only devices do not show an empty chart. GPU absence
-is normal and never affects health. Use `--gpus all` for NVIDIA. AMD/Intel
-`/dev/dri` passthrough is host-specific and outside the CLI's `--gpus` option.
+is normal and never affects health. NVIDIA passthrough is automatic when
+`start` detects `nvidia-smi` or Docker's `nvidia` runtime; use `--no-gpu` to
+opt out. AMD/Intel `/dev/dri` passthrough is host-specific and outside the
+CLI's `--gpus` option.
 
 Closing Chromium in `/desktop-view` automatically brings back one blank tab. Chromium uses its namespace sandbox when the host permits unprivileged user namespaces; otherwise it falls back to `--no-sandbox` with the warning infobar suppressed. Use `--no-browser-sandbox` to force that fallback when diagnosing host compatibility.
 
@@ -184,9 +187,10 @@ directory and its operator data.
 
 ### Jobs
 
-Use `/jobs` to see what the machine is actually doing. The queue timeline reads
-top-to-bottom from upcoming jobs through the single executing job to recently
-finished jobs. The newest-first activity ledger records each LLM generation,
+Use `/jobs` to see what the machine is actually doing. The queue card groups
+rows into Running now (at most one; only that row pulses), Up next, and
+Recently finished, each row led by a short type-derived name and kind pill.
+The newest-first activity ledger records each LLM generation,
 agent tool call, speech synthesis, and mail submission; selecting a row opens
 its payload, result, timing, and type-specific details. Jiggler bursts also
 appear as `jiggle` tool events. The bounded ledger
@@ -241,9 +245,10 @@ by Gmail, so use a reputable smarthost for reliable delivery.
 
 Task screenshots and JSONL step logs are retained under
 `~/.virtualme/agent/<taskId>/` for the most recent 20 tasks. CPU-only vision can
-take tens of seconds per step. `--gpus all` forwards NVIDIA GPU access, enables
-the GPU status/history display, and sets `VM_LLAMA_GPU=1`, but v1's pinned
-llama.cpp runtime is still the CPU build.
+take tens of seconds per step. With NVIDIA passthrough (automatic detection,
+explicit `--gpus <spec>`, or `VM_LLAMA_GPU=1`), the container's pinned Vulkan
+llama.cpp build runs the model fully offloaded to the GPU; without it, the
+CPU build is used.
 
 ### AI skills
 
@@ -335,7 +340,7 @@ Use a Raspberry Pi 5 or Raspberry Pi 4 with 8 GB RAM at minimum. The RAM floor i
 
 ## Architecture
 
-The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Valkey, vision-enabled llama.cpp with Gemma 4 E2B, local sherpa-onnx/Piper TTS, a dma outbound-mail queue, and a Go controller on `:8080`, running unprivileged (host uid/gid) with one rw data mount. The controller concurrently probes service health, detects and samples visible NVIDIA/AMD/Intel GPUs, samples and persists metrics, records machine activity, composes and DKIM-signs mail, schedules and sequentially executes reliable Valkey jobs and recurring projects, streams shared chat and speech, produces opt-in ambient OS-level mouse motion, and runs a bounded browser-agent loop combining screenshots, compact DOM/read-only CDP observations, OS-level `xdotool` actions, bash, and audible responses. It proxies noVNC and embeds the same-origin minified multi-page SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.
+The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Valkey, vision-enabled llama.cpp with Gemma 4 E2B (baked CPU and Vulkan GPU runtimes; the service picks one at startup), local sherpa-onnx/Piper TTS, a dma outbound-mail queue, and a Go controller on `:8080`, running unprivileged (host uid/gid) with one rw data mount. The controller concurrently probes service health, detects and samples visible NVIDIA/AMD/Intel GPUs, samples and persists metrics, records machine activity, composes and DKIM-signs mail, schedules and sequentially executes reliable Valkey jobs and recurring projects, streams shared chat and speech, produces default-on ambient OS-level mouse motion, and runs a bounded browser-agent loop combining screenshots, compact DOM/read-only CDP observations, OS-level `xdotool` actions, bash, and audible responses. It proxies noVNC and embeds the same-origin minified multi-page SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.
 
 The model's system prompts are plain text in
 [controller/prompts/](controller/prompts/) (spec 022).

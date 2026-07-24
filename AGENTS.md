@@ -26,7 +26,7 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `.cursor/skills/` | Shared AI operating and development procedures |
 | `specs/` | Numbered, authoritative implementation specs |
 | `docker/` | Container image and supervised services (spec 002) |
-| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached multi-voice local TTS, outbound mail, and multi-page console (specs 002–024) |
+| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached multi-voice local TTS, outbound mail, and multi-page console (specs 002–025) |
 | `controller/prompts/` | Embedded plain-text agent and fallback-chat system prompts |
 
 ## Commands
@@ -80,13 +80,18 @@ shows browser-reachable and container-network addresses plus the controller
 build version, and uses committed outlined-path wordmark/monogram assets. Its
 connection watch combines server uptime, current websocket duration, and
 motion/reduced-motion-aware live state.
-The opt-in jiggler produces bursty humanlike mouse trajectories through
-`xdotool`, yields to queued work and agent actuation, persists its Status-page
-switch in Valkey, and records each completed burst in the activity ledger.
+The default-on jiggler produces bursty humanlike mouse trajectories through
+`xdotool` every 8 to 27 seconds, yields only to the agent's actuation lock,
+persists its Status-page switch in Valkey, and records each completed burst in
+the activity ledger.
 The controller detects the first visible NVIDIA, AMD, or Intel GPU once at
 startup without affecting health. It includes static GPU identity in state and
 persists utilization/memory metrics when NVIDIA or AMD sysfs sampling is
-available; the console hides the GPU chart for presence-only devices.
+available; the console hides the GPU chart for presence-only devices. The CLI
+auto-passes a detected host NVIDIA stack (`--gpus all` plus `VM_LLAMA_GPU=1`
+and `NVIDIA_DRIVER_CAPABILITIES=all`; `--no-gpu` opts out), and `svc-llama`
+selects the baked Vulkan llama.cpp runtime with full offload when a GPU device
+is injected, else the CPU build.
 Status charts share a persistent lookback, bounded boundary-aligned locale
 ticks, responsive title/control headers, timestamp-true hover selection, and
 the theme-defined `--p1` through `--p8` series ramp.
