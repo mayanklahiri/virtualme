@@ -221,6 +221,157 @@ func TestSubmitAndQueueAndImage(t *testing.T) {
 	}
 }
 
+func TestQueueCapturedDMAFixtures(t *testing.T) {
+	now := time.Unix(1800000000, 0)
+	queue, err := Queue("testdata", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := make(map[string]QueueMessage)
+	for _, message := range queue {
+		byID[message.ID] = message
+	}
+	if len(queue) != 4 {
+		t.Fatalf("captured queue length = %d, want 4", len(queue))
+	}
+	captured := byID["5.63e58bcd0ef0"]
+	if captured.To != "nobody@example.com" || captured.From != "Sender <sender@example.com>" ||
+		captured.Subject != "Captured dma fixture" || captured.Preview != "Captured plain body with ünicode.\r\n" {
+		t.Fatalf("captured fixture = %#v", captured)
+	}
+	if captured.SubmittedTS != time.Unix(1700000000, 0).UnixMilli() {
+		t.Fatalf("submittedTs = %d", captured.SubmittedTS)
+	}
+	multipart := byID["multipart"]
+	if multipart.To != "first@example.com" ||
+		!strings.Contains(multipart.Preview, "First plain part with ünicode and = signs.") ||
+		len(multipart.Attachments) != 1 || multipart.Attachments[0].MIMEType != "application/octet-stream" ||
+		multipart.Attachments[0].Size != 6 {
+		t.Fatalf("multipart fixture = %#v", multipart)
+	}
+}
+
+func TestQueueDefensiveParsingPreviewAndFallbacks(t *testing.T) {
+	spool := t.TempDir()
+	now := time.Unix(1700001000, 0)
+	envelope := "unrecognized version\nSender: sender@example.test\nRecipient: first@example.test\n" +
+		"Recipient: second@example.test\nUnknown: ignored\n"
+	body := strings.Repeat("界", 510)
+	message := "From: Fallback <header@example.test>\r\nTo: ignored@example.test\r\n" +
+		"Subject: =?UTF-8?Q?fallback_=C3=BC?=\r\nContent-Type: text/plain\r\n\r\n" + body
+	for name, content := range map[string]string{"Qdefensive": envelope, "Mdefensive": message} {
+		path := filepath.Join(spool, name)
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_ = os.Chtimes(path, now.Add(-20*time.Second), now.Add(-20*time.Second))
+	}
+	if err := os.WriteFile(filepath.Join(spool, "Qmalformed"), []byte{0xff, 0, '\n'}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(spool, "Morphan"), []byte("Subject: not queued\n\nbody"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	queue, err := Queue(spool, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queue) != 2 {
+		t.Fatalf("queue = %#v", queue)
+	}
+	item := queue[0]
+	if item.ID != "defensive" || item.To != "first@example.test (+1 more)" ||
+		len(item.Recipients) != 2 || item.Subject != "fallback ü" ||
+		len([]rune(item.Preview)) != previewRunes || item.SubmittedTS != now.Add(-20*time.Second).UnixMilli() {
+		t.Fatalf("defensive item = %#v", item)
+	}
+}
+
+func TestQueueErrorsAndRetryMath(t *testing.T) {
+	spool := t.TempDir()
+	if err := os.WriteFile(filepath.Join(spool, "Qabc"),
+		[]byte("Sender: a@example.com\nRecipient: b@example.com\nError: envelope diagnostic\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(spool, "Mabc"), []byte("Subject: test\n\nbody"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(t.TempDir(), "flush.log")
+	if err := os.WriteFile(logPath, []byte(
+		"dma xabc: wrong message\ndma abc: first failure\ndma abc-extra: wrong message\n"+
+			"dma abc: connection refused\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1060, 0)
+	queue, err := queueWithState(spool, logPath, now, 42)
+	if err != nil || len(queue) != 1 || queue[0].LastError != "envelope diagnostic" ||
+		queue[0].NextRetrySec != 42 {
+		t.Fatalf("queue = %#v, %v", queue, err)
+	}
+	if err := os.WriteFile(filepath.Join(spool, "Qabc"),
+		[]byte("Sender: a@example.com\nRecipient: b@example.com\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	queue, err = queueWithState(spool, logPath, now, 42)
+	if err != nil || queue[0].LastError != "dma abc: connection refused" {
+		t.Fatalf("log fallback queue = %#v, %v", queue, err)
+	}
+	if got := NextRetrySec(time.Unix(1000, 0), 60, time.Unix(1018, 0)); got != 42 {
+		t.Fatalf("NextRetrySec = %d", got)
+	}
+	if got := NextRetrySec(time.Unix(1000, 0), 60, time.Unix(1100, 0)); got != 0 {
+		t.Fatalf("expired NextRetrySec = %d", got)
+	}
+}
+
+func TestServiceTimelineDiffsFlushSnapshots(t *testing.T) {
+	dataDir := t.TempDir()
+	spool := filepath.Join(dataDir, "mail", "spool")
+	if err := os.MkdirAll(spool, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1000, 0)
+	service, err := NewService(Config{
+		DataDir: dataDir, Mailname: "example.test", From: "sender@example.test",
+		Now: func() time.Time { return now }, FlushEverySec: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFlush := func(seconds int64) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dataDir, "mail", "last-flush"),
+			[]byte(fmt.Sprint(seconds)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFlush(1000)
+	service.Status()
+	for name, content := range map[string]string{
+		"Qqueued": "Sender: sender@example.test\nRecipient: user@example.test\n",
+		"Mqueued": "Subject: queued\n\nbody",
+	} {
+		if err := os.WriteFile(filepath.Join(spool, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	service.Status()
+	if err := os.Remove(filepath.Join(spool, "Qqueued")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(spool, "Mqueued")); err != nil {
+		t.Fatal(err)
+	}
+	now = time.Unix(1060, 0)
+	writeFlush(1060)
+	status := service.Status()
+	if len(status.Timeline) != 2 ||
+		!strings.Contains(status.Timeline[0].Text, "left queue") ||
+		!strings.Contains(status.Timeline[1].Text, "Flush ran (1 queued before, 0 after)") {
+		t.Fatalf("timeline = %#v", status.Timeline)
+	}
+}
+
 func TestServiceFrames(t *testing.T) {
 	dataDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dataDir, "mail", "spool"), 0o700); err != nil {
@@ -255,7 +406,10 @@ func TestServiceFrames(t *testing.T) {
 		t.Fatal("status request not handled")
 	}
 	status := string(<-replies)
-	if !strings.Contains(status, `"mode":"smarthost"`) || !strings.Contains(status, `"lastResult"`) {
+	if !strings.Contains(status, `"mode":"smarthost"`) ||
+		!strings.Contains(status, `"flushEverySec":60`) ||
+		!strings.Contains(status, `"timeline":[{"ts":1700000000000,"text":"Submitted message`) ||
+		!strings.Contains(status, `"lastResult"`) {
 		t.Fatalf("status=%s", status)
 	}
 }

@@ -25,9 +25,15 @@ const server = createServer((socket) => {
       buffer = buffer.slice(end + 2);
       if (data) {
         if (line === ".") {
-          writeFileSync(output, message);
           data = false;
-          socket.write("250 queued\r\n");
+          const captured = message;
+          const accept = () => {
+            writeFileSync(output, captured);
+            socket.write("250 queued\r\n");
+          };
+          const delay = Number(process.env.MAIL_SINK_ACCEPT_DELAY_MS ?? 0);
+          if (delay > 0) setTimeout(accept, delay);
+          else accept();
         } else {
           message += `${line.startsWith("..") ? line.slice(1) : line}\r\n`;
         }

@@ -1,0 +1,32 @@
+Received: from virtualme (uid 1000)
+	(envelope-from sender@example.com)
+	id 4
+	by example.test (DragonFly Mail Agent v0.13);
+	Fri, 24 Jul 2026 06:37:17 +0000
+From: Sender <sender@example.com>
+To: first@example.com, second@example.com
+Subject: Multipart captured fixture
+Date: Tue, 14 Nov 2023 22:13:20 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary=outer
+
+--outer
+Content-Type: multipart/alternative; boundary=inner
+
+--inner
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+First plain part with =C3=BCnicode and =3D signs.
+--inner
+Content-Type: text/html; charset=utf-8
+
+<p>HTML ignored</p>
+--inner--
+--outer
+Content-Type: application/octet-stream; name=data.bin
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename=data.bin
+
+AQIDBAUG
+--outer--

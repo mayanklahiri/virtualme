@@ -21,6 +21,7 @@ type Config struct {
 	DataDir, SendmailPath     string
 	Mailname, From, Smarthost string
 	DKIMDomain, DKIMSelector  string
+	FlushEverySec             int64
 	Runner                    Runner
 	Now                       func() time.Time
 	Broadcast                 func([]byte)
@@ -46,22 +47,38 @@ type LastResult struct {
 	Error string `json:"error,omitempty"`
 }
 
+// TimelineEvent records an in-memory mail queue lifecycle event.
+type TimelineEvent struct {
+	TS   int64  `json:"ts"`
+	Text string `json:"text"`
+}
+
 // Status is the websocket-visible mail state.
 type Status struct {
-	Type       string       `json:"type"`
-	Mode       string       `json:"mode"`
-	From       string       `json:"from"`
-	Mailname   string       `json:"mailname"`
-	DKIM       DKIMStatus   `json:"dkim"`
-	Queue      []QueueEntry `json:"queue"`
-	LastResult *LastResult  `json:"lastResult"`
+	Type          string          `json:"type"`
+	Mode          string          `json:"mode"`
+	From          string          `json:"from"`
+	Mailname      string          `json:"mailname"`
+	DKIM          DKIMStatus      `json:"dkim"`
+	Queue         []QueueMessage  `json:"queue"`
+	FlushEverySec int64           `json:"flushEverySec"`
+	NextRetrySec  int64           `json:"nextRetrySec"`
+	Timeline      []TimelineEvent `json:"timeline"`
+	LastResult    *LastResult     `json:"lastResult"`
 }
 
 // Service handles mail websocket requests.
 type Service struct {
-	config Config
-	mu     sync.Mutex
-	last   *LastResult
+	config    Config
+	refreshMu sync.Mutex
+	mu        sync.Mutex
+	last      *LastResult
+	queue     []QueueMessage
+	timeline  []TimelineEvent
+	previous  map[string]QueueMessage
+	lastFlush time.Time
+	nextRetry int64
+	ready     bool
 }
 
 // NewService validates config and initializes DKIM state.
@@ -83,6 +100,9 @@ func NewService(config Config) (*Service, error) {
 	}
 	if config.DKIMSelector == "" {
 		config.DKIMSelector = "virtualme"
+	}
+	if config.FlushEverySec <= 0 {
+		config.FlushEverySec = 60
 	}
 	if config.DKIMDomain != "" && config.Key == nil {
 		key, err := EnsureKey(KeyPath(config.DataDir))
@@ -166,10 +186,29 @@ func (service *Service) send(id, recipient, subject, body string, includeImage b
 	}
 	service.mu.Lock()
 	service.last = last
+	if err == nil {
+		service.addTimelineLocked(service.config.Now(), "Submitted message to "+recipient+".")
+	}
 	service.mu.Unlock()
 	encoded, _ := json.Marshal(result)
 	_ = reply(encoded)
 	service.broadcastStatus()
+}
+
+// Start broadcasts refreshed queue state every 30 seconds while clients exist.
+func (service *Service) Start(ctx context.Context, clientsConnected func() bool) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if clientsConnected == nil || clientsConnected() {
+				service.broadcastStatus()
+			}
+		}
+	}
 }
 
 func recipientDomain(address *mail.Address) string {
@@ -196,6 +235,8 @@ func paragraphs(body string) string {
 
 // Status returns the current status.
 func (service *Service) Status() Status {
+	now := service.config.Now()
+	service.refresh(now)
 	mode := "direct"
 	if service.config.Smarthost != "" {
 		mode = "smarthost"
@@ -207,15 +248,20 @@ func (service *Service) Status() Status {
 	} else {
 		dkim.Note = "DKIM disabled; direct delivery needs SPF or DKIM alignment"
 	}
-	queue, err := Queue(filepath.Join(service.config.DataDir, "mail", "spool"), service.config.Now())
-	if err != nil {
-		queue = []QueueEntry{}
-	}
 	service.mu.Lock()
 	last := service.last
+	queue := append([]QueueMessage(nil), service.queue...)
+	nextRetry := service.nextRetry
+	timeline := make([]TimelineEvent, len(service.timeline))
+	for index := range service.timeline {
+		timeline[index] = service.timeline[len(service.timeline)-1-index]
+	}
 	service.mu.Unlock()
 	return Status{Type: "mail-status", Mode: mode, From: service.config.From,
-		Mailname: service.config.Mailname, DKIM: dkim, Queue: queue, LastResult: last}
+		Mailname: service.config.Mailname, DKIM: dkim, Queue: queue,
+		FlushEverySec: service.config.FlushEverySec,
+		NextRetrySec:  nextRetry,
+		Timeline:      timeline, LastResult: last}
 }
 
 // StatusMessage returns a JSON status frame.
@@ -228,4 +274,59 @@ func (service *Service) broadcastStatus() {
 	if service.config.Broadcast != nil {
 		service.config.Broadcast(service.StatusMessage())
 	}
+}
+
+func (service *Service) refresh(now time.Time) {
+	service.refreshMu.Lock()
+	defer service.refreshMu.Unlock()
+	mailDir := filepath.Join(service.config.DataDir, "mail")
+	lastFlush := readLastFlush(filepath.Join(mailDir, "last-flush"))
+	nextRetry := NextRetrySec(lastFlush, service.config.FlushEverySec, now)
+	queue, err := queueWithState(filepath.Join(mailDir, "spool"), filepath.Join(mailDir, "flush.log"), now, nextRetry)
+
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	if err != nil {
+		service.nextRetry = nextRetry
+		for index := range service.queue {
+			service.queue[index].NextRetrySec = nextRetry
+		}
+		return
+	}
+	current := queueMap(queue)
+	if !service.ready {
+		service.ready = true
+		service.lastFlush = lastFlush
+	} else if !lastFlush.IsZero() && lastFlush.After(service.lastFlush) {
+		ts := lastFlush
+		service.addTimelineLocked(ts, fmt.Sprintf("Flush ran (%d queued before, %d after).", len(service.previous), len(current)))
+		service.lastFlush = lastFlush
+	}
+	for id, previous := range service.previous {
+		if _, exists := current[id]; !exists {
+			label := previous.To
+			if label == "" {
+				label = id
+			}
+			service.addTimelineLocked(now, "Message to "+label+" left queue (delivered or bounced).")
+		}
+	}
+	service.previous = current
+	service.queue = queue
+	service.nextRetry = nextRetry
+}
+
+func (service *Service) addTimelineLocked(ts time.Time, text string) {
+	service.timeline = append(service.timeline, TimelineEvent{TS: ts.UnixMilli(), Text: text})
+	if len(service.timeline) > 20 {
+		service.timeline = append([]TimelineEvent(nil), service.timeline[len(service.timeline)-20:]...)
+	}
+}
+
+func queueMap(queue []QueueMessage) map[string]QueueMessage {
+	result := make(map[string]QueueMessage, len(queue))
+	for _, message := range queue {
+		result[message.ID] = message
+	}
+	return result
 }

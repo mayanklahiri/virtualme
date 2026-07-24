@@ -134,7 +134,9 @@ test("start forwards configured outbound-mail environment", () => {
   const parent = mkdtempSync(join(tmpdir(), "virtualme-test-"));
   const dataDir = join(parent, "data");
   const previous = process.env.VM_MAIL_SMARTHOST;
+  const previousFlush = process.env.VM_MAIL_FLUSH_SEC;
   process.env.VM_MAIL_SMARTHOST = "relay.example";
+  process.env.VM_MAIL_FLUSH_SEC = "15";
   try {
     /** @type {string[] | undefined} */
     let invocation;
@@ -145,12 +147,15 @@ test("start forwards configured outbound-mail environment", () => {
     }, probes);
     assert.equal(code, 0);
     assert.ok(invocation);
-    assert.deepEqual(invocation.slice(-3), [
-      "-e", "VM_MAIL_SMARTHOST=relay.example", "mayanklahiri/virtualme:latest",
+    assert.deepEqual(invocation.slice(-5), [
+      "-e", "VM_MAIL_SMARTHOST=relay.example",
+      "-e", "VM_MAIL_FLUSH_SEC=15", "mayanklahiri/virtualme:latest",
     ]);
   } finally {
     if (previous === undefined) delete process.env.VM_MAIL_SMARTHOST;
     else process.env.VM_MAIL_SMARTHOST = previous;
+    if (previousFlush === undefined) delete process.env.VM_MAIL_FLUSH_SEC;
+    else process.env.VM_MAIL_FLUSH_SEC = previousFlush;
     rmSync(parent, { recursive: true, force: true });
   }
 });

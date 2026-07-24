@@ -220,3 +220,13 @@ Required edits (code/lists, not spec files):
 Run the `/master-update` skill procedure. Expected changes: README — outbound-mail feature bullet, `VM_MAIL_*` env table, deliverability caveat (SPF/DKIM/PTR, smarthost recommendation); `operate` skill — configuring smarthost/DKIM, publishing the TXT record, reading the queue, "why is my mail not arriving" triage; `develop` skill — layer 015, `svc-mailq`, `internal/mail`, ws `mail-*` frames, spool layout; `AGENTS.md` — layout/architecture mention.
 
 Commit as `spec 010: outbound mail — dma MTA, DKIM in controller, console Mail tab`.
+
+## Amendments
+
+### 2026-07-24 — Queue transparency supersession
+
+Spec 023 supersedes §3's queue-runner body, §4c's size/age-only queue model,
+and §5's corresponding `mail-status` shape. The runner now persists a bounded
+delivery log and atomic last-flush marker; the controller defensively reads
+dma envelope/message pairs and exposes queue metadata, next-flush timing, and
+an in-memory lifecycle timeline.

@@ -88,7 +88,7 @@ requires a new spec.
 | `controller/internal/actuation` | Global lock serializing OS-level mouse/keyboard input |
 | `controller/internal/jiggler` | Opt-in humanlike mouse trajectories, Valkey state, and burst lifecycle |
 | `controller/cmd/ttsd`, `controller/internal/tts` | Whitelisted Lessac/Ryan synthesis, sentence WAV cache, Valkey speech log, NDJSON client, and streaming helpers |
-| `controller/internal/mail` | Stdlib MIME/CID composition, DKIM signing, dma submission, and spool status |
+| `controller/internal/mail` | Stdlib MIME/CID composition, DKIM signing, dma submission, and defensive spool transparency |
 | `controller/prompts` | Embedded plain-text agent and fallback-chat system prompts |
 | `controller/web/static` | Hand-written multi-page SPA, themes, charts, markdown, agent hooks |
 | `controller/web/static/js/jobs.js` | Queue timeline, live activity, and type-specific job details |
@@ -118,8 +118,12 @@ bounded `virtualme:speech:log` history. The voice whitelist is
 `internal/tts.Voices`; sentence WAVs are cached under
 `$VM_DATA_DIR/tts-cache/`.
 It maps `mail-send`/`mail-status-req` requests to `mail-result`/`mail-status`
-frames. Persistent dma configuration, queue files, and the DKIM key live under
-`$VM_DATA_DIR/mail/`; `svc-mailq` retries deferred messages.
+frames. `internal/mail` defensively parses dma `Q*` envelopes and RFC 5322
+`M*` messages; captured dma 0.13 plain and multipart/quoted-printable pairs in
+`internal/mail/testdata/` lock the real spool format. Persistent dma
+configuration, queue files, bounded `flush.log`, `last-flush`, and the DKIM key
+live under `$VM_DATA_DIR/mail/`; `svc-mailq` tees delivery errors, bounds the
+log to 500 lines, writes the flush marker, and retries deferred messages.
 It maps `job-push`/`queue-peek` to `job-pushed`/`queue-state`; all LLM work
 runs through the single `internal/jobs` worker, and disconnecting an initiating
 websocket cancels that connection's work.

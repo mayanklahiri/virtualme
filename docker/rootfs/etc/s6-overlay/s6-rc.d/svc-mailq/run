@@ -1,7 +1,14 @@
 #!/command/with-contenv bash
 # dma submits immediately; retry deferred messages forever.
 set -euo pipefail
+umask 077
+mail_dir="$VM_DATA_DIR/mail"
+log="$mail_dir/flush.log"
 while :; do
-  /usr/sbin/dma -q || true
+  { /usr/sbin/dma -q 2>&1 || true; } | tee -a "$log"
+  tail -n 500 "$log" > "$log.tmp"
+  mv "$log.tmp" "$log"
+  date +%s > "$mail_dir/last-flush.tmp"
+  mv "$mail_dir/last-flush.tmp" "$mail_dir/last-flush"
   sleep "${VM_MAIL_FLUSH_SEC:-60}"
 done

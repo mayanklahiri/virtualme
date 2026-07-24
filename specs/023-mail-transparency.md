@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft |
+| Status | Executed (2026-07-24) |
 | Depends on | `specs/010-outbound-mail.md` (dma queue, controller mail service, Mail tab) |
 | Produces | Per-message queue insight on the Mail tab: what a queued message is (recipient, subject, size, contents preview), why it is still queued (last delivery error), when it will be retried (countdown derived from the flush cadence), and a "what happened" timeline for the last send; clarified compose affordances flagged by the live UI inspection |
 | Followed by | Future specs |
@@ -69,10 +69,30 @@ No new message types: everything rides the existing `mail-status` (extended shap
 
 ## 7. Acceptance checklist
 
-- [ ] `npm run check` green.
-- [ ] A queued unroutable message shows: recipient, subject, submitted time, contents preview, a non-empty last error, and a retry countdown that resets each flush.
-- [ ] Age renders humanized (`8.6 h`), never raw seconds.
-- [ ] `Last send` and the queue are visually and semantically separate; the contradiction from the live inspection cannot reproduce.
-- [ ] Deliverability aside wraps fully at 1600 px and 375 px.
-- [ ] Queue updates within ~30 s of `svc-mailq` delivering a message with no user interaction.
-- [ ] e2e mail probe passes; spool-parser fixtures cover multipart + QP.
+- [x] `npm run check` green.
+- [x] A queued unroutable message shows: recipient, subject, submitted time, contents preview, a non-empty last error, and a retry countdown that resets each flush.
+- [x] Age renders humanized (`8.6 h`), never raw seconds.
+- [x] `Last send` and the queue are visually and semantically separate; the contradiction from the live inspection cannot reproduce.
+- [x] Deliverability aside wraps fully at 1600 px and 375 px.
+- [x] Queue updates within ~30 s of `svc-mailq` delivering a message with no user interaction.
+- [x] e2e mail probe passes; spool-parser fixtures cover multipart + QP.
+
+## Amendments
+
+### 2026-07-24 — Execution details
+
+- Debian dma 0.13 creates one `Q`/`M` pair per envelope recipient. Captured
+  `Q` files contain `ID`, `Sender`, and one `Recipient`; they carry no
+  diagnostic field. The matching `M` file contains the complete RFC 5322
+  message and may be duplicated across recipient-specific pairs.
+- dma can leave a deferred message queued without emitting a diagnostic.
+  The UI therefore preserves the specified honest
+  `no delivery attempt recorded yet` fallback; it does not manufacture an
+  error. When dma emits an ID-bearing line, the newest exact-ID log match is
+  shown, while an envelope diagnostic remains preferred.
+- Queue snapshots require the authoritative `Q` half and tolerate pair
+  removal during a concurrent dma flush. Message reads, envelope scans, and
+  flush-log scans are bounded. The last-flush marker is replaced atomically.
+- The SMTP e2e sink delays acceptance briefly so the probe deterministically
+  observes enriched transient spool state before asserting the inferred
+  `left queue` event.

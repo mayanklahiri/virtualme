@@ -51,13 +51,15 @@ echo "e2e: [1/19] CLI build (tags :dev and the start tag)"
 
 ./cli.sh stop >/dev/null 2>&1 || true
 echo "e2e: [2/19] starting SMTP sink and CLI on fresh data dir ${DATA_DIR}"
-MAIL_SINK_HOST=0.0.0.0 node test/mail-sink.mjs "$MAIL_CAPTURE" >/tmp/virtualme-mail-sink.log 2>&1 &
+MAIL_SINK_HOST=0.0.0.0 MAIL_SINK_ACCEPT_DELAY_MS=1500 \
+  node test/mail-sink.mjs "$MAIL_CAPTURE" >/tmp/virtualme-mail-sink.log 2>&1 &
 MAIL_SINK_PID=$!
 sleep 1
 kill -0 "$MAIL_SINK_PID" 2>/dev/null || fail "mail sink did not start"
 export VM_MAIL_SMARTHOST=vmhost
 export VM_MAIL_SMARTHOST_PORT=2525
 export VM_MAIL_DKIM_DOMAIN=example.test
+export VM_MAIL_FLUSH_SEC=2
 start_vm >/dev/null || fail "cli start"
 
 echo "e2e: [3/19] waiting for all-green /healthz (timeout ${TIMEOUT}s)"

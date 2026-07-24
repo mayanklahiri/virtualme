@@ -198,3 +198,10 @@ reserves the persistence lane without adding agent runtime behavior.
 |---|---|---|---|
 | `virtualme:speech:log` bounded speech history | `$VM_DATA_DIR/valkey/` (AOF) | `internal/tts.Log` via `svc-valkey` | 020 |
 | Synthesized-audio cache | `$VM_DATA_DIR/tts-cache/` | `ttsd`, exact sentence/voice/speed WAV files; safe to delete anytime | 020 |
+
+### 2026-07-24 — Mail flush diagnostics
+
+| State | Path | Owner / mechanism | Introduced |
+|---|---|---|---|
+| Bounded dma delivery diagnostics | `$VM_DATA_DIR/mail/flush.log` | `svc-mailq`, newest 500 lines | 023 |
+| Last queue-flush marker | `$VM_DATA_DIR/mail/last-flush` | `svc-mailq`, epoch seconds rewritten after each cycle | 023 |

@@ -8,12 +8,9 @@ import (
 	"image/color"
 	"image/png"
 	"math"
-	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
-	"time"
 )
 
 // Runner executes the sendmail-compatible submission command.
@@ -42,55 +39,6 @@ func Submit(ctx context.Context, runner Runner, path, envelopeFrom string, recip
 	args := []string{"-i", "-f", envelopeFrom}
 	args = append(args, recipients...)
 	return runner.Run(ctx, path, args, message)
-}
-
-// QueueEntry describes one queued dma message.
-type QueueEntry struct {
-	ID     string `json:"id"`
-	Size   int64  `json:"size"`
-	AgeSec int64  `json:"ageSec"`
-}
-
-// Queue lists and groups dma spool files by queue identifier.
-func Queue(directory string, now time.Time) ([]QueueEntry, error) {
-	entries, err := os.ReadDir(directory)
-	if err != nil {
-		return nil, err
-	}
-	type accumulated struct {
-		size int64
-		mod  time.Time
-	}
-	grouped := make(map[string]accumulated)
-	for _, entry := range entries {
-		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") || entry.Name() == "flush" {
-			continue
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return nil, err
-		}
-		id := entry.Name()
-		if len(id) > 1 && (id[0] == 'M' || id[0] == 'Q') {
-			id = id[1:]
-		}
-		item := grouped[id]
-		item.size += info.Size()
-		if item.mod.IsZero() || info.ModTime().Before(item.mod) {
-			item.mod = info.ModTime()
-		}
-		grouped[id] = item
-	}
-	result := make([]QueueEntry, 0, len(grouped))
-	for id, item := range grouped {
-		age := now.Sub(item.mod).Seconds()
-		if age < 0 {
-			age = 0
-		}
-		result = append(result, QueueEntry{ID: id, Size: item.size, AgeSec: int64(age)})
-	}
-	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
-	return result, nil
 }
 
 // TestImage returns a deterministic 320x180 PNG with a gradient and sine curve.

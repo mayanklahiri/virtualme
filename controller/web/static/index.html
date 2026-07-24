@@ -251,10 +251,12 @@
             <label for="mail-body">Body</label>
             <textarea id="mail-body" name="body" rows="8" maxlength="20000"></textarea>
             <label class="mail-checkbox"><input id="mail-image" type="checkbox"> Embed test image</label>
+            <small class="mail-help">Attaches a small inline image to exercise multipart/CID composition.</small>
             <div class="mail-actions">
-              <button id="mail-gmail-test" class="secondary" type="button">Send Gmail test</button>
+              <button id="mail-gmail-test" class="secondary" type="button" title="Prefills a deliverability test addressed to a Gmail inbox — Gmail's headers show SPF/DKIM verdicts.">Send Gmail test</button>
               <button id="mail-send" type="submit"><svg class="icon"><use href="/icons.svg#i-send"/></svg>Send</button>
             </div>
+            <small class="mail-help">Prefills a deliverability test addressed to a Gmail inbox — Gmail's headers show SPF/DKIM verdicts.</small>
             <p id="mail-result" class="mail-result" aria-live="polite"></p>
           </form>
           <div class="mail-card">
@@ -271,8 +273,16 @@
               <div class="copy-row"><textarea id="mail-dns-value" rows="4" readonly></textarea><button type="button" data-copy="mail-dns-value"><svg class="icon"><use href="/icons.svg#i-copy"/></svg></button></div>
             </div>
             <h2>Queue</h2>
-            <table class="mail-queue"><thead><tr><th>ID</th><th>Size</th><th>Age</th></tr></thead><tbody id="mail-queue"></tbody></table>
-            <p id="mail-last">No messages submitted in this controller session.</p>
+            <div id="mail-queue" class="mail-queue"></div>
+            <p id="mail-queue-empty" class="mail-empty"></p>
+            <section id="mail-activity-section" class="mail-activity" hidden>
+              <h2>Activity</h2>
+              <ol id="mail-activity"></ol>
+            </section>
+            <section class="mail-last-send">
+              <h2>Last send</h2>
+              <p id="mail-last">No sends yet in this controller session.</p>
+            </section>
           </div>
         </div>
         <aside class="mail-guidance">

@@ -1,0 +1,14 @@
+Received: from virtualme (uid 1000)
+	(envelope-from sender@example.com)
+	id 5
+	by example.test (DragonFly Mail Agent v0.13);
+	Fri, 24 Jul 2026 06:36:29 +0000
+From: Sender <sender@example.com>
+To: nobody@example.com
+Subject: Captured dma fixture
+Date: Tue, 14 Nov 2023 22:13:20 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Captured plain body with =C3=BCnicode.

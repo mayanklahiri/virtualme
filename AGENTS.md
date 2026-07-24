@@ -26,7 +26,7 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `.cursor/skills/` | Shared AI operating and development procedures |
 | `specs/` | Numbered, authoritative implementation specs |
 | `docker/` | Container image and supervised services (spec 002) |
-| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached multi-voice local TTS, outbound mail, and multi-page console (specs 002–022) |
+| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached multi-voice local TTS, outbound mail, and multi-page console (specs 002–023) |
 | `controller/prompts/` | Embedded plain-text agent and fallback-chat system prompts |
 
 ## Commands
@@ -64,7 +64,9 @@ speech clients, and the agent's `speak` tool. Bounded speech history persists
 in Valkey and exact sentence renders use a disposable on-disk LRU cache.
 The controller composes stdlib MIME/CID mail, signs it with a persistent DKIM
 key, and submits it to the supervised dma queue for direct-MX or smarthost
-delivery; mail configuration and spool state live under `$VM_DATA_DIR/mail/`.
+delivery. The Mail console defensively reads dma envelope/message pairs and its
+bounded flush log to show recipients, text previews, errors, next-flush timing,
+and a session-only lifecycle timeline; mail state lives under `$VM_DATA_DIR/mail/`.
 All LLM work runs sequentially through a Valkey-backed interactive/scheduled
 job queue with visibility recovery, retries, dead-lettering, time-bucket
 scheduling, and initiator-disconnect cancellation.
@@ -118,6 +120,6 @@ the theme-defined `--p1` through `--p8` series ramp.
 | [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, second voice, and audio hygiene |
 | [021](specs/021-agent-cdp-tools-console.md) | CDP observation tools and the Tools console page |
 | [022](specs/022-system-prompt.md) | On-disk embedded system prompts and SLM-optimized rewrite |
-| [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing (draft) |
+| [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing |
 | [024](specs/024-brand-chrome-polish.md) | Brand wordmark, wristwatch live indicator, and console polish (draft) |
 | [025](specs/025-release-presentation.md) | Marvin release notes, registry metadata, and the /do-release skill (draft) |

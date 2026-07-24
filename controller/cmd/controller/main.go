@@ -389,11 +389,12 @@ func main() {
 	mailService, err := mail.NewService(mail.Config{
 		DataDir: dataDir, SendmailPath: cfg.SendmailPath,
 		Mailname: mailname, From: os.Getenv("VM_MAIL_FROM"),
-		Smarthost:    os.Getenv("VM_MAIL_SMARTHOST"),
-		DKIMDomain:   os.Getenv("VM_MAIL_DKIM_DOMAIN"),
-		DKIMSelector: envOr("VM_MAIL_DKIM_SELECTOR", "virtualme"),
-		Broadcast:    hub.Broadcast,
-		Activity:     activity,
+		Smarthost:     os.Getenv("VM_MAIL_SMARTHOST"),
+		DKIMDomain:    os.Getenv("VM_MAIL_DKIM_DOMAIN"),
+		DKIMSelector:  envOr("VM_MAIL_DKIM_SELECTOR", "virtualme"),
+		FlushEverySec: int64(envInt("VM_MAIL_FLUSH_SEC", 60)),
+		Broadcast:     hub.Broadcast,
+		Activity:      activity,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -593,6 +594,7 @@ func main() {
 	hub.SetOnDisconnect(jobManager.DropInitiator)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go mailService.Start(ctx, func() bool { return hub.Count() > 0 })
 	if err := jobManager.Start(ctx); err != nil {
 		log.Fatal("jobs: startup failed:", err)
 	}

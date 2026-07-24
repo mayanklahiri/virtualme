@@ -30,7 +30,7 @@ Env overrides: `VIRTUALME_IMAGE`, `VIRTUALME_TAG`, `VIRTUALME_DATA`, and `TZ`
 also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 `VM_MAIL_SMARTHOST`, `VM_MAIL_SMARTHOST_PORT`, `VM_MAIL_SMARTHOST_USER`,
 `VM_MAIL_SMARTHOST_PASS`, `VM_MAIL_DKIM_DOMAIN`, and
-`VM_MAIL_DKIM_SELECTOR`, plus `VM_TTS_CACHE_DIR` and
+`VM_MAIL_DKIM_SELECTOR`, `VM_MAIL_FLUSH_SEC`, plus `VM_TTS_CACHE_DIR` and
 `VM_TTS_CACHE_MAX_MB`.
 
 ## Endpoints (container running)
@@ -141,8 +141,13 @@ starting:
 With `VM_MAIL_DKIM_DOMAIN` set, copy the TXT owner/value shown in `/mail` into
 DNS. The selector defaults to `virtualme`. Persistent configuration, queued
 messages, and `dkim.key` are under `~/.virtualme/mail/`; inspect
-`~/.virtualme/mail/spool/` or the Mail status panel to read the queue. Keep the
-private key mode at 0600.
+`~/.virtualme/mail/spool/` or the Mail status panel to read the queue. Queue
+age is time since the dma spool pair was created; "retry" counts down to the
+next queue flush, not a guaranteed delivery attempt, because dma may apply
+backoff. The newest recorded attempt error comes from the envelope when
+available, otherwise the bounded `~/.virtualme/mail/flush.log`. Text previews
+are read directly from queued messages and the 20-entry timeline is
+controller-memory-only. Keep the private key mode at 0600.
 
 ## Troubleshooting
 
@@ -158,7 +163,7 @@ private key mode at 0600.
 10. Data location: all persistent state is under `~/.virtualme/`; see `specs/007-persistence-locality.md` §1a plus its amendments.
 11. Agent artifacts: inspect `~/.virtualme/agent/<taskId>/steps.jsonl` and `step-*.jpg`; Stop cancels the current task.
 12. Speech: check the `tts` entry in `/healthz`; `ttsd` listens only on container loopback port 8082. Its startup log lists the found Lessac/Ryan voice directories; cache files are under `~/.virtualme/tts-cache/`.
-13. Mail not arriving: check the `mail` health entry, last result, and queue; confirm relay credentials/port or direct-path outbound port 25, publish the displayed DKIM TXT record and SPF, and verify sending-IP PTR/reputation. Residential/dynamic IPs should use a smarthost.
+13. Mail not arriving: check the `mail` health entry, queue row's last error and next-flush countdown, and `~/.virtualme/mail/flush.log`; confirm relay credentials/port or direct-path outbound port 25, publish the displayed DKIM TXT record and SPF, and verify sending-IP PTR/reputation. Residential/dynamic IPs should use a smarthost.
 14. Job queue: `queue-peek` on `/ws` returns upcoming, running, and finished jobs; durable queue keys are in the Valkey AOF under `~/.virtualme/valkey/`.
 15. Projects: records and run summaries are in the Valkey AOF; scratch files are under `~/.virtualme/projects/<id>/` and survive project deletion.
 16. Activity ledger: `/jobs` replays the newest 100 entries from the bounded `virtualme:activity` Valkey list; queue rows are separate envelope state.

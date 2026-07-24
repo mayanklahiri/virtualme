@@ -67,7 +67,8 @@ The first start loads a ~3 GB model; allow a few minutes for `/healthz` to becom
 Set `VIRTUALME_IMAGE` or `VIRTUALME_TAG` to override the default image reference,
 `VIRTUALME_DATA` to override the default data directory, and `TZ` to override
 the detected host timezone passed into the container. `start` also forwards
-`VM_TTS_CACHE_DIR` and `VM_TTS_CACHE_MAX_MB`.
+the `VM_MAIL_*` variables documented below plus `VM_TTS_CACHE_DIR` and
+`VM_TTS_CACHE_MAX_MB`.
 
 ### Data directory
 
@@ -77,9 +78,10 @@ container's `~/.virtualme`. It contains `valkey/` (chat and speech history,
 stats, the reliable job queue, activity ledger, and project records),
 `chromium/` (browser profile), `xdg/{config,cache,data}/`, `metrics/` (tiered
 history), `agent/` (agent artifacts), `projects/` (per-project scratch space),
-`tts-cache/` (recomputable synthesized audio), and `mail/` (dma config/spool
-and the DKIM private key). Chromium settings, projects, and queued mail survive container
-and image replacement. The container runs as the invoking host uid/gid, so
+`tts-cache/` (recomputable synthesized audio), and `mail/` (dma config/spool,
+bounded flush log, flush marker, and the DKIM private key). Chromium settings,
+projects, and queued mail survive container and image replacement. The
+container runs as the invoking host uid/gid, so
 every data file is host-owned. Everything else is intentionally ephemeral or
 baked into the image; the canonical persistence map is
 [`specs/007-persistence-locality.md` §1](specs/007-persistence-locality.md#1-canonical-persistence-map),
@@ -110,7 +112,7 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/status` | Service health, system/GPU meters, active time selectors, opt-in jiggler, and persistent per-core/process/GPU metrics |
 | `/chat` | Markdown chat, generation controls, LLM progress, and conversation totals |
 | `/speech` | Two-voice streaming local speech with seeds, persistent history/replay, and disk cache |
-| `/mail` | Outbound-mail composer, queue status, and DKIM DNS record |
+| `/mail` | Outbound-mail composer, message-level queue contents/errors/next-flush timing, activity, and DKIM DNS record |
 | `/desktop-view` | Embedded private noVNC desktop |
 | `/healthz` | Aggregate JSON health for all eight services |
 | `/ws` | Websocket: live state, metrics, queued jobs, activity, tool manifests/invocation, chat, agent, TTS, and mail frames |
@@ -205,6 +207,11 @@ unprivileged [dma](https://github.com/corecode/dma) queue. Messages can include
 a generated inline CID image. Delivery is direct to recipient MX hosts by
 default, or through a configured STARTTLS smarthost. Optional controller-side
 DKIM signing exposes the DNS TXT name and value to publish in the status panel.
+Expandable queue rows show the envelope recipient, subject, age, plain-text
+preview, attachment types/sizes, newest recorded delivery error, and a live
+countdown to the next queue flush. The countdown is not a delivery guarantee:
+dma may apply its own retry backoff. The session activity timeline is held only
+in controller memory.
 
 | Environment | Purpose |
 |---|---|
@@ -216,6 +223,7 @@ DKIM signing exposes the DNS TXT name and value to publish in the status panel.
 | `VM_MAIL_SMARTHOST_PASS` | Optional relay password |
 | `VM_MAIL_DKIM_DOMAIN` | Enable DKIM signing for this domain |
 | `VM_MAIL_DKIM_SELECTOR` | DKIM selector; defaults to `virtualme` |
+| `VM_MAIL_FLUSH_SEC` | Queue flush cadence and countdown interval; defaults to `60` |
 
 Set these variables before `virtualme start`; the CLI forwards them to the
 container. Direct delivery needs SPF and/or DKIM alignment plus acceptable IP
@@ -266,7 +274,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, second voice, and audio hygiene |
 | [021](specs/021-agent-cdp-tools-console.md) | CDP observation tools and the Tools console page |
 | [022](specs/022-system-prompt.md) | On-disk embedded system prompts and SLM-optimized rewrite |
-| [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing (draft) |
+| [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing |
 | [024](specs/024-brand-chrome-polish.md) | Brand wordmark, wristwatch live indicator, and console polish (draft) |
 | [025](specs/025-release-presentation.md) | Marvin release notes, registry metadata, and the /do-release skill (draft) |
 
