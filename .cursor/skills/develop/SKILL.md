@@ -26,6 +26,10 @@ the same script. New stateful components must be added to the canonical map in
 `specs/007-persistence-locality.md` §1.
 Container tests: `bash test/smoke.sh`, `bash test/e2e.sh` (need Docker; e2e
 drives the real CLI and includes a restart cycle plus a chat probe).
+Soak tests: `./cli.sh soak [--no-build]` (spec 012) rebuilds, restarts on a
+fresh data dir, and runs live end-to-end flows from `test/soak.mjs` with
+layered hard/soft assertions (initial flows drive the browser agent via chat;
+the runner is feature-agnostic).
 
 ## Docker layers
 
@@ -37,8 +41,7 @@ drives the real CLI and includes a restart cycle plus a chat probe).
 | `004-xvfb-desktop.sh` | Xvfb, Openbox, x11vnc, noVNC |
 | `005-chromium.sh` | Chromium and fonts |
 | `006-valkey.sh` | Valkey |
-| `007-node-playwright.sh` | Node.js and Playwright Core `1.61.1` |
-| `008-s6-overlay.sh` | s6-overlay `v3.2.3.2` |
+| `008-s6-overlay.sh` | s6-overlay `v3.2.3.2` (layer 007 removed by spec 012; the numbering gap is permanent) |
 | `009-user.sh` | Unprivileged `virtualme` user (uid/gid 1000) |
 | `010-vision-projector.sh` | Pinned Gemma 4 E2B multimodal projector |
 | `011-agent-tools.sh` | scrot and ImageMagick capture tooling |

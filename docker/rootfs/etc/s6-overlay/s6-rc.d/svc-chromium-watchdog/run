@@ -4,9 +4,22 @@ until xdpyinfo >/dev/null 2>&1; do sleep 0.2; done
 
 MISS=0
 GRACE="${VM_CHROMIUM_WATCHDOG_GRACE:-3}"
+read -r SCREEN_W SCREEN_H < <(xdotool getdisplaygeometry)
 while sleep 2; do
-  if xdotool search --onlyvisible --class chromium >/dev/null 2>&1; then
+  WIN="$(xdotool search --onlyvisible --class chromium 2>/dev/null | head -1 || true)"
+  if [ -n "$WIN" ]; then
     MISS=0
+    # Self-heal geometry drift (spec 012 §3): if the window covers less than
+    # ~95% of the virtual screen, the uncovered root shows as black in the
+    # remote desktop. Re-fit it; the openbox rule handles fresh maps.
+    GEO="$(xdotool getwindowgeometry --shell "$WIN" 2>/dev/null || true)"
+    WIDTH="$(printf '%s\n' "$GEO" | sed -n 's/^WIDTH=//p')"
+    HEIGHT="$(printf '%s\n' "$GEO" | sed -n 's/^HEIGHT=//p')"
+    if [ -n "$WIDTH" ] && [ -n "$HEIGHT" ] &&
+       { [ "$WIDTH" -lt $((SCREEN_W * 95 / 100)) ] || [ "$HEIGHT" -lt $((SCREEN_H * 90 / 100)) ]; }; then
+      echo "chromium-watchdog: window ${WIDTH}x${HEIGHT} < screen ${SCREEN_W}x${SCREEN_H}; re-fitting" >&2
+      xdotool windowmove "$WIN" 0 0 windowsize "$WIN" 100% 100% || true
+    fi
     continue
   fi
   MISS=$((MISS + 1))

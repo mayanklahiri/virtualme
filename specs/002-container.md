@@ -785,3 +785,16 @@ chmod 755 /home/virtualme/.virtualme
 No change to the run-time contract: persistent writes still go only to the
 bind-mounted `$VM_DATA_DIR`; the home itself remains rootfs-owned and
 non-writable by a non-1000 runtime uid.
+
+### 2026-07-23 — Layer 007 (Node.js + playwright-core) removed by spec 012
+
+Spec 008 implemented the browser agent with a raw read-only CDP client in the
+Go controller; the Node/Playwright driver anticipated by §layer-007 was never
+built, so the layer shipped dead weight (`npm`, `playwright-core`, and
+`/opt/agent/node_modules`). Spec 012 deletes
+`docker/layers/007-node-playwright.sh` and its `COPY`+`RUN` pair from the
+Dockerfile. The layer numbering gap is permanent (layers are append-only;
+008-015 keep their numbers). A bare `nodejs` binary remains as a transitive
+dependency of the Debian `novnc` package (layer 004). `system-manifest.sh` no
+longer uses `node` for JSON escaping (pure-bash escaper) and drops the `node`
+tools entry; the image label no longer mentions Playwright.

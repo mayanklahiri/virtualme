@@ -20,8 +20,9 @@ import (
 )
 
 const (
-	outputCap = 64 * 1024
-	domCap    = 48 * 1024
+	outputCap        = 64 * 1024
+	domCap           = 12 * 1024
+	navigateSettleMs = 15000
 )
 
 // Runner executes a process and returns its captured output.
@@ -159,7 +160,7 @@ func schema(value string) json.RawMessage { return json.RawMessage(value) }
 func (t *localTools) Definitions() []Tool {
 	return []Tool{
 		{Name: "screenshot", Description: "Capture the visible browser screen with an API-coordinate grid.", Schema: schema(`{"type":"object","properties":{},"additionalProperties":false}`)},
-		{Name: "dom", Description: "Read rendered visible DOM elements with stable refs and screen-space boxes.", Schema: schema(`{"type":"object","properties":{"selectorHint":{"type":"string"},"page":{"type":"integer","minimum":0}},"additionalProperties":false}`)},
+		{Name: "dom", Description: "Read rendered visible DOM elements with stable refs for click_element/type_into. selectorHint is a case-insensitive substring matched against tag/text/attributes - NOT a CSS selector. Large pages paginate; pass page to continue.", Schema: schema(`{"type":"object","properties":{"selectorHint":{"type":"string","description":"substring filter (not CSS)"},"page":{"type":"integer","minimum":0}},"additionalProperties":false}`)},
 		{Name: "read_page", Description: "Read the current page URL, title, and visible text.", Schema: schema(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "click", Description: "Click API-space screenshot coordinates via OS input.", Schema: schema(`{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"],"additionalProperties":false}`)},
 		{Name: "click_element", Description: "Click the center of a DOM ref via OS input.", Schema: schema(`{"type":"object","properties":{"ref":{"type":"integer"}},"required":["ref"],"additionalProperties":false}`)},
@@ -167,7 +168,7 @@ func (t *localTools) Definitions() []Tool {
 		{Name: "type_into", Description: "Click a DOM ref and type text via OS input.", Schema: schema(`{"type":"object","properties":{"ref":{"type":"integer"},"text":{"type":"string"}},"required":["ref","text"],"additionalProperties":false}`)},
 		{Name: "key", Description: "Press a key or chord such as ctrl+l or Return via OS input.", Schema: schema(`{"type":"object","properties":{"keys":{"type":"string"}},"required":["keys"],"additionalProperties":false}`)},
 		{Name: "scroll", Description: "Scroll the visible page via OS mouse wheel input.", Schema: schema(`{"type":"object","properties":{"dir":{"type":"string","enum":["up","down"]},"amount":{"type":"integer","minimum":1,"maximum":50}},"required":["dir"],"additionalProperties":false}`)},
-		{Name: "navigate", Description: "Navigate by focusing Chromium's omnibox and typing a URL via OS input.", Schema: schema(`{"type":"object","properties":{"url":{"type":"string"}},"required":["url"],"additionalProperties":false}`)},
+		{Name: "navigate", Description: "Navigate by focusing Chromium's omnibox and typing a URL via OS input; waits for the page to settle and returns the resulting URL, title, and readiness.", Schema: schema(`{"type":"object","properties":{"url":{"type":"string"}},"required":["url"],"additionalProperties":false}`)},
 		{Name: "bash", Description: "Run a one-shot bash command in the container; cwd and exported variables persist for this task.", Schema: schema(`{"type":"object","properties":{"command":{"type":"string"},"timeoutSec":{"type":"integer","minimum":1,"maximum":300}},"required":["command"],"additionalProperties":false}`)},
 		{Name: "system_info", Description: "Probe the local OS, packages, environment, paths, disk, and services.", Schema: schema(`{"type":"object","properties":{"topic":{"type":"string","enum":["os","packages","env","paths","all"]}},"additionalProperties":false}`)},
 		{Name: "speak", Description: "Speak text aloud to the user through the console (local text-to-speech). Use when the user asks to hear something or an audible response is clearly better.", Schema: schema(`{"type":"object","properties":{"text":{"type":"string","maxLength":4096},"speed":{"type":"number","minimum":0.5,"maximum":2}},"required":["text"],"additionalProperties":false}`)},
@@ -282,13 +283,23 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 		if strings.TrimSpace(args.URL) == "" {
 			return ToolResult{}, errors.New("url is empty")
 		}
+		before := t.cdp.pageInfo(ctx)
 		if _, err := t.action(ctx, "", "key", "--clearmodifiers", "ctrl+l"); err != nil {
 			return ToolResult{}, err
 		}
 		if _, err := t.action(ctx, "", "type", "--clearmodifiers", "--delay", "1", "--", args.URL); err != nil {
 			return ToolResult{}, err
 		}
-		return t.action(ctx, "Navigated via omnibox", "key", "Return")
+		if _, err := t.action(ctx, "", "key", "Return"); err != nil {
+			return ToolResult{}, err
+		}
+		settled := t.cdp.WaitSettled(ctx, before.URL, navigateSettleMs*time.Millisecond)
+		observation, _ := json.Marshal(map[string]any{
+			"url": settled.URL, "title": settled.Title, "ready": settled.Ready,
+		})
+		return ToolResult{
+			Text: string(observation), Summary: "Navigated via omnibox", Observe: true,
+		}, nil
 	case "bash":
 		return t.bash(ctx, raw)
 	case "system_info":
@@ -540,10 +551,10 @@ func (t *localTools) systemInfo(ctx context.Context, raw json.RawMessage) (ToolR
 	}
 	commands := map[string]string{
 		"os":       `cat /etc/os-release; uname -a`,
-		"packages": `chromium --version; bash --version | sed -n '1p'; node --version; xdotool version; scrot --version`,
+		"packages": `chromium --version; bash --version | sed -n '1p'; xdotool version; scrot --version`,
 		"env":      `env | grep -E '^(VM_|XDG_|DISPLAY=|HOME=|PATH=)' | sort`,
 		"paths":    `printf 'data=%s\n' "$VM_DATA_DIR"; df -h "$VM_DATA_DIR"; pgrep -a 'chromium|llama|valkey|controller' || true`,
-		"all":      `cat /etc/os-release; uname -a; chromium --version; node --version; env | grep -E '^(VM_|XDG_|DISPLAY=|HOME=|PATH=)' | sort; df -h "$VM_DATA_DIR"; pgrep -a 'chromium|llama|valkey|controller' || true`,
+		"all":      `cat /etc/os-release; uname -a; chromium --version; env | grep -E '^(VM_|XDG_|DISPLAY=|HOME=|PATH=)' | sort; df -h "$VM_DATA_DIR"; pgrep -a 'chromium|llama|valkey|controller' || true`,
 	}
 	command, ok := commands[args.Topic]
 	if !ok {

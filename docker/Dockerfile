@@ -16,7 +16,7 @@ RUN cd controller && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/t
 FROM debian:stable-slim
 
 LABEL org.opencontainers.image.title="Virtual Me" \
-      org.opencontainers.image.description="Private personal background agent: Xvfb, Chromium, Playwright, Valkey, llama.cpp + Gemma, Go control plane" \
+      org.opencontainers.image.description="Private personal background agent: Xvfb, Chromium, Valkey, llama.cpp + Gemma, Go control plane" \
       org.opencontainers.image.source="https://github.com/mayanklahiri/virtualme" \
       org.opencontainers.image.licenses="MIT"
 
@@ -34,8 +34,8 @@ COPY docker/layers/005-chromium.sh /tmp/layers/005-chromium.sh
 RUN bash /tmp/layers/005-chromium.sh
 COPY docker/layers/006-valkey.sh /tmp/layers/006-valkey.sh
 RUN bash /tmp/layers/006-valkey.sh
-COPY docker/layers/007-node-playwright.sh /tmp/layers/007-node-playwright.sh
-RUN bash /tmp/layers/007-node-playwright.sh
+# Layer 007 (Node.js + playwright-core) removed by spec 012; the numbering
+# gap is permanent (layers are append-only).
 COPY docker/layers/008-s6-overlay.sh /tmp/layers/008-s6-overlay.sh
 RUN bash /tmp/layers/008-s6-overlay.sh
 COPY docker/layers/009-user.sh /tmp/layers/009-user.sh

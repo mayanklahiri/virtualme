@@ -159,3 +159,11 @@ test("start rejects unknown flags as a usage error", () => {
   const code = start(["--bogus"], () => 0, probes);
   assert.equal(code, 2);
 });
+
+test("soak rejects unknown flags and is listed in help", () => {
+  const bad = cli(["soak", "--bogus"]);
+  assert.equal(bad.status, 2);
+  assert.match(bad.stderr, /usage: soak/);
+  const help = cli(["help"]);
+  assert.match(help.stdout, /soak \[--no-build\]/);
+});

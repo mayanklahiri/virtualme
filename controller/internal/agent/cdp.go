@@ -82,21 +82,33 @@ func (c *CDP) call(ctx context.Context, method string, params any, result any) e
 	if err := writeClientFrame(conn, payload); err != nil {
 		return err
 	}
+	var message []byte
+	messageOpcode := byte(0)
 	for {
-		frame, opcode, err := readServerFrame(reader)
+		frame, opcode, fin, err := readServerFrame(reader)
 		if err != nil {
 			return err
 		}
-		if opcode == 0x9 {
+		switch opcode {
+		case 0x9:
 			if err := writeClientControl(conn, 0xA, frame); err != nil {
 				return err
 			}
 			continue
-		}
-		if opcode == 0x8 {
+		case 0x8:
 			return errors.New("CDP websocket closed")
+		case 0x1, 0x2:
+			message = append(message[:0], frame...)
+			messageOpcode = opcode
+		case 0x0:
+			message = append(message, frame...)
+		default:
+			continue
 		}
-		if opcode != 0x1 {
+		if len(message) > maxCDPMessage {
+			return errors.New("CDP message exceeds 16 MiB")
+		}
+		if !fin || messageOpcode != 0x1 {
 			continue
 		}
 		var envelope struct {
@@ -106,7 +118,7 @@ func (c *CDP) call(ctx context.Context, method string, params any, result any) e
 				Message string `json:"message"`
 			} `json:"error"`
 		}
-		if json.Unmarshal(frame, &envelope) != nil || envelope.ID != 1 {
+		if json.Unmarshal(message, &envelope) != nil || envelope.ID != 1 {
 			continue
 		}
 		if envelope.Error != nil {
@@ -204,38 +216,38 @@ func writeMaskedFrame(writer io.Writer, opcode byte, payload []byte) error {
 	return err
 }
 
-func readServerFrame(reader *bufio.Reader) ([]byte, byte, error) {
+const maxCDPMessage = 16 * 1024 * 1024
+
+func readServerFrame(reader *bufio.Reader) ([]byte, byte, bool, error) {
 	var header [2]byte
 	if _, err := io.ReadFull(reader, header[:]); err != nil {
-		return nil, 0, err
+		return nil, 0, false, err
 	}
 	if header[1]&0x80 != 0 {
-		return nil, 0, errors.New("CDP server frame unexpectedly masked")
+		return nil, 0, false, errors.New("CDP server frame unexpectedly masked")
 	}
-	if header[0]&0x80 == 0 {
-		return nil, 0, errors.New("fragmented CDP frames are unsupported")
-	}
+	fin := header[0]&0x80 != 0
 	length := uint64(header[1] & 0x7f)
 	switch length {
 	case 126:
 		var value [2]byte
 		if _, err := io.ReadFull(reader, value[:]); err != nil {
-			return nil, 0, err
+			return nil, 0, false, err
 		}
 		length = uint64(binary.BigEndian.Uint16(value[:]))
 	case 127:
 		var value [8]byte
 		if _, err := io.ReadFull(reader, value[:]); err != nil {
-			return nil, 0, err
+			return nil, 0, false, err
 		}
 		length = binary.BigEndian.Uint64(value[:])
 	}
-	if length > 16*1024*1024 {
-		return nil, 0, errors.New("CDP frame exceeds 16 MiB")
+	if length > maxCDPMessage {
+		return nil, 0, false, errors.New("CDP frame exceeds 16 MiB")
 	}
 	payload := make([]byte, int(length))
 	_, err := io.ReadFull(reader, payload)
-	return payload, header[0] & 0x0f, err
+	return payload, header[0] & 0x0f, fin, err
 }
 
 // ReadPage returns URL, title, and visible rendered text without changing state.
@@ -287,7 +299,7 @@ type domElement struct {
 	ParentRef  int               `json:"-"`
 	Tag        string            `json:"tag"`
 	Text       string            `json:"text,omitempty"`
-	Box        [4]float64        `json:"box"`
+	Box        [4]float64        `json:"-"`
 	Attributes map[string]string `json:"attributes,omitempty"`
 }
 
@@ -296,7 +308,32 @@ var allowedAttributes = map[string]bool{
 	"value": true, "placeholder": true, "aria-label": true, "alt": true, "title": true,
 }
 
-// DOM returns compact rendered elements and their stable screen-space boxes.
+// interactiveTags are always serialized even without text or attributes, so
+// the model can click or fill them by ref.
+var interactiveTags = map[string]bool{
+	"a": true, "button": true, "input": true, "select": true, "textarea": true,
+	"option": true, "summary": true, "label": true, "img": true, "iframe": true,
+	"video": true, "audio": true,
+}
+
+// densify drops layout-only elements that carry no information for the model:
+// no text, no allow-listed attributes, and a non-interactive tag.
+func densify(elements []domElement) []domElement {
+	dense := make([]domElement, 0, len(elements))
+	for _, element := range elements {
+		if element.Text == "" && len(element.Attributes) == 0 && !interactiveTags[element.Tag] {
+			continue
+		}
+		dense = append(dense, element)
+	}
+	return dense
+}
+
+const hintMissNote = "selectorHint matched nothing; it is a substring filter, not a CSS selector; showing unfiltered elements"
+
+// DOM returns dense rendered elements and their stable screen-space boxes.
+// The serialized result carries the page URL and title; layout-only elements
+// are omitted from the JSON but keep server-side boxes for ref clicks.
 func (c *CDP) DOM(ctx context.Context, hint string, page, capBytes int) (string, map[int][4]float64, error) {
 	var snapshot snapshotResult
 	if err := c.call(ctx, "DOMSnapshot.captureSnapshot", map[string]any{
@@ -307,69 +344,118 @@ func (c *CDP) DOM(ctx context.Context, hint string, page, capBytes int) (string,
 		return "", nil, err
 	}
 	elements, boxes := compactSnapshot(snapshot)
-	offsetX, offsetY, scrollX, scrollY := c.viewportOffsets(ctx)
+	info := c.pageInfo(ctx)
 	for index := range elements {
 		box := elements[index].Box
-		box[0] = box[0] - scrollX + offsetX
-		box[1] = box[1] - scrollY + offsetY
+		box[0] = box[0] - info.ScrollX + info.OffsetX
+		box[1] = box[1] - info.ScrollY + info.OffsetY
 		elements[index].Box = box
 		boxes[elements[index].Ref] = box
 	}
-	filtered := elements
+	filtered, note := elements, ""
 	if hint != "" {
-		needle := strings.ToLower(hint)
-		matches := make(map[int]bool)
-		for _, element := range elements {
-			encoded, _ := json.Marshal(element)
-			if strings.Contains(strings.ToLower(string(encoded)), needle) {
-				matches[element.Ref] = true
-			}
-		}
-		filtered = filtered[:0]
-		parents := make(map[int]int, len(elements))
-		for _, element := range elements {
-			parents[element.Ref] = element.ParentRef
-		}
-		for _, element := range elements {
-			for ref := element.Ref; ref >= 0; ref = parents[ref] {
-				if matches[ref] {
-					filtered = append(filtered, element)
-					break
-				}
-				parent, exists := parents[ref]
-				if !exists || parent == ref {
-					break
-				}
-			}
+		filtered = filterByHint(elements, hint)
+		if len(filtered) == 0 {
+			filtered, note = elements, hintMissNote
 		}
 	}
 	if page < 0 {
 		page = 0
 	}
-	result := paginateDOM(filtered, page, capBytes)
+	result := paginateDOM(densify(filtered), page, capBytes)
+	result["url"] = info.URL
+	result["title"] = info.Title
+	if note != "" {
+		result["note"] = note
+	}
 	encoded, err := json.Marshal(result)
 	return string(encoded), boxes, err
 }
 
-func (c *CDP) viewportOffsets(ctx context.Context) (offsetX, offsetY, scrollX, scrollY float64) {
+// filterByHint keeps elements whose serialized form (or an ancestor's)
+// contains the case-insensitive hint substring.
+func filterByHint(elements []domElement, hint string) []domElement {
+	needle := strings.ToLower(hint)
+	matches := make(map[int]bool)
+	for _, element := range elements {
+		encoded, _ := json.Marshal(element)
+		if strings.Contains(strings.ToLower(string(encoded)), needle) {
+			matches[element.Ref] = true
+		}
+	}
+	filtered := make([]domElement, 0)
+	parents := make(map[int]int, len(elements))
+	for _, element := range elements {
+		parents[element.Ref] = element.ParentRef
+	}
+	for _, element := range elements {
+		for ref := element.Ref; ref >= 0; ref = parents[ref] {
+			if matches[ref] {
+				filtered = append(filtered, element)
+				break
+			}
+			parent, exists := parents[ref]
+			if !exists || parent == ref {
+				break
+			}
+		}
+	}
+	return filtered
+}
+
+type pageInfo struct {
+	URL     string  `json:"url"`
+	Title   string  `json:"title"`
+	Ready   bool    `json:"ready"`
+	OffsetX float64 `json:"offsetX"`
+	OffsetY float64 `json:"offsetY"`
+	ScrollX float64 `json:"scrollX"`
+	ScrollY float64 `json:"scrollY"`
+}
+
+func (c *CDP) pageInfo(ctx context.Context) pageInfo {
 	var result struct {
 		Result struct {
-			Value struct {
-				OffsetX float64 `json:"offsetX"`
-				OffsetY float64 `json:"offsetY"`
-				ScrollX float64 `json:"scrollX"`
-				ScrollY float64 `json:"scrollY"`
-			} `json:"value"`
+			Value pageInfo `json:"value"`
 		} `json:"result"`
 	}
-	expression := `({offsetX:screenX+(outerWidth-innerWidth)/2,offsetY:screenY+(outerHeight-innerHeight),scrollX,scrollY})`
+	expression := `({url:location.href,title:document.title,ready:document.readyState==="complete",` +
+		`offsetX:screenX+(outerWidth-innerWidth)/2,offsetY:screenY+(outerHeight-innerHeight),scrollX,scrollY})`
 	if c.call(ctx, "Runtime.evaluate", map[string]any{
 		"expression": expression, "returnByValue": true,
 	}, &result) != nil {
-		return 0, 0, 0, 0
+		return pageInfo{}
 	}
-	value := result.Result.Value
-	return value.OffsetX, value.OffsetY, value.ScrollX, value.ScrollY
+	return result.Result.Value
+}
+
+// WaitSettled polls read-only page state after an OS-level navigation until
+// the document settles: readyState complete on a new URL, or an observed
+// loading transition back to complete on the same URL. On timeout it reports
+// the last-seen state with Ready=false.
+func (c *CDP) WaitSettled(ctx context.Context, beforeURL string, timeout time.Duration) pageInfo {
+	deadline := time.Now().Add(timeout)
+	sawTransition := false
+	last := pageInfo{}
+	for {
+		pollCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		info := c.pageInfo(pollCtx)
+		cancel()
+		if info.URL != "" {
+			last = info
+			if !info.Ready {
+				sawTransition = true
+			}
+			if info.Ready && (info.URL != beforeURL || sawTransition) {
+				return info
+			}
+		}
+		if ctx.Err() != nil || time.Now().After(deadline) {
+			last.Ready = false
+			return last
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }
 
 func stringAt(stringsTable []string, index int) string {

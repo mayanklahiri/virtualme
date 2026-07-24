@@ -57,6 +57,9 @@ func (a *Agent) recordStep(ctx context.Context, call ToolCall, result ToolResult
 		"type": "agent-step", "taskId": a.taskID, "n": a.step,
 		"tool": call.Function.Name, "args": args, "summary": result.Summary,
 	}
+	if result.Text != "" {
+		event["text"] = truncatePromptText(result.Text, observationTextCap)
+	}
 	if toolErr != nil {
 		event["error"] = toolErr.Error()
 	}

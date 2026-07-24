@@ -119,8 +119,15 @@ func TestToolLoopThenFinalReply(t *testing.T) {
 	if !strings.Contains(joined, `"type":"agent-step"`) || !strings.Contains(joined, `"phase":"done"`) {
 		t.Fatalf("events = %s", joined)
 	}
-	if _, err := os.Stat(filepath.Join(agent.taskDir, "steps.jsonl")); err != nil {
+	steps, err := os.ReadFile(filepath.Join(agent.taskDir, "steps.jsonl"))
+	if err != nil {
 		t.Fatal("missing steps.jsonl:", err)
+	}
+	if !strings.Contains(string(steps), `"text":"tool result"`) {
+		t.Fatalf("steps.jsonl must persist observation text: %s", steps)
+	}
+	if !strings.Contains(joined, `"text":"tool result"`) {
+		t.Fatal("agent-step frames must carry observation text")
 	}
 }
 

@@ -62,6 +62,7 @@ The first start loads a ~3 GB model; allow a few minutes for `/healthz` to becom
 | `virtualme build` | Build `:dev` and the configured start tag from a checkout |
 | `virtualme keygen` | Generate a 256-bit base64url token |
 | `virtualme update` | Pull the configured image tag |
+| `virtualme soak [--no-build]` | Rebuild, restart on a fresh data dir, and run live soak flows against the running controller (source checkout only) |
 
 Set `VIRTUALME_IMAGE` or `VIRTUALME_TAG` to override the default image reference, and `VIRTUALME_DATA` to override the default data directory.
 
@@ -190,6 +191,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [009](specs/009-local-tts.md) | Local sherpa-onnx/Piper speech synthesis |
 | [010](specs/010-outbound-mail.md) | Outbound dma queue, MIME/DKIM, and Mail console |
 | [011](specs/011-ui-refresh.md) | Console brand, collapsed theme picker, eight themes, and live-capacity home page |
+| [012](specs/012-agent-observation-soak.md) | Dense DOM observations, settled navigation, desktop coverage, Playwright-layer removal, and the live soak suite |
 
 ### CI/CD
 
@@ -230,4 +232,4 @@ Use a Raspberry Pi 5 or Raspberry Pi 4 with 8 GB RAM at minimum. The RAM floor i
 
 ## Architecture
 
-The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Playwright, Valkey, vision-enabled llama.cpp with Gemma 4 E2B, local sherpa-onnx/Piper TTS, a dma outbound-mail queue, and a Go controller on `:8080`, running unprivileged (host uid/gid) with one rw data mount. The controller concurrently probes service health, samples and persists metrics, composes and DKIM-signs mail, streams shared chat and speech, and runs a bounded browser-agent loop combining screenshots, compact DOM/read-only CDP observations, OS-level `xdotool` actions, bash, and audible responses. It proxies noVNC and embeds the same-origin minified multi-page SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.
+The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Valkey, vision-enabled llama.cpp with Gemma 4 E2B, local sherpa-onnx/Piper TTS, a dma outbound-mail queue, and a Go controller on `:8080`, running unprivileged (host uid/gid) with one rw data mount. The controller concurrently probes service health, samples and persists metrics, composes and DKIM-signs mail, streams shared chat and speech, and runs a bounded browser-agent loop combining screenshots, compact DOM/read-only CDP observations, OS-level `xdotool` actions, bash, and audible responses. It proxies noVNC and embeds the same-origin minified multi-page SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.

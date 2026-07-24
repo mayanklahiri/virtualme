@@ -31,7 +31,6 @@
     "agent",
     "docker",
     "local-llm",
-    "playwright",
     "automation"
   ],
   "author": "Mayank Lahiri",

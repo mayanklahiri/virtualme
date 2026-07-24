@@ -26,7 +26,7 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `.cursor/skills/` | Shared AI operating and development procedures |
 | `specs/` | Numbered, authoritative implementation specs |
 | `docker/` | Container image and supervised services (spec 002) |
-| `controller/` | Go control plane, browser-agent loop, local TTS, outbound mail, and multi-page console (specs 002–011) |
+| `controller/` | Go control plane, browser-agent loop, local TTS, outbound mail, and multi-page console (specs 002–012) |
 
 ## Commands
 
@@ -41,12 +41,16 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `bash test/smoke.sh` | Run the container smoke test (spec 002) |
 | `bash test/e2e.sh` | Run full end-to-end tests (spec 003) |
 | `E2E_AGENT=1 bash test/e2e.sh` | Include the slow real vision/browser-agent probe |
+| `./cli.sh soak [--no-build]` | Rebuild, restart on a fresh data dir, and run live soak flows (spec 012) |
 | `bash controller/tools/fetch-assets.sh` | Fetch pinned fonts, icons, and hero image (specs 003, 005, 011) |
 
-The controller's browser agent combines vision screenshots, compact rendered
+The controller's browser agent combines vision screenshots, dense rendered
 DOM and read-only CDP observations, OS-level `xdotool` mouse/keyboard
-actuation, and bounded bash execution. CDP never performs input or navigation;
-agent screenshots and step logs persist under `$VM_DATA_DIR/agent/`.
+actuation, and bounded bash execution. DOM observations carry the page URL
+and title, omit layout-only noise, and always fit the model's context;
+`navigate` waits for the page to settle. CDP never performs input or
+navigation; agent screenshots and step logs (including observation text)
+persist under `$VM_DATA_DIR/agent/`.
 The loopback-only `ttsd` service wraps pinned sherpa-onnx and Piper Lessac
 artifacts; the controller streams its audio to the Speech tab, OpenAI-compatible
 speech clients, and the agent's `speak` tool without persistent TTS state.
@@ -77,3 +81,4 @@ delivery; mail configuration and spool state live under `$VM_DATA_DIR/mail/`.
 | [009](specs/009-local-tts.md) | Local sherpa-onnx/Piper speech synthesis, API, console, and agent tool |
 | [010](specs/010-outbound-mail.md) | dma outbound queue, MIME/DKIM controller, and Mail console |
 | [011](specs/011-ui-refresh.md) | Console brand, collapsed theme picker, eight themes, and live-capacity home page |
+| [012](specs/012-agent-observation-soak.md) | Dense DOM observations, settled navigation, desktop coverage, Playwright-layer removal, and the live soak suite |

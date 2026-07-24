@@ -5,14 +5,38 @@ set -euo pipefail
 output="${1:-/opt/agent/system-manifest.json}"
 mkdir -p "$(dirname "$output")"
 
+# Pure-bash JSON string escaping (spec 012 §4: the image has no Node).
+# Handles backslash, double quote, and control characters; version strings
+# never contain anything more exotic.
 json_string() {
-  node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>console.log(JSON.stringify(s.trim())))'
+  local input escaped="" char code
+  input="$(cat)"
+  input="${input#"${input%%[![:space:]]*}"}"
+  input="${input%"${input##*[![:space:]]}"}"
+  local i
+  for (( i = 0; i < ${#input}; i++ )); do
+    char="${input:i:1}"
+    case "$char" in
+      '\') escaped+='\\' ;;
+      '"') escaped+='\"' ;;
+      $'\n') escaped+='\n' ;;
+      $'\r') escaped+='\r' ;;
+      $'\t') escaped+='\t' ;;
+      *)
+        printf -v code '%d' "'$char"
+        if (( code < 32 )); then
+          printf -v char '\\u%04x' "$code"
+        fi
+        escaped+="$char"
+        ;;
+    esac
+  done
+  printf '"%s"\n' "$escaped"
 }
 
 os_release="$(. /etc/os-release && printf '%s %s' "$NAME" "$VERSION")"
 chromium_version="$(chromium --version 2>/dev/null || true)"
 bash_version="$(bash --version | sed -n '1p')"
-node_version="$(node --version 2>/dev/null || true)"
 xdotool_version="$(xdotool version 2>/dev/null || true)"
 scrot_version="$(scrot --version 2>/dev/null | sed -n '1p' || true)"
 llama_version="$(/opt/llama/llama-server --version 2>&1 | sed -n '1p' || true)"
@@ -23,7 +47,6 @@ cat >"$output" <<EOF
   "tools": {
     "chromium": $(printf '%s' "$chromium_version" | json_string),
     "bash": $(printf '%s' "$bash_version" | json_string),
-    "node": $(printf '%s' "$node_version" | json_string),
     "xdotool": $(printf '%s' "$xdotool_version" | json_string),
     "scrot": $(printf '%s' "$scrot_version" | json_string),
     "llama": $(printf '%s' "$llama_version" | json_string)

@@ -211,3 +211,18 @@ Commit as `spec 008: OS-level browser-control agent (vision + xdotool + DOM + ba
 ### 2026-07-23 — Increase and bound the llama context
 
 Section 3b's 8192-token default is superseded: `VM_LLAMA_CTX` defaults to 16384 tokens. Agent requests must remain below that configured limit. Chat history is bounded by both message count and text size. Tool output and full observations are separately capped; observation content is not duplicated in both tool and user messages. The loop retains at most four recent complete tool rounds and only the latest full observation, preventing accumulated screenshots, DOM snapshots, and command output from exhausting the context. Completions reserve at most one quarter of the configured context, capped at 1024 tokens. If llama still rejects a request for context overflow, the loop drops all but the current user turn and latest tool round, then retries once without exposing llama's raw HTTP error.
+
+### 2026-07-23 — Dense DOM observation and settled navigate (spec 012)
+
+Spec 012 supersedes parts of §5a: `dom` results carry `url`/`title`, omit
+per-element `box` values from the serialized JSON (boxes remain server-side
+for `click_element`/`type_into`), and skip layout-only elements with no text,
+no allow-listed attributes, and a non-interactive tag. The per-page JSON cap
+drops from 48 KiB to 12 KiB while the observation-message cap rises to
+16 KiB, so a full DOM page always reaches the model without mid-JSON
+truncation. `selectorHint` is documented as a substring filter and a miss
+returns unfiltered elements with an explanatory `note`. `navigate` polls
+read-only `document.readyState` until the page settles and returns an
+observation with `{url,title,ready}`. `recordStep` persists capped
+observation text in `steps.jsonl` and `agent-step` frames. The CDP websocket
+reader reassembles fragmented frames.

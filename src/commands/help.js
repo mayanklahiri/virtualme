@@ -11,6 +11,7 @@ const commands = [
   ["build", "Build the local development/start image"],
   ["keygen", "Generate a 256-bit base64url token"],
   ["update", "Pull the configured image"],
+  ["soak [--no-build]", "Rebuild, restart, and run live soak flows (source checkout)"],
 ];
 
 /**

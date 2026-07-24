@@ -9,9 +9,10 @@ import { run as status } from "./commands/status.js";
 import { run as logs } from "./commands/logs.js";
 import { run as build } from "./commands/build.js";
 import { run as update } from "./commands/update.js";
+import { run as soak } from "./commands/soak.js";
 
 /** @type {Record<string, (argv: string[]) => number | Promise<number>>} */
-const commands = { help, version, doctor, keygen, start, stop, status, logs, build, update };
+const commands = { help, version, doctor, keygen, start, stop, status, logs, build, update, soak };
 
 /** @param {string[]} argv */
 export async function main(argv) {

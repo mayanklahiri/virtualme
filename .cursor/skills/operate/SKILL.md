@@ -62,9 +62,9 @@ CDP state; all browser actions use `xdotool` mouse/keyboard input on `:99`.
 The chat timeline shows each tool step. Use the Stop button to cancel an
 in-flight model request, shell command, or runaway task.
 
-Full screenshots and `steps.jsonl` are retained under
-`~/.virtualme/agent/<taskId>/` for the most recent 20 tasks. CPU-only vision
-steps can take tens of seconds. `--gpus all` passes GPU devices and marks
+Full screenshots and `steps.jsonl` (tool arguments, summaries, and capped
+observation text) are retained under `~/.virtualme/agent/<taskId>/` for the
+most recent 20 tasks. CPU-only vision steps can take tens of seconds. `--gpus all` passes GPU devices and marks
 `VM_LLAMA_GPU=1`, but v1 still ships the pinned CPU llama.cpp build.
 
 ## Local speech
@@ -101,7 +101,7 @@ private key mode at 0600.
 4. RAM: 8 GB minimum (Pi 5 or Pi 4 8GB). The LLM alone needs ~4 GB.
 5. Trust model: prototype has NO auth/TLS — only run on a trusted private network.
 6. Metrics history: persisted multi-resolution files live under `~/.virtualme/metrics/`.
-7. Browser window: closing Chromium auto-restarts it with one blank tab.
+7. Browser window: closing Chromium auto-restarts it with one blank tab; the watchdog also re-maximizes a drifted window so the remote desktop never shows black dead space.
 8. Browser profile: settings persist under `~/.virtualme/chromium/`.
 9. Browser sandbox: namespace sandboxing is automatic when supported; use `--no-browser-sandbox` to force the warning-suppressed fallback.
 10. Data location: all persistent state is under `~/.virtualme/`; see `specs/007-persistence-locality.md` §1a plus the mail row superseded by spec 010 §7.

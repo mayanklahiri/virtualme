@@ -26,7 +26,7 @@ const (
 	defaultContextTokens = 16384
 	maxToolRounds        = 4
 	toolTextCap          = 4 * 1024
-	observationTextCap   = 8 * 1024
+	observationTextCap   = 16 * 1024
 )
 
 var errContextExceeded = errors.New("model context exceeds the configured limit")
