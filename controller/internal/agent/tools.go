@@ -178,7 +178,7 @@ func (t *localTools) Definitions() []Tool {
 		{Name: "navigate", Description: "Navigate by focusing Chromium's omnibox and typing a URL via OS input; waits for the page to settle and returns the resulting URL, title, and readiness.", Schema: schema(`{"type":"object","properties":{"url":{"type":"string"}},"required":["url"],"additionalProperties":false}`)},
 		{Name: "bash", Description: "Run a one-shot bash command in the container; cwd and exported variables persist for this task.", Schema: schema(`{"type":"object","properties":{"command":{"type":"string"},"timeoutSec":{"type":"integer","minimum":1,"maximum":300}},"required":["command"],"additionalProperties":false}`)},
 		{Name: "system_info", Description: "Probe the local OS, packages, environment, paths, disk, and services.", Schema: schema(`{"type":"object","properties":{"topic":{"type":"string","enum":["os","packages","env","paths","all"]}},"additionalProperties":false}`)},
-		{Name: "speak", Description: "Speak text aloud to the user through the console (local text-to-speech). Use when the user asks to hear something or an audible response is clearly better.", Schema: schema(`{"type":"object","properties":{"text":{"type":"string","maxLength":4096},"speed":{"type":"number","minimum":0.5,"maximum":2}},"required":["text"],"additionalProperties":false}`)},
+		{Name: "speak", Description: "Speak text aloud to the user through the console (local text-to-speech). Use when the user asks to hear something or an audible response is clearly better.", Schema: schema(`{"type":"object","properties":{"text":{"type":"string","maxLength":4096},"speed":{"type":"number","minimum":0.5,"maximum":2},"voice":{"type":"string","enum":["en_US-lessac-medium","en_US-ryan-medium"]}},"required":["text"],"additionalProperties":false}`)},
 	}
 }
 
@@ -336,15 +336,17 @@ func (t *localTools) speak(ctx context.Context, raw json.RawMessage) (result Too
 	var args struct {
 		Text  string  `json:"text"`
 		Speed float64 `json:"speed"`
+		Voice string  `json:"voice"`
 	}
 	defer func() {
 		if t.cfg.Activity != nil {
+			voice := tts.NormalizeVoice(args.Voice)
 			_ = t.cfg.Activity.Record(jobs.ActivityEvent{
 				Kind: "tts", Name: "synthesize", JobID: jobs.JobID(ctx),
-				Summary: fmt.Sprintf("Synthesized %d characters with %s", len([]rune(args.Text)), tts.Voice),
+				Summary: fmt.Sprintf("Synthesized %d characters with %s", len([]rune(args.Text)), voice),
 				Detail: jobs.ActivityDetail{
 					DurationMS: time.Since(started).Milliseconds(), OK: resultErr == nil,
-					Chars: len([]rune(args.Text)), Voice: tts.Voice,
+					Chars: len([]rune(args.Text)), Voice: voice,
 				},
 			})
 		}
@@ -369,7 +371,9 @@ func (t *localTools) speak(ctx context.Context, raw json.RawMessage) (result Too
 	queued, _ := json.Marshal(map[string]any{"type": "tts-status", "id": id, "origin": origin, "phase": "queued"})
 	t.cfg.Broadcast(queued)
 	sentenceCount := 0
-	summary, err := t.cfg.TTS.Synthesize(ctx, tts.Request{Text: args.Text, Speed: args.Speed}, func(event tts.Event) error {
+	summary, err := t.cfg.TTS.Synthesize(ctx, tts.Request{
+		Text: args.Text, Speed: args.Speed, Voice: args.Voice, Origin: "chat",
+	}, func(event tts.Event) error {
 		frame := map[string]any{"id": id, "origin": origin}
 		switch event.Type {
 		case "start":
@@ -380,7 +384,7 @@ func (t *localTools) speak(ctx context.Context, raw json.RawMessage) (result Too
 			status, _ := json.Marshal(map[string]any{"type": "tts-status", "id": id, "origin": origin, "phase": "synthesizing", "sentence": event.Seq + 1, "sentences": sentenceCount})
 			t.cfg.Broadcast(status)
 		case "done":
-			frame["type"], frame["audioSec"], frame["rtf"] = "tts-done", event.AudioSec, event.RTF
+			frame["type"], frame["audioSec"], frame["rtf"], frame["cached"] = "tts-done", event.AudioSec, event.RTF, event.Cached
 		default:
 			return nil
 		}

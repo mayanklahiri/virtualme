@@ -77,23 +77,27 @@ func TestReadWAVWalksChunks(t *testing.T) {
 
 func TestHealthRequiresVoiceFiles(t *testing.T) {
 	modelDir := t.TempDir()
-	service := NewService(Config{ModelDir: modelDir, Voice: Voice})
+	service := NewService(Config{ModelDir: modelDir})
 	response := httptest.NewRecorder()
 	service.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("missing model health = %d", response.Code)
 	}
-	for _, name := range []string{Voice + ".onnx", "tokens.txt"} {
-		if err := os.WriteFile(filepath.Join(modelDir, name), []byte("fixture"), 0o600); err != nil {
+	voiceDir := filepath.Join(modelDir, "vits-piper-"+DefaultVoice)
+	if err := os.Mkdir(voiceDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{DefaultVoice + ".onnx", "tokens.txt"} {
+		if err := os.WriteFile(filepath.Join(voiceDir, name), []byte("fixture"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := os.Mkdir(filepath.Join(modelDir, "espeak-ng-data"), 0o700); err != nil {
+	if err := os.Mkdir(filepath.Join(voiceDir, "espeak-ng-data"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	response = httptest.NewRecorder()
 	service.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/healthz", nil))
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"voice":"`+Voice+`"`) {
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"voice":"`+DefaultVoice+`"`) {
 		t.Fatalf("healthy response = %d: %s", response.Code, response.Body.String())
 	}
 }
@@ -124,7 +128,7 @@ func (f *fixtureRunner) Run(ctx context.Context, _ string, args, _ []string) err
 
 func TestSynthesizeHandlerStreamAndArguments(t *testing.T) {
 	runner := &fixtureRunner{}
-	service := NewService(Config{SherpaDir: "/sherpa", ModelDir: "/voice", Voice: Voice, MaxChars: 20, Runner: runner})
+	service := NewService(Config{SherpaDir: "/sherpa", ModelDir: "/voice", MaxChars: 20, Runner: runner})
 	request := httptest.NewRequest(http.MethodPost, "/synthesize", strings.NewReader(`{"text":"One sentence. Two.","speed":9}`))
 	response := httptest.NewRecorder()
 	service.Handler().ServeHTTP(response, request)
@@ -152,9 +156,9 @@ func TestSynthesizeHandlerStreamAndArguments(t *testing.T) {
 	argv := strings.Join(runner.args[0], " ")
 	runner.mu.Unlock()
 	for _, want := range []string{
-		"--vits-model=/voice/" + Voice + ".onnx",
-		"--vits-tokens=/voice/tokens.txt",
-		"--vits-data-dir=/voice/espeak-ng-data",
+		"--vits-model=/voice/vits-piper-" + DefaultVoice + "/" + DefaultVoice + ".onnx",
+		"--vits-tokens=/voice/vits-piper-" + DefaultVoice + "/tokens.txt",
+		"--vits-data-dir=/voice/vits-piper-" + DefaultVoice + "/espeak-ng-data",
 		"--vits-length-scale=0.5",
 	} {
 		if !strings.Contains(argv, want) {
@@ -201,15 +205,24 @@ func TestClientStreamsEvents(t *testing.T) {
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		_, _ = w.Write([]byte("{\"type\":\"start\",\"sampleRate\":16000,\"channels\":1,\"sentences\":1}\n"))
 		_, _ = w.Write([]byte("{\"type\":\"chunk\",\"seq\":0,\"pcm\":\"AQI=\"}\n"))
-		_, _ = w.Write([]byte("{\"type\":\"done\",\"audioSec\":1.5,\"rtf\":0.2}\n"))
+		_, _ = w.Write([]byte("{\"type\":\"done\",\"audioSec\":1.5,\"rtf\":0.2,\"cached\":true}\n"))
 	}))
 	defer server.Close()
 	var events []string
-	summary, err := (&Client{URL: server.URL}).Synthesize(context.Background(), Request{Text: "hello"}, func(event Event) error {
+	store := new(memoryList)
+	client := &Client{URL: server.URL, Log: NewLog(store, nil)}
+	summary, err := client.Synthesize(context.Background(), Request{
+		Text: "hello", Voice: "en_US-ryan-medium", Origin: "api",
+	}, func(event Event) error {
 		events = append(events, event.Type)
 		return nil
 	})
-	if err != nil || strings.Join(events, ",") != "start,chunk,done" || summary.AudioSec != 1.5 {
+	if err != nil || strings.Join(events, ",") != "start,chunk,done" || summary.AudioSec != 1.5 || !summary.Cached {
 		t.Fatalf("Synthesize = %+v, %v, %v", summary, events, err)
+	}
+	if len(store.values) != 1 || !strings.Contains(store.values[0], `"origin":"api"`) ||
+		!strings.Contains(store.values[0], `"voice":"en_US-ryan-medium"`) ||
+		!strings.Contains(store.values[0], `"cached":true`) {
+		t.Fatalf("speech log = %v", store.values)
 	}
 }

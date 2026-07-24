@@ -1,5 +1,6 @@
 // Real-stack local TTS websocket and OpenAI-compatible API probe.
 import { Buffer } from "node:buffer";
+import { performance } from "node:perf_hooks";
 
 const url = process.argv[2];
 const base = process.argv[3] ?? "http://127.0.0.1:8080";
@@ -14,6 +15,12 @@ let phase = "normal";
 let chunks = 0;
 let lastSeq = -1;
 let stoppedDone = false;
+let phaseStarted = 0;
+let firstDuration = 0;
+let lessacPCM = "";
+let voicePCM = "";
+const cacheText = "A unique sentence verifies the exact speech cache.";
+const voiceText = "Two voices must produce audibly distinct local speech.";
 
 /** @param {string} reason */
 function fail(reason) {
@@ -28,17 +35,26 @@ function sendNormal() {
   }));
 }
 
-async function checkHTTP() {
+/** @param {string} id @param {string} text @param {string} voice */
+function request(id, text, voice) {
+  phaseStarted = performance.now();
+  chunks = 0;
+  lastSeq = -1;
+  socket.send(JSON.stringify({ type: "tts-req", id, text, voice }));
+}
+
+async function checkHTTP(voice = "en_US-ryan-medium") {
   const response = await fetch(`${base}/v1/audio/speech`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ input: "Hello from the speech API." }),
+    body: JSON.stringify({ input: "Hello from the speech API.", voice }),
   });
   const body = new Uint8Array(await response.arrayBuffer());
   if (!response.ok) fail(`speech API returned ${response.status}`);
   if (!String(response.headers.get("content-type")).startsWith("audio/wav")) fail("speech API content type");
   if (body[0] !== 82 || body[1] !== 73 || body[2] !== 70 || body[3] !== 70) fail("speech API missing RIFF");
   if (body.length <= 10000) fail(`speech API body too short: ${body.length}`);
+  if (response.headers.get("x-vm-voice") !== voice) fail("speech API voice mapping");
 }
 
 socket.addEventListener("error", () => fail("websocket error"));
@@ -55,7 +71,7 @@ socket.addEventListener("message", async (event) => {
       lastSeq = message.seq;
       chunks += 1;
       const raw = Buffer.from(message.pcm, "base64");
-      const view = new DataView(raw.buffer);
+      const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
       let sum = 0;
       for (let index = 0; index + 1 < raw.length; index += 2) {
         const sample = view.getInt16(index, true);
@@ -65,6 +81,32 @@ socket.addEventListener("message", async (event) => {
       if (rms < 10) fail(`silent PCM chunk: RMS ${rms}`);
     } else if (message.type === "tts-done") {
       if (chunks < 2) fail(`only ${chunks} chunks`);
+      phase = "cache-first";
+      request("probe-cache-first", cacheText, "en_US-lessac-medium");
+    }
+  } else if (phase === "cache-first" && message.id === "probe-cache-first" && message.type === "tts-done") {
+    firstDuration = performance.now() - phaseStarted;
+    if (message.cached) fail("first cache request unexpectedly hit");
+    phase = "cache-second";
+    request("probe-cache-second", cacheText, "en_US-lessac-medium");
+  } else if (phase === "cache-second" && message.id === "probe-cache-second" && message.type === "tts-done") {
+    const secondDuration = performance.now() - phaseStarted;
+    if (!message.cached) fail("second cache request missed");
+    if (secondDuration >= firstDuration * 0.25) {
+      fail(`cache speedup insufficient: ${secondDuration.toFixed(0)}ms vs ${firstDuration.toFixed(0)}ms`);
+    }
+    phase = "voice-lessac";
+    request("probe-voice-lessac", voiceText, "en_US-lessac-medium");
+  } else if (phase === "voice-lessac" && message.id === "probe-voice-lessac") {
+    if (message.type === "tts-chunk") lessacPCM += message.pcm;
+    if (message.type === "tts-done") {
+      phase = "voice-ryan";
+      request("probe-voice-ryan", voiceText, "en_US-ryan-medium");
+    }
+  } else if (phase === "voice-ryan" && message.id === "probe-voice-ryan") {
+    if (message.type === "tts-chunk") voicePCM += message.pcm;
+    if (message.type === "tts-done") {
+      if (!voicePCM || voicePCM === lessacPCM) fail("Ryan render is empty or identical to Lessac");
       try {
         await checkHTTP();
       } catch (error) {

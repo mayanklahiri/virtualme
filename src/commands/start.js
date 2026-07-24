@@ -78,6 +78,7 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
     "VM_MAIL_MAILNAME", "VM_MAIL_FROM", "VM_MAIL_SMARTHOST",
     "VM_MAIL_SMARTHOST_PORT", "VM_MAIL_SMARTHOST_USER",
     "VM_MAIL_SMARTHOST_PASS", "VM_MAIL_DKIM_DOMAIN", "VM_MAIL_DKIM_SELECTOR",
+    "VM_TTS_CACHE_DIR", "VM_TTS_CACHE_MAX_MB",
   ]) {
     if (process.env[name] !== undefined) {
       dockerArgs.push("-e", `${name}=${process.env[name]}`);

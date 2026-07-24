@@ -180,9 +180,11 @@ start_vm >/dev/null || fail "cli start (direct mode)"
 wait_healthy
 node test/mail-probe.mjs --direct "ws://127.0.0.1:${PORT}/ws" || fail "mail direct probe"
 
-echo "e2e: [19/19] restart preserves chat, projects, metrics, mail spool, and DKIM key"
+echo "e2e: [19/19] restart preserves chat, projects, speech, metrics, mail spool, and DKIM key"
 compgen -G "$DATA_DIR/valkey/*" >/dev/null \
   || fail "valkey persistence is empty before restart"
+compgen -G "$DATA_DIR/tts-cache/*.wav" >/dev/null \
+  || fail "speech cache is empty before restart"
 ./cli.sh stop >/dev/null || fail "cli stop"
 start_vm >/dev/null || fail "cli start (restart)"
 wait_healthy
@@ -191,6 +193,10 @@ node test/metrics-probe.mjs --non-empty "ws://127.0.0.1:${PORT}/ws" \
   || fail "metrics history lost across restart"
 node test/chat-probe.mjs --history-only "ws://127.0.0.1:${PORT}/ws" \
   || fail "chat history lost across restart"
+node test/speech-log-probe.mjs "ws://127.0.0.1:${PORT}/ws" \
+  || fail "speech history lost across restart"
+compgen -G "$DATA_DIR/tts-cache/*.wav" >/dev/null \
+  || fail "speech cache lost across restart"
 node test/projects-probe.mjs --verify-delete "$project_id" "ws://127.0.0.1:${PORT}/ws" \
   || fail "project persistence/delete probe"
 node test/jiggler-probe.mjs --expect false "ws://127.0.0.1:${PORT}/ws" \

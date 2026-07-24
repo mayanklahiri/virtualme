@@ -87,6 +87,33 @@ func TestSpeechEndpointErrors(t *testing.T) {
 	}
 }
 
+func TestSpeechEndpointMapsVoice(t *testing.T) {
+	requestBody := make(chan tts.Request, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		var input tts.Request
+		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+			t.Error(err)
+		}
+		requestBody <- input
+		_, _ = w.Write([]byte(
+			"{\"type\":\"start\",\"sampleRate\":22050,\"channels\":1,\"sentences\":1}\n" +
+				"{\"type\":\"chunk\",\"seq\":0,\"pcm\":\"AQI=\"}\n" +
+				"{\"type\":\"done\",\"audioSec\":1,\"rtf\":0.1}\n",
+		))
+	}))
+	defer server.Close()
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/audio/speech",
+		strings.NewReader(`{"input":"Hello.","voice":"en_US-ryan-medium","response_format":"pcm"}`))
+	speechHandler(&tts.Client{URL: server.URL}).ServeHTTP(response, request)
+	if response.Header().Get("X-VM-Voice") != "en_US-ryan-medium" {
+		t.Fatalf("voice header = %q", response.Header().Get("X-VM-Voice"))
+	}
+	if input := <-requestBody; input.Voice != "en_US-ryan-medium" {
+		t.Fatalf("ttsd request voice = %q", input.Voice)
+	}
+}
+
 func TestTTSWSReplacesAndStopsPerConnection(t *testing.T) {
 	manager := newTTSWS(&tts.Client{})
 	conn := new(ws.Conn)

@@ -262,3 +262,17 @@ The repository's s6-overlay version defines the user bundle under
 membership is installed at `user-bundles.d/user/contents.d/svc-tts`, not the
 deprecated runtime-generated `s6-rc.d/user/contents.d/` path shown in §3a.
 Creating the latter in the image prevents unprivileged s6 startup.
+
+### 2026-07-23 — Spec 020 multi-voice and cache extension
+
+Spec 020 adds `en_US-ryan-medium` without changing the pinned sherpa-onnx
+runtime. `VM_TTS_MODEL_DIR` now names the parent `/opt/models/tts`; ttsd joins
+the whitelisted request voice as `vits-piper-<voice>/`. The former `Voice`
+constant is superseded by `Voices` plus `DefaultVoice`, API voice fields now
+select a model, and unknown values still fall back permissively to Lessac.
+
+The Speech console's speed slider and static voice label are superseded by the
+spec 020 voice selector. API clients and the `speak` tool retain the speed
+parameter and controller-side clamping. Sentence WAVs are cached under
+`$VM_DATA_DIR/tts-cache/`; this adds persistence for recomputable audio but
+does not alter sentence-level streaming.

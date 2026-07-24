@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -23,13 +24,33 @@ import (
 	"unicode/utf8"
 )
 
-const Voice = "en_US-lessac-medium"
+// Voices is the complete set of image-baked Piper voices. The first is the
+// default used for omitted or unknown voice names.
+var Voices = []string{"en_US-lessac-medium", "en_US-ryan-medium"}
+
+const DefaultVoice = "en_US-lessac-medium"
+
+// NormalizeVoice preserves the permissive API behavior while constraining
+// model paths to image-baked voices.
+func NormalizeVoice(voice string) string {
+	for _, available := range Voices {
+		if voice == available {
+			return voice
+		}
+	}
+	if voice != "" {
+		log.Printf("tts: unknown voice %q; using %s", voice, DefaultVoice)
+	}
+	return DefaultVoice
+}
 
 // Request is accepted by ttsd's synthesis endpoint.
 type Request struct {
-	Text  string  `json:"text"`
-	Speed float64 `json:"speed,omitempty"`
-	Split *bool   `json:"split,omitempty"`
+	Text   string  `json:"text"`
+	Speed  float64 `json:"speed,omitempty"`
+	Split  *bool   `json:"split,omitempty"`
+	Voice  string  `json:"voice,omitempty"`
+	Origin string  `json:"-"`
 }
 
 // Event is one NDJSON synthesis event.
@@ -44,6 +65,7 @@ type Event struct {
 	GenMS      int64   `json:"genMs,omitempty"`
 	AudioSec   float64 `json:"audioSec,omitempty"`
 	RTF        float64 `json:"rtf,omitempty"`
+	Cached     bool    `json:"cached,omitempty"`
 	Error      string  `json:"error,omitempty"`
 }
 
@@ -54,6 +76,7 @@ type Summary struct {
 	Sentences  int
 	AudioSec   float64
 	RTF        float64
+	Cached     bool
 }
 
 // Runner invokes the pinned offline TTS executable.
@@ -97,11 +120,12 @@ func (processRunner) Run(ctx context.Context, name string, args, env []string) e
 
 // Config configures the local synthesis service.
 type Config struct {
-	SherpaDir string
-	ModelDir  string
-	Voice     string
-	MaxChars  int
-	Runner    Runner
+	SherpaDir     string
+	ModelDir      string
+	CacheDir      string
+	CacheMaxBytes int64
+	MaxChars      int
+	Runner        Runner
 }
 
 // Service serializes CPU-bound synthesis requests.
@@ -112,9 +136,6 @@ type Service struct {
 
 // NewService creates a synthesis service.
 func NewService(cfg Config) *Service {
-	if cfg.Voice == "" {
-		cfg.Voice = Voice
-	}
 	if cfg.MaxChars <= 0 {
 		cfg.MaxChars = 4096
 	}
@@ -126,14 +147,15 @@ func NewService(cfg Config) *Service {
 	return &Service{cfg: cfg, queue: queue}
 }
 
-func (s *Service) modelFiles() (string, string, string) {
-	return filepath.Join(s.cfg.ModelDir, s.cfg.Voice+".onnx"),
-		filepath.Join(s.cfg.ModelDir, "tokens.txt"),
-		filepath.Join(s.cfg.ModelDir, "espeak-ng-data")
+func (s *Service) modelFiles(voice string) (string, string, string) {
+	dir := filepath.Join(s.cfg.ModelDir, "vits-piper-"+voice)
+	return filepath.Join(dir, voice+".onnx"),
+		filepath.Join(dir, "tokens.txt"),
+		filepath.Join(dir, "espeak-ng-data")
 }
 
 func (s *Service) healthy() bool {
-	model, tokens, data := s.modelFiles()
+	model, tokens, data := s.modelFiles(DefaultVoice)
 	for _, name := range []string{model, tokens} {
 		if info, err := os.Stat(name); err != nil || !info.Mode().IsRegular() {
 			return false
@@ -141,6 +163,23 @@ func (s *Service) healthy() bool {
 	}
 	info, err := os.Stat(data)
 	return err == nil && info.IsDir()
+}
+
+// AvailableVoices returns image-baked voice directories found at startup.
+func (s *Service) AvailableVoices() []string {
+	available := make([]string, 0, len(Voices))
+	for _, voice := range Voices {
+		model, tokens, data := s.modelFiles(voice)
+		modelInfo, modelErr := os.Stat(model)
+		tokenInfo, tokenErr := os.Stat(tokens)
+		dataInfo, dataErr := os.Stat(data)
+		if modelErr == nil && modelInfo.Mode().IsRegular() &&
+			tokenErr == nil && tokenInfo.Mode().IsRegular() &&
+			dataErr == nil && dataInfo.IsDir() {
+			available = append(available, voice)
+		}
+	}
+	return available
 }
 
 // Handler serves ttsd's health and synthesis routes.
@@ -162,7 +201,7 @@ func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusServiceUnavailable
 	}
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{"ok": status == http.StatusOK, "voice": s.cfg.Voice})
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": status == http.StatusOK, "voice": DefaultVoice})
 }
 
 func parseRequest(r *http.Request, maxChars int) (Request, []string, error) {
@@ -183,6 +222,7 @@ func parseRequest(r *http.Request, maxChars int) (Request, []string, error) {
 		request.Speed = 1
 	}
 	request.Speed = max(0.5, min(2, request.Speed))
+	request.Voice = NormalizeVoice(request.Voice)
 	split := request.Split == nil || *request.Split
 	sentences := []string{request.Text}
 	if split {
@@ -223,15 +263,17 @@ func (s *Service) handleSynthesize(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
 	totalSamples := 0
 	sampleRate := 0
+	allCached := true
 	for index, sentence := range sentences {
 		generated := time.Now()
-		pcm, rate, channelCount, synthErr := s.synthesize(r.Context(), sentence, request.Speed)
+		pcm, rate, channelCount, cached, synthErr := s.synthesize(r.Context(), sentence, request.Voice, request.Speed)
 		if synthErr != nil {
 			if r.Context().Err() == nil {
 				emit(Event{Type: "error", Error: synthErr.Error()})
 			}
 			return
 		}
+		allCached = allCached && cached
 		if index == 0 {
 			sampleRate = rate
 			if !emit(Event{Type: "start", SampleRate: rate, Channels: channelCount, Sentences: len(sentences)}) {
@@ -251,18 +293,23 @@ func (s *Service) handleSynthesize(w http.ResponseWriter, r *http.Request) {
 	if audioSec > 0 {
 		rtf = time.Since(started).Seconds() / audioSec
 	}
-	emit(Event{Type: "done", AudioSec: audioSec, RTF: rtf})
+	emit(Event{Type: "done", AudioSec: audioSec, RTF: rtf, Cached: allCached})
 }
 
-func (s *Service) synthesize(ctx context.Context, sentence string, speed float64) ([]byte, int, int, error) {
+func (s *Service) synthesize(ctx context.Context, sentence, voice string, speed float64) ([]byte, int, int, bool, error) {
+	if s.cfg.CacheDir != "" {
+		if pcm, rate, channels, ok := s.readCache(voice, speed, sentence); ok {
+			return pcm, rate, channels, true, nil
+		}
+	}
 	file, err := os.CreateTemp("", "virtualme-tts-*.wav")
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, 0, false, err
 	}
 	name := file.Name()
 	_ = file.Close()
 	defer os.Remove(name)
-	model, tokens, data := s.modelFiles()
+	model, tokens, data := s.modelFiles(voice)
 	args := []string{
 		"--vits-model=" + model,
 		"--vits-tokens=" + tokens,
@@ -273,9 +320,18 @@ func (s *Service) synthesize(ctx context.Context, sentence string, speed float64
 	}
 	binaryPath := filepath.Join(s.cfg.SherpaDir, "bin", "sherpa-onnx-offline-tts")
 	if err := s.cfg.Runner.Run(ctx, binaryPath, args, []string{"LD_LIBRARY_PATH=" + filepath.Join(s.cfg.SherpaDir, "lib")}); err != nil {
-		return nil, 0, 0, fmt.Errorf("sherpa synthesis: %w", err)
+		return nil, 0, 0, false, fmt.Errorf("sherpa synthesis: %w", err)
 	}
-	return ReadWAV(name)
+	pcm, rate, channels, err := ReadWAV(name)
+	if err != nil {
+		return nil, 0, 0, false, err
+	}
+	if s.cfg.CacheDir != "" {
+		if err := s.writeCache(voice, speed, sentence, name); err != nil {
+			log.Printf("tts: cache write: %v", err)
+		}
+	}
+	return pcm, rate, channels, false, nil
 }
 
 // ReadWAV extracts s16le mono PCM by walking RIFF chunks.
@@ -377,10 +433,16 @@ func isSpace(r rune) bool {
 type Client struct {
 	URL  string
 	HTTP *http.Client
+	Log  *Log
 }
 
 // Synthesize posts a request and invokes onEvent for every stream event.
 func (c *Client) Synthesize(ctx context.Context, request Request, onEvent func(Event) error) (Summary, error) {
+	request.Voice = NormalizeVoice(request.Voice)
+	if request.Speed == 0 {
+		request.Speed = 1
+	}
+	started := time.Now()
 	body, _ := json.Marshal(request)
 	target := strings.TrimSuffix(c.URL, "/") + "/synthesize"
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
@@ -413,7 +475,7 @@ func (c *Client) Synthesize(ctx context.Context, request Request, onEvent func(E
 		case "start":
 			summary.SampleRate, summary.Channels, summary.Sentences = event.SampleRate, event.Channels, event.Sentences
 		case "done":
-			summary.AudioSec, summary.RTF = event.AudioSec, event.RTF
+			summary.AudioSec, summary.RTF, summary.Cached = event.AudioSec, event.RTF, event.Cached
 		case "error":
 			return summary, errors.New(event.Error)
 		}
@@ -429,7 +491,26 @@ func (c *Client) Synthesize(ctx context.Context, request Request, onEvent func(E
 	if summary.SampleRate == 0 {
 		return summary, errors.New("ttsd stream ended before start")
 	}
+	if c.Log != nil && request.Origin != "" {
+		if err := c.Log.Record(Entry{
+			Timestamp: time.Now().UnixMilli(), Origin: request.Origin,
+			Voice: request.Voice, Speed: request.Speed,
+			Chars:      utf8.RuneCountInString(strings.TrimSpace(request.Text)),
+			DurationMS: time.Since(started).Milliseconds(), Cached: summary.Cached,
+			Text: truncateRunes(strings.TrimSpace(request.Text), 500),
+		}); err != nil {
+			log.Printf("tts: speech log: %v", err)
+		}
+	}
 	return summary, nil
+}
+
+func truncateRunes(text string, limit int) string {
+	value := []rune(text)
+	if len(value) <= limit {
+		return text
+	}
+	return string(value[:limit])
 }
 
 // WriteStreamingWAV writes a streaming RIFF header with unknown final sizes.

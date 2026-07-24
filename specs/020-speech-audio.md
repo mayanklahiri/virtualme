@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/009-local-tts.md` (ttsd, Speech tab, speak tool), `specs/013-job-queue-scheduler.md` (`internal/valkey`, activity ledger via spec 015) |
 | Produces | Speech-page seed texts (Kipling / Kerouac-style / Thompson-style), a Clear button, speed selector removed from the UI, a server-global Valkey-persisted log of generated speech with replay; an exact-string disk cache in the TTS engine under `$VM_DATA_DIR/tts-cache/`; a second Piper voice (`en_US-ryan-medium`) on the same sherpa-onnx runtime with a voice selector; elimination of stray playback audio artifacts (the "water droplet"), with explicitly **no** completion chime |
 | Followed by | Future specs |
@@ -130,10 +130,24 @@ Repo ground truth: there are **no** sound assets and no `new Audio()`/oscillator
 
 ## 9. Acceptance checklist
 
-- [ ] `npm run check` green.
-- [ ] Speech page: seeds fill the editor verbatim; Clear empties; no speed control renders; counter reads `N / 4096`.
-- [ ] Speaking a seed with each voice sounds distinct; history lists both entries with correct origin/voice; Replay of a cached entry starts in under ~1 s.
-- [ ] `$VM_DATA_DIR/tts-cache/` populates; filling it past the cap evicts oldest files; deleting the dir entirely is harmless (recreated).
-- [ ] Agent `speak` and `/v1/audio/speech` both appear in the history with origins `chat`/`api`.
-- [ ] Rapid Speak/Stop cycles and mid-stream Stop produce no clicks/pops/droplets (headphone test); grep confirms no non-TTS audio source in the SPA.
-- [ ] History and cache survive container restart.
+- [x] `npm run check` green.
+- [x] Speech page: seeds fill the editor verbatim; Clear empties; no speed control renders; counter reads `N / 4096`.
+- [x] Speaking a seed with each voice sounds distinct; history lists both entries with correct origin/voice; Replay of a cached entry starts in under ~1 s.
+- [x] `$VM_DATA_DIR/tts-cache/` populates; filling it past the cap evicts oldest files; deleting the dir entirely is harmless (recreated).
+- [x] Agent `speak` and `/v1/audio/speech` both appear in the history with origins `chat`/`api`.
+- [ ] Rapid Speak/Stop cycles and mid-stream Stop produce no clicks/pops/droplets (headphone test); the deterministic source audit confirms no non-TTS audio source in the SPA, but this execution environment has no audible output for the headphone check.
+- [x] History and cache survive container restart.
+
+## Execution notes
+
+- The Ryan bundle was downloaded from the exact §5 URL and independently
+  hashed as `c546af78b6395b4e7c4ce1ed899438b64426a362f5d4ec5fecd090ded9ad7505`.
+- Hermetic Go tests cover exact cache hits/misses, atomic writes, corrupted-WAV
+  replacement, LRU eviction, voice fallback/model paths, and the 100-entry
+  history cap. Browser-free tests lock the verbatim seeds and sole declicked
+  audio path.
+- The full container e2e suite rendered both voices distinctly, measured the
+  second exact request below 25% of the first, exercised the Ryan HTTP API,
+  and verified speech history plus cache files across a stop/start cycle.
+- The only unperformed acceptance action is subjective headphone listening;
+  no host audio device is exposed in the execution environment.

@@ -26,7 +26,7 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `.cursor/skills/` | Shared AI operating and development procedures |
 | `specs/` | Numbered, authoritative implementation specs |
 | `docker/` | Container image and supervised services (spec 002) |
-| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, ambient jiggler, local TTS, outbound mail, and multi-page console (specs 002–018) |
+| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, ambient jiggler, cached multi-voice local TTS, outbound mail, and multi-page console (specs 002–020) |
 
 ## Commands
 
@@ -52,9 +52,10 @@ and title, omit layout-only noise, and always fit the model's context;
 navigation; agent screenshots and step logs (including observation text)
 persist under `$VM_DATA_DIR/agent/`. Chromium uses documented deterministic
 automation flags and one undecorated full-screen virtual-desktop surface.
-The loopback-only `ttsd` service wraps pinned sherpa-onnx and Piper Lessac
+The loopback-only `ttsd` service wraps pinned sherpa-onnx and Piper Lessac/Ryan
 artifacts; the controller streams its audio to the Speech tab, OpenAI-compatible
-speech clients, and the agent's `speak` tool without persistent TTS state.
+speech clients, and the agent's `speak` tool. Bounded speech history persists
+in Valkey and exact sentence renders use a disposable on-disk LRU cache.
 The controller composes stdlib MIME/CID mail, signs it with a persistent DKIM
 key, and submits it to the supervised dma queue for direct-MX or smarthost
 delivery; mail configuration and spool state live under `$VM_DATA_DIR/mail/`.
@@ -108,7 +109,7 @@ the theme-defined `--p1` through `--p8` series ramp.
 | [017](specs/017-jiggler.md) | Jiggler: humanlike OS-level mouse motion with a Status switch |
 | [018](specs/018-gpu-observability.md) | Multi-vendor GPU detection, status widget, and usage series |
 | [019](specs/019-chart-overhaul.md) | Chart ticks, titles, lookback control, and uniform series color |
-| [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, second voice, and audio hygiene (draft) |
+| [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, second voice, and audio hygiene |
 | [021](specs/021-agent-cdp-tools-console.md) | CDP observation tools and the Tools console page (draft) |
 | [022](specs/022-system-prompt.md) | On-disk embedded system prompts, SLM-optimized rewrite (draft) |
 | [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing (draft) |

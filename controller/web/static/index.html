@@ -208,18 +208,22 @@
         <h1 id="speech-title">Speech</h1>
         <div class="speech-card">
           <label for="speech-input">Text</label>
+          <div class="speech-seeds" role="group" aria-label="Seed texts"><span class="lookback-label">Seeds</span><button type="button" data-seed="if">Kipling — If</button><button type="button" data-seed="road">Road notes</button><button type="button" data-seed="bridge">Night bridge</button></div>
           <textarea id="speech-input" rows="8" maxlength="4096" placeholder="Enter text to speak aloud"></textarea>
           <div class="speech-controls">
             <span id="speech-count">0 / 4096</span>
-            <label for="speech-speed">Speed <output id="speech-speed-value">1.0×</output></label>
-            <input id="speech-speed" type="range" min="0.5" max="2" step="0.1" value="1">
-            <span>Voice <strong>Lessac (en-US)</strong></span>
+            <label for="speech-voice">Voice</label><select id="speech-voice"><option value="en_US-lessac-medium">Lessac (en-US)</option><option value="en_US-ryan-medium">Ryan (en-US)</option></select>
           </div>
           <div class="speech-actions">
+            <button id="speech-clear" class="secondary" type="button"><svg class="icon"><use href="/icons.svg#i-trash-2"/></svg>Clear</button>
             <button id="speech-stop" class="secondary" type="button" hidden><svg class="icon"><use href="/icons.svg#i-square"/></svg>Stop</button>
             <button id="speech-speak" type="button" disabled><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg>Speak</button>
           </div>
           <p id="speech-status" class="llm-status" aria-live="polite"></p>
+        </div>
+        <div class="speech-history-card">
+          <h2>History</h2>
+          <ul id="speech-history" class="speech-history"></ul>
         </div>
       </section>
 

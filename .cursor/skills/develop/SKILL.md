@@ -50,6 +50,7 @@ the runner is feature-agnostic).
 | `014-tts-model.sh` | Pinned Piper `en_US-lessac-medium` voice |
 | `015-mta.sh` | Debian dma outbound MTA |
 | `016-tzdata.sh` | Host-local timezone data for scheduler wall clocks |
+| `017-tts-voice-ryan.sh` | Pinned Piper `en_US-ryan-medium` second voice |
 
 The s6 tree defines `svc-xvfb`, `svc-openbox`, `svc-x11vnc`, `svc-novnc`,
 `svc-valkey`, `svc-llama`, `svc-chromium`, `svc-chromium-watchdog`,
@@ -86,7 +87,7 @@ requires a new spec.
 | `controller/internal/agent` | Tool-call loop, read-only CDP/DOM observations, OS-level actions, bash, and artifacts |
 | `controller/internal/actuation` | Global lock serializing OS-level mouse/keyboard input |
 | `controller/internal/jiggler` | Opt-in humanlike mouse trajectories, Valkey state, and burst lifecycle |
-| `controller/cmd/ttsd`, `controller/internal/tts` | Serialized sherpa subprocess synthesis, WAV parsing, NDJSON client, and streaming helpers |
+| `controller/cmd/ttsd`, `controller/internal/tts` | Whitelisted Lessac/Ryan synthesis, sentence WAV cache, Valkey speech log, NDJSON client, and streaming helpers |
 | `controller/internal/mail` | Stdlib MIME/CID composition, DKIM signing, dma submission, and spool status |
 | `controller/web/static` | Hand-written multi-page SPA, themes, charts, markdown, agent hooks |
 | `controller/web/static/js/jobs.js` | Queue timeline, live activity, and type-specific job details |
@@ -105,9 +106,12 @@ series names, units, and a maximum function while retaining the shared
 lookback/tick/hover behavior. Every chart series and legend swatch must use the
 theme's `--p1` through `--p8` ramp; never introduce chart-specific colors.
 
-The controller maps `tts-req`/`tts-stop` websocket requests to per-connection
-`tts-*` streams, serves `POST /v1/audio/speech`, and broadcasts agent `speak`
-tool audio with `origin:"chat"`.
+The controller maps voice-aware `tts-req`/`tts-stop` websocket requests to
+per-connection `tts-*` streams, serves `POST /v1/audio/speech`, broadcasts
+agent `speak` audio with `origin:"chat"`, and maps `speech-log-req` to the
+bounded `virtualme:speech:log` history. The voice whitelist is
+`internal/tts.Voices`; sentence WAVs are cached under
+`$VM_DATA_DIR/tts-cache/`.
 It maps `mail-send`/`mail-status-req` requests to `mail-result`/`mail-status`
 frames. Persistent dma configuration, queue files, and the DKIM key live under
 `$VM_DATA_DIR/mail/`; `svc-mailq` retries deferred messages.

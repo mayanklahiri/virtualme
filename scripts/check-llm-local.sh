@@ -110,6 +110,7 @@ required_paths=(
   agent
   mail
   projects
+  tts-cache
 )
 for path in "${required_paths[@]}"; do
   if ! grep -Fq "\$VM_DATA_DIR/$path" "$data_dirs"; then

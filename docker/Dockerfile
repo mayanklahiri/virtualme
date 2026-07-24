@@ -55,6 +55,8 @@ COPY docker/layers/015-mta.sh /tmp/layers/015-mta.sh
 RUN bash /tmp/layers/015-mta.sh
 COPY docker/layers/016-tzdata.sh /tmp/layers/016-tzdata.sh
 RUN bash /tmp/layers/016-tzdata.sh
+COPY docker/layers/017-tts-voice-ryan.sh /tmp/layers/017-tts-voice-ryan.sh
+RUN bash /tmp/layers/017-tts-voice-ryan.sh
 
 # Fast-moving top: service tree + controller binary.
 COPY docker/rootfs/ /
@@ -75,9 +77,9 @@ ENV LANG=C.UTF-8 \
     VM_LLAMA_CTX=16384 \
     VM_TTS_PORT=8082 \
     VM_SHERPA_DIR=/opt/sherpa-onnx \
-    VM_TTS_MODEL_DIR=/opt/models/tts/vits-piper-en_US-lessac-medium \
-    VM_TTS_VOICE=en_US-lessac-medium \
+    VM_TTS_MODEL_DIR=/opt/models/tts \
     VM_TTS_MAX_CHARS=4096 \
+    VM_TTS_CACHE_MAX_MB=256 \
     VM_MAIL_FLUSH_SEC=60 \
     VM_AGENT_MAX_STEPS=25 \
     VM_AGENT_KEEP_TASKS=20 \

@@ -191,3 +191,10 @@ reserves the persistence lane without adding agent runtime behavior.
 | State | Path | Owner / mechanism | Introduced |
 |---|---|---|---|
 | `virtualme:jiggler:enabled` jiggler switch | `$VM_DATA_DIR/valkey/` (AOF) | `internal/jiggler` via `svc-valkey` | 017 |
+
+### 2026-07-23 — Speech history and synthesized-audio cache
+
+| State | Path | Owner / mechanism | Introduced |
+|---|---|---|---|
+| `virtualme:speech:log` bounded speech history | `$VM_DATA_DIR/valkey/` (AOF) | `internal/tts.Log` via `svc-valkey` | 020 |
+| Synthesized-audio cache | `$VM_DATA_DIR/tts-cache/` | `ttsd`, exact sentence/voice/speed WAV files; safe to delete anytime | 020 |

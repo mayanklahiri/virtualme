@@ -162,6 +162,7 @@ curl -fsS "http://127.0.0.1:${PORT}/healthz" \
 curl -fsS "http://127.0.0.1:${PORT}/healthz" \
   | grep -q '"name":"mail","ok":true' || fail "mail health probe missing or unhealthy"
 [ -d "$DATA_DIR/mail/spool" ] || fail "data dir missing mail/spool"
+[ -d "$DATA_DIR/tts-cache" ] || fail "data dir missing tts-cache"
 docker exec "$NAME" pgrep -f 'svc-mailq' >/dev/null \
   || fail "svc-mailq is not supervised and up"
 docker exec "$NAME" sh -c \
@@ -244,7 +245,7 @@ compgen -G "$DATA_DIR/valkey/appendonly*" >/dev/null \
 for entry in "$DATA_DIR"/*; do
   [ -e "$entry" ] || continue
   case "$(basename "$entry")" in
-    valkey|chromium|xdg|metrics|agent|mail|projects) ;;
+    valkey|chromium|xdg|metrics|agent|mail|projects|tts-cache) ;;
     *) fail "unexpected top-level data entry: $(basename "$entry")" ;;
   esac
 done

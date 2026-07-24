@@ -66,18 +66,19 @@ The first start loads a ~3 GB model; allow a few minutes for `/healthz` to becom
 
 Set `VIRTUALME_IMAGE` or `VIRTUALME_TAG` to override the default image reference,
 `VIRTUALME_DATA` to override the default data directory, and `TZ` to override
-the detected host timezone passed into the container.
+the detected host timezone passed into the container. `start` also forwards
+`VM_TTS_CACHE_DIR` and `VM_TTS_CACHE_MAX_MB`.
 
 ### Data directory
 
 The host directory `~/.virtualme` (override with `--data <dir>` or
 `VIRTUALME_DATA`) is created on first `start` and mounted read-write at the
-container's `~/.virtualme`. It contains `valkey/` (chat history, stats, the
-reliable job queue, activity ledger, and project records),
+container's `~/.virtualme`. It contains `valkey/` (chat and speech history,
+stats, the reliable job queue, activity ledger, and project records),
 `chromium/` (browser profile), `xdg/{config,cache,data}/`, `metrics/` (tiered
 history), `agent/` (agent artifacts), `projects/` (per-project scratch space),
-and `mail/` (dma config/spool and the DKIM private key). Chromium settings,
-projects, and queued mail survive container
+`tts-cache/` (recomputable synthesized audio), and `mail/` (dma config/spool
+and the DKIM private key). Chromium settings, projects, and queued mail survive container
 and image replacement. The container runs as the invoking host uid/gid, so
 every data file is host-owned. Everything else is intentionally ephemeral or
 baked into the image; the canonical persistence map is
@@ -107,7 +108,7 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/jobs` | Queue timeline, fine-grained machine activity, and type-specific details |
 | `/status` | Service health, system/GPU meters, active time selectors, opt-in jiggler, and persistent per-core/process/GPU metrics |
 | `/chat` | Markdown chat, generation controls, LLM progress, and conversation totals |
-| `/speech` | Streaming local text-to-speech with the Lessac en-US voice |
+| `/speech` | Two-voice streaming local speech with seeds, persistent history/replay, and disk cache |
 | `/mail` | Outbound-mail composer, queue status, and DKIM DNS record |
 | `/desktop-view` | Embedded private noVNC desktop |
 | `/healthz` | Aggregate JSON health for all eight services |
@@ -172,15 +173,19 @@ persists in Valkey across container restarts.
 ### Local speech
 
 The `/speech` tab streams sentence-level audio from the fully local
-[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) engine and its baked
-[Piper Lessac en-US voice](https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models).
-The browser starts playing after the first sentence while later sentences
-synthesize. Agent chat can use the `speak` tool when asked for an audible
-response; its audio bubble supports replay and is not persisted.
+[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) engine with baked Piper
+Lessac and Ryan en-US voices. Seed texts fill the editor, and the global
+newest-first history persists in Valkey with cached replay. The browser starts
+playing after the first sentence while later sentences synthesize. Agent chat
+can use the `speak` tool when asked for an audible response; its audio bubble
+supports replay.
 
 OpenAI-compatible clients can call `POST /v1/audio/speech`; `wav` is the
-default response format and `pcm` returns raw 16-bit mono PCM. The single
-voice is accepted through the API's `voice` field but currently ignored.
+default response format and `pcm` returns raw 16-bit mono PCM. Set `voice` to
+`en_US-lessac-medium` or `en_US-ryan-medium`; unknown values fall back to
+Lessac. Exact sentence/voice/speed renders are cached under
+`~/.virtualme/tts-cache/`; `VM_TTS_CACHE_MAX_MB` sets the LRU cap (default
+256 MiB), and deleting the cache is safe.
 
 ### Outbound mail
 
@@ -247,7 +252,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [017](specs/017-jiggler.md) | Jiggler: humanlike OS-level mouse motion with a Status switch |
 | [018](specs/018-gpu-observability.md) | Multi-vendor GPU detection, status widget, and usage series |
 | [019](specs/019-chart-overhaul.md) | Chart ticks, titles, lookback control, and uniform series color |
-| [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, second voice, and audio hygiene (draft) |
+| [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, second voice, and audio hygiene |
 | [021](specs/021-agent-cdp-tools-console.md) | CDP observation tools and the Tools console page (draft) |
 | [022](specs/022-system-prompt.md) | On-disk embedded system prompts, SLM-optimized rewrite (draft) |
 | [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing (draft) |

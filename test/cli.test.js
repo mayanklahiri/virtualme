@@ -155,6 +155,31 @@ test("start forwards configured outbound-mail environment", () => {
   }
 });
 
+test("start forwards configured TTS cache environment", () => {
+  const parent = mkdtempSync(join(tmpdir(), "virtualme-test-"));
+  const dataDir = join(parent, "data");
+  const previous = process.env.VM_TTS_CACHE_MAX_MB;
+  process.env.VM_TTS_CACHE_MAX_MB = "64";
+  try {
+    /** @type {string[] | undefined} */
+    let invocation;
+    const probes = { haveDocker: () => true, daemonUp: () => true, containerState: () => "absent" };
+    const code = start(["--data", dataDir], (args) => {
+      invocation = args;
+      return 0;
+    }, probes);
+    assert.equal(code, 0);
+    assert.ok(invocation);
+    assert.deepEqual(invocation.slice(-3), [
+      "-e", "VM_TTS_CACHE_MAX_MB=64", "mayanklahiri/virtualme:latest",
+    ]);
+  } finally {
+    if (previous === undefined) delete process.env.VM_TTS_CACHE_MAX_MB;
+    else process.env.VM_TTS_CACHE_MAX_MB = previous;
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
 test("start forwards an optional GPU specification and marker env", () => {
   const parent = mkdtempSync(join(tmpdir(), "virtualme-test-"));
   const dataDir = join(parent, "data");

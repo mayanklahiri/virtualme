@@ -166,10 +166,13 @@ func speechHandler(client *tts.Client, activities ...jobs.ActivityRecorder) http
 			openAIError(w, http.StatusBadRequest, "response_format must be wav or pcm")
 			return
 		}
-		w.Header().Set("X-VM-Voice", tts.Voice)
+		voice := tts.NormalizeVoice(input.Voice)
+		w.Header().Set("X-VM-Voice", voice)
 		startedAt := time.Now()
 		started := false
-		_, err := client.Synthesize(r.Context(), tts.Request{Text: input.Input, Speed: input.Speed}, func(event tts.Event) error {
+		_, err := client.Synthesize(r.Context(), tts.Request{
+			Text: input.Input, Speed: input.Speed, Voice: voice, Origin: "api",
+		}, func(event tts.Event) error {
 			switch event.Type {
 			case "start":
 				started = true
@@ -205,10 +208,10 @@ func speechHandler(client *tts.Client, activities ...jobs.ActivityRecorder) http
 		if activity != nil {
 			_ = activity.Record(jobs.ActivityEvent{
 				Kind: "tts", Name: "synthesize",
-				Summary: fmt.Sprintf("Synthesized %d characters with %s", len([]rune(input.Input)), tts.Voice),
+				Summary: fmt.Sprintf("Synthesized %d characters with %s", len([]rune(input.Input)), voice),
 				Detail: jobs.ActivityDetail{
 					DurationMS: time.Since(startedAt).Milliseconds(), OK: err == nil,
-					Chars: len([]rune(input.Input)), Voice: tts.Voice,
+					Chars: len([]rune(input.Input)), Voice: voice,
 				},
 			})
 		}
@@ -280,6 +283,7 @@ func (t *ttsWS) handle(conn *ws.Conn, payload []byte) bool {
 		ID    string  `json:"id"`
 		Text  string  `json:"text"`
 		Speed float64 `json:"speed"`
+		Voice string  `json:"voice"`
 	}
 	if json.Unmarshal(payload, &request) != nil || (request.Type != "tts-req" && request.Type != "tts-stop") {
 		return false
@@ -295,12 +299,15 @@ func (t *ttsWS) handle(conn *ws.Conn, payload []byte) bool {
 		t.write(conn, map[string]any{"type": "tts-status", "id": oldID, "origin": "console", "phase": "stopped"})
 	}
 	go func() {
+		voice := tts.NormalizeVoice(request.Voice)
 		startedAt := time.Now()
 		defer cancel()
 		defer t.done(conn, token)
 		t.write(conn, map[string]any{"type": "tts-status", "id": request.ID, "origin": "console", "phase": "queued"})
 		sentences := 0
-		_, err := t.client.Synthesize(ctx, tts.Request{Text: request.Text, Speed: request.Speed}, func(event tts.Event) error {
+		_, err := t.client.Synthesize(ctx, tts.Request{
+			Text: request.Text, Speed: request.Speed, Voice: voice, Origin: "console",
+		}, func(event tts.Event) error {
 			frame := map[string]any{"id": request.ID, "origin": "console"}
 			switch event.Type {
 			case "start":
@@ -310,7 +317,7 @@ func (t *ttsWS) handle(conn *ws.Conn, payload []byte) bool {
 				frame["type"], frame["seq"], frame["pcm"] = "tts-chunk", event.Seq, event.PCM
 				t.write(conn, map[string]any{"type": "tts-status", "id": request.ID, "origin": "console", "phase": "synthesizing", "sentence": event.Seq + 1, "sentences": sentences})
 			case "done":
-				frame["type"], frame["audioSec"], frame["rtf"] = "tts-done", event.AudioSec, event.RTF
+				frame["type"], frame["audioSec"], frame["rtf"], frame["cached"] = "tts-done", event.AudioSec, event.RTF, event.Cached
 				t.write(conn, map[string]any{"type": "tts-status", "id": request.ID, "origin": "console", "phase": "done", "sentences": sentences, "rtf": event.RTF})
 			default:
 				return nil
@@ -324,10 +331,10 @@ func (t *ttsWS) handle(conn *ws.Conn, payload []byte) bool {
 		if t.activity != nil {
 			_ = t.activity.Record(jobs.ActivityEvent{
 				Kind: "tts", Name: "synthesize",
-				Summary: fmt.Sprintf("Synthesized %d characters with %s", len([]rune(request.Text)), tts.Voice),
+				Summary: fmt.Sprintf("Synthesized %d characters with %s", len([]rune(request.Text)), voice),
 				Detail: jobs.ActivityDetail{
 					DurationMS: time.Since(startedAt).Milliseconds(), OK: err == nil,
-					Chars: len([]rune(request.Text)), Voice: tts.Voice,
+					Chars: len([]rune(request.Text)), Voice: voice,
 				},
 			})
 		}
@@ -346,7 +353,11 @@ func main() {
 	cfg := health.FromEnv()
 	hub := ws.NewHub()
 	activity := jobs.NewActivity(valkey.New(cfg.ValkeyAddr), hub.Broadcast)
-	ttsClient := &tts.Client{URL: "http://127.0.0.1:" + envOr("VM_TTS_PORT", "8082")}
+	speechLog := tts.NewLog(valkey.New(cfg.ValkeyAddr), hub.Broadcast)
+	ttsClient := &tts.Client{
+		URL: "http://127.0.0.1:" + envOr("VM_TTS_PORT", "8082"),
+		Log: speechLog,
+	}
 	ttsSocket := newTTSWS(ttsClient, activity)
 	desktopURL, err := url.Parse("http://127.0.0.1:6080")
 	if err != nil {
@@ -447,6 +458,9 @@ func main() {
 		if ttsSocket.handle(conn, payload) {
 			return
 		}
+		if speechLog.HandleMessage(payload, conn.WriteText) {
+			return
+		}
 		if mailService.Handle(payload, conn.WriteText) {
 			return
 		}
@@ -471,6 +485,7 @@ func main() {
 		_ = conn.WriteText(jobManager.StateMessage())
 		_ = conn.WriteText(projectService.Message())
 		_ = conn.WriteText(activity.Message())
+		_ = conn.WriteText(speechLog.Message())
 	})
 	hub.SetOnDisconnect(jobManager.DropInitiator)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

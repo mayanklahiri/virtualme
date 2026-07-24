@@ -30,7 +30,8 @@ Env overrides: `VIRTUALME_IMAGE`, `VIRTUALME_TAG`, `VIRTUALME_DATA`, and `TZ`
 also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 `VM_MAIL_SMARTHOST`, `VM_MAIL_SMARTHOST_PORT`, `VM_MAIL_SMARTHOST_USER`,
 `VM_MAIL_SMARTHOST_PASS`, `VM_MAIL_DKIM_DOMAIN`, and
-`VM_MAIL_DKIM_SELECTOR`.
+`VM_MAIL_DKIM_SELECTOR`, plus `VM_TTS_CACHE_DIR` and
+`VM_TTS_CACHE_MAX_MB`.
 
 ## Endpoints (container running)
 
@@ -106,11 +107,17 @@ passes NVIDIA GPU devices, lights up GPU observability, and marks
 
 ## Local speech
 
-Use `/speech` to synthesize with the single baked Lessac en-US voice. Playback
-starts after the first sentence while later sentences generate; Raspberry Pi
-latency is therefore sentence-dependent. Stop cancels synthesis immediately.
-In chat, explicitly ask the agent to say something aloud to invoke `speak`;
-audio is session-only and replayable from its chat bubble.
+Use `/speech` to synthesize with the baked Lessac or Ryan en-US voice. The seed
+buttons fill the editor; Clear resets it. Completed console, chat, and API
+syntheses appear in the global Valkey-backed History list and can be replayed.
+Playback starts after the first sentence while later sentences generate; Stop
+cancels synthesis immediately. In chat, explicitly ask the agent to say
+something aloud to invoke `speak`.
+
+Exact sentence/voice/speed renders are cached under
+`~/.virtualme/tts-cache/`. `VM_TTS_CACHE_MAX_MB` sets the LRU cap (default
+256 MiB); `VM_TTS_CACHE_DIR` overrides the location. The cache is
+recomputable and may be deleted while the container is stopped.
 
 ## Outbound mail
 
@@ -143,7 +150,7 @@ private key mode at 0600.
 9. Browser sandbox: namespace sandboxing is automatic when supported; use `--no-browser-sandbox` to force the warning-suppressed fallback.
 10. Data location: all persistent state is under `~/.virtualme/`; see `specs/007-persistence-locality.md` §1a plus its amendments.
 11. Agent artifacts: inspect `~/.virtualme/agent/<taskId>/steps.jsonl` and `step-*.jpg`; Stop cancels the current task.
-12. Speech: check the `tts` entry in `/healthz`; `ttsd` listens only on container loopback port 8082.
+12. Speech: check the `tts` entry in `/healthz`; `ttsd` listens only on container loopback port 8082. Its startup log lists the found Lessac/Ryan voice directories; cache files are under `~/.virtualme/tts-cache/`.
 13. Mail not arriving: check the `mail` health entry, last result, and queue; confirm relay credentials/port or direct-path outbound port 25, publish the displayed DKIM TXT record and SPF, and verify sending-IP PTR/reputation. Residential/dynamic IPs should use a smarthost.
 14. Job queue: `queue-peek` on `/ws` returns upcoming, running, and finished jobs; durable queue keys are in the Valkey AOF under `~/.virtualme/valkey/`.
 15. Projects: records and run summaries are in the Valkey AOF; scratch files are under `~/.virtualme/projects/<id>/` and survive project deletion.

@@ -80,6 +80,9 @@ function onMessage(message) {
       speech.frame(message);
       chat.tts(message);
       break;
+    case "speech-log":
+      speech.frame(message);
+      break;
     case "mail-result":
     case "mail-status":
       mail.frame(message);
