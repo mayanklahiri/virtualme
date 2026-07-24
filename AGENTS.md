@@ -58,7 +58,7 @@ text in `controller/prompts/`; wording changes require a spec amendment.
 The server-driven `/tools` console lists every agent definition, generates
 forms from its JSON schema, and serializes manual calls through the job queue;
 manual results and timings enter the persistent activity ledger.
-The loopback-only `ttsd` service wraps pinned sherpa-onnx and Piper Lessac/Ryan
+The loopback-only `ttsd` service wraps pinned sherpa-onnx and Piper Lessac/Alba
 artifacts; the controller streams its audio to the Speech tab, OpenAI-compatible
 speech clients, and the agent's `speak` tool. Bounded speech history persists
 in Valkey and exact sentence renders use a disposable on-disk LRU cache.

@@ -38,10 +38,6 @@ func (runner *fakeRunner) count() int {
 	return len(runner.calls)
 }
 
-type fakeJobs struct{ running bool }
-
-func (state *fakeJobs) IsRunning() bool { return state.running }
-
 type fakeActivity struct{ events []jobs.ActivityEvent }
 
 func (activity *fakeActivity) Record(event jobs.ActivityEvent) error {
@@ -63,6 +59,7 @@ func TestBurstDisabledAndYields(t *testing.T) {
 		t.Fatalf("disabled burst = %d movements, %d calls", got, runner.count())
 	}
 	service.setCached(true)
+	// The agent's actuation lock is the only remaining yield condition.
 	actuation.Lock()
 	if got := service.burst(context.Background()); got != 0 {
 		t.Fatalf("locked burst = %d movements", got)
@@ -71,29 +68,18 @@ func TestBurstDisabledAndYields(t *testing.T) {
 	if runner.count() != 0 {
 		t.Fatalf("locked burst made %d calls", runner.count())
 	}
-	service.jobs = &fakeJobs{running: true}
-	if got := service.burst(context.Background()); got != 0 || runner.count() != 0 {
-		t.Fatalf("running-job burst = %d movements, %d calls", got, runner.count())
-	}
 }
 
-func TestBurstStopsWhenJobStarts(t *testing.T) {
-	runner := new(fakeRunner)
-	service := testService(runner)
-	service.setCached(true)
-	state := new(fakeJobs)
-	service.jobs = state
-	sleeps := 0
-	service.sleep = func(context.Context, time.Duration) bool {
-		sleeps++
-		state.running = true
-		return true
+func TestBurstCadenceIsEightToTwentySevenSeconds(t *testing.T) {
+	service := testService(new(fakeRunner))
+	if service.silenceMin != 8*time.Second || service.silenceMax != 27*time.Second {
+		t.Fatalf("cadence = %v-%v, want 8s-27s", service.silenceMin, service.silenceMax)
 	}
-	if completed := service.burst(context.Background()); completed != 0 {
-		t.Fatalf("completed = %d", completed)
-	}
-	if sleeps != 1 || runner.count() != 2 {
-		t.Fatalf("sleeps = %d, runner calls = %d", sleeps, runner.count())
+	for range 100 {
+		wait := service.duration(service.silenceMin, service.silenceMax)
+		if wait < 8*time.Second || wait > 27*time.Second {
+			t.Fatalf("wait = %v outside 8s-27s", wait)
+		}
 	}
 }
 
@@ -222,5 +208,29 @@ func TestEnableDisableRoundTripsValkey(t *testing.T) {
 	if len(frames) != 2 || !strings.Contains(frames[0], `"enabled":true`) ||
 		!strings.Contains(frames[1], `"enabled":false`) {
 		t.Fatalf("broadcasts = %v", frames)
+	}
+}
+
+func TestStartDefaultsToEnabled(t *testing.T) {
+	server := newStringRESP(t)
+	client := valkey.New(server.listener.Addr().String())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Absent key: enabled by default.
+	service := New(new(fakeRunner), client, nil, 800, 600)
+	service.sleep = func(context.Context, time.Duration) bool { return false }
+	if err := service.Start(ctx); err != nil || !service.Enabled() {
+		t.Fatalf("fresh start = %v, enabled %v (want enabled)", err, service.Enabled())
+	}
+
+	// Only an explicit persisted "0" disables.
+	if err := client.Set(enabledKey, "0"); err != nil {
+		t.Fatal(err)
+	}
+	disabled := New(new(fakeRunner), client, nil, 800, 600)
+	disabled.sleep = func(context.Context, time.Duration) bool { return false }
+	if err := disabled.Start(ctx); err != nil || disabled.Enabled() {
+		t.Fatalf("disabled start = %v, enabled %v (want disabled)", err, disabled.Enabled())
 	}
 }

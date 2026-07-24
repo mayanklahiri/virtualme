@@ -5,4 +5,5 @@ controller/web/static/icons/
 controller/web/static/img/
 controller/web/dist/
 controller/controller
+scripts/.cache/
 /.DS_Store

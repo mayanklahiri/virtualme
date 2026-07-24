@@ -285,12 +285,14 @@ func (c *Collector) collect() {
 		return
 	}
 	procMem := make([]int, len(processes))
+	procCPU := make([]float64, len(processes))
 	for i, process := range processes {
 		procMem[i] = process.MemMB
+		procCPU[i] = process.CPUPct
 	}
 	if c.store != nil {
 		c.store.Add(metrics.Sample{
-			Ts: snapshot.Ts, Cores: cores, ProcMemMB: procMem,
+			Ts: snapshot.Ts, Cores: cores, ProcCPU: procCPU, ProcMemMB: procMem,
 			Load1: system.Load1, MemUsedMB: system.MemUsedMB, MemTotalMB: system.MemTotalMB,
 			GPUUtil: system.GPUUtil, GPUMemMB: system.GPUMemMB,
 		})

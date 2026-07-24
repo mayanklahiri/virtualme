@@ -31,6 +31,16 @@ export function capture(args) {
   return { code: result.status ?? 1, stdout: result.stdout ?? "" };
 }
 
+/**
+ * Best-effort host NVIDIA detection: a working `nvidia-smi` on PATH, or a
+ * Docker daemon that registers the `nvidia` runtime (NVIDIA Container Toolkit).
+ */
+export function hostNvidia() {
+  if (spawnSync("nvidia-smi", ["-L"], { stdio: "ignore" }).status === 0) return true;
+  const info = capture(["info", "--format", "{{json .Runtimes}}"]);
+  return info.code === 0 && info.stdout.includes('"nvidia"');
+}
+
 /** @returns {"running" | "exited" | "absent"} */
 export function containerState() {
   const result = capture(["inspect", "-f", "{{.State.Status}}", CONTAINER]);

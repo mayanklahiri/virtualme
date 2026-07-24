@@ -9,26 +9,16 @@ But make allowance for their doubting too;
 If you can wait and not be tired by waiting,
 Or being lied about, don't deal in lies,
 Or being hated, don't give way to hating,
-And yet don't look too good, nor talk too wise.
-
-If you can fill the unforgiving minute
-With sixty seconds' worth of distance run,
-Yours is the Earth and everything that's in it,
-And, which is more, you'll be a Man, my son!`,
+And yet don't look too good, nor talk too wise.`,
   road: `And so we went, the two of us and the whole hum of the valley night going with us,
 past the fruit stands shuttered and the neon vacancy signs buzzing their one pink word
-over and over, and I thought about everybody asleep in all those rooms dreaming their
-separate Americas, and the road kept unspooling like it knew where it was going even
-if we didn't, and that was the thing, that was always the thing. You don't drive the
-road, the road drives you, mile after holy mile, until the dawn comes up gray and
-gorgeous over the flats and you remember you forgot to be tired.`,
+over and over, and the road kept unspooling like it knew where it was going even
+if we didn't, and that was the thing, that was always the thing.`,
   bridge: `There is no sane reason to take a motorcycle across the Bay Bridge at three in the
 morning, which is exactly why it must be done. The city hangs out there in the fog
 like a rumor of itself, all white towers and bad debts, and the bike is screaming
 under you in fifth gear with the cables thrumming overhead like the strings of some
-huge demented harp. Halfway across you stop being a person with obligations and
-become a simple physics problem: velocity, wind, nerve, and the toll you pay on
-the far side has nothing to do with money.`,
+huge demented harp.`,
 };
 
 export function initTTS(send) {
@@ -126,7 +116,7 @@ export function initTTS(send) {
       origin.textContent = entry.origin;
       const details = document.createElement("span");
       details.className = "speech-history-details";
-      const shortVoice = entry.voice === "en_US-ryan-medium" ? "Ryan" : "Lessac";
+      const shortVoice = entry.voice === "en_GB-alba-medium" ? "Alba" : "Lessac";
       details.textContent = `${shortVoice} · ${entry.chars} chars`;
       if (entry.cached) {
         const cached = document.createElement("span");

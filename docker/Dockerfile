@@ -56,8 +56,10 @@ COPY docker/layers/015-mta.sh /tmp/layers/015-mta.sh
 RUN bash /tmp/layers/015-mta.sh
 COPY docker/layers/016-tzdata.sh /tmp/layers/016-tzdata.sh
 RUN bash /tmp/layers/016-tzdata.sh
-COPY docker/layers/017-tts-voice-ryan.sh /tmp/layers/017-tts-voice-ryan.sh
-RUN bash /tmp/layers/017-tts-voice-ryan.sh
+COPY docker/layers/017-tts-voice-alba.sh /tmp/layers/017-tts-voice-alba.sh
+RUN bash /tmp/layers/017-tts-voice-alba.sh
+COPY docker/layers/018-llama-vulkan.sh /tmp/layers/018-llama-vulkan.sh
+RUN bash /tmp/layers/018-llama-vulkan.sh
 
 # Fast-moving top: service tree + controller binary.
 COPY docker/rootfs/ /

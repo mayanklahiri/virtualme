@@ -40,10 +40,10 @@
     </header>
     <div id="nav-curtain" class="nav-curtain" hidden></div>
     <nav id="sidebar" class="sidebar" aria-label="Primary">
-      <div class="brand">
+      <a class="brand" href="/" data-nav aria-label="Virtual Me home">
         <svg class="icon brand-mark" aria-hidden="true"><use href="/icons.svg#i-virtualme-mark"/></svg>
-        <svg class="wordmark-svg" viewBox="0 0 130 25" role="img" aria-label="Virtual Me"><use href="/icons.svg#i-wordmark"/></svg>
-      </div>
+        <svg class="wordmark-svg" role="img" aria-label="Virtual Me"><use href="/icons.svg#i-wordmark"/></svg>
+      </a>
       <button id="nav-close" class="icon-button nav-close" type="button" aria-label="Close navigation">
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-x"/></svg>
       </button>
@@ -88,18 +88,18 @@
             <p class="eyebrow">Private background agent</p>
             <h1 id="home-title">Good to see you.</h1>
             <p><strong>Virtual Me</strong> runs a private browser, a local model, and an agent loop on this machine. Nothing leaves the box.</p>
+            <p class="hero-health"><span id="home-health" class="health-pill pending">Waiting for controller</span></p>
           </div>
           <figure class="hero-media" aria-hidden="true"><img src="/img/hero-earthrise.jpg" alt=""></figure>
         </div>
         <section class="status-band" aria-label="Controller facts">
-          <div class="status-band-health"><span id="home-health" class="health-pill pending">Waiting for controller</span></div>
           <dl class="fact-grid">
             <div class="fact"><dt>Host</dt><dd id="home-host">…</dd></div>
             <div class="fact"><dt>Address</dt><dd id="home-address">…</dd><small id="home-container-address"></small></div>
             <div class="fact"><dt>Uptime</dt><dd id="home-uptime">…</dd></div>
-            <div class="fact"><dt>CPU</dt><dd id="home-cpu">…</dd></div>
+            <div class="fact"><dt>CPU</dt><dd id="home-cpu">…</dd><small id="home-cpu-load"></small></div>
             <div class="fact"><dt>Memory</dt><dd id="home-memory">…</dd></div>
-            <div class="fact"><dt>Disk</dt><dd id="home-disk">…</dd></div>
+            <div class="fact"><dt>Disk</dt><dd id="home-disk">…</dd><small id="home-disk-total"></small></div>
             <div id="home-gpu-row" class="fact" hidden><dt>GPU</dt><dd id="home-gpu">…</dd></div>
             <div class="fact"><dt>Model</dt><dd>Gemma 4 E2B Q4_0</dd></div>
           </dl>
@@ -114,7 +114,7 @@
           <a href="/mail" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-mail"/></svg></span><strong>Mail</strong><span>Compose and inspect delivery</span></a>
           <a href="/desktop-view" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-monitor"/></svg></span><strong>Desktop</strong><span>Open the private browser</span></a>
         </div>
-        <footer><span id="home-version">Virtual Me</span><a href="https://github.com/mayanklahiri/virtualme" target="_blank" rel="noopener noreferrer">GitHub</a></footer>
+        <footer><span id="home-version">Virtual Me</span><span class="footer-links"><a href="https://github.com/mayanklahiri/virtualme/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT license</a><a href="https://github.com/mayanklahiri/virtualme" target="_blank" rel="noopener noreferrer">GitHub</a></span></footer>
       </section>
 
       <section data-page="projects" hidden aria-labelledby="projects-title">
@@ -149,9 +149,18 @@
         <div class="jobs-grid">
           <div class="jobs-main">
             <article class="jobs-card"><h2>Queue</h2>
-              <ol id="queue-upcoming" class="queue-block" aria-label="Upcoming"></ol>
-              <ol id="queue-running" class="queue-block running" aria-label="Executing"></ol>
-              <ol id="queue-finished" class="queue-block" aria-label="Recently finished"></ol>
+              <div class="queue-group" hidden>
+                <h3 class="queue-group-title">Running now</h3>
+                <ol id="queue-running" class="queue-block running" aria-label="Running now"></ol>
+              </div>
+              <div class="queue-group" hidden>
+                <h3 class="queue-group-title">Up next</h3>
+                <ol id="queue-upcoming" class="queue-block" aria-label="Up next"></ol>
+              </div>
+              <div class="queue-group" hidden>
+                <h3 class="queue-group-title">Recently finished</h3>
+                <ol id="queue-finished" class="queue-block" aria-label="Recently finished"></ol>
+              </div>
               <p id="queue-empty" class="empty-note" hidden>Queue idle. Nothing upcoming.</p>
             </article>
             <article class="jobs-card"><h2>Activity</h2>
@@ -184,8 +193,6 @@
         <h2>Services</h2>
         <ul id="service-list" class="services" aria-live="polite"></ul>
         <div class="system-grid">
-          <article class="metric"><div><label for="load">One-minute load <strong id="load-value">0.00</strong></label><meter id="load" min="0" max="8" value="0">0</meter></div></article>
-          <article class="metric"><div><label for="memory">Memory <strong id="memory-value">0 / 0 MB</strong></label><meter id="memory" min="0" max="1" value="0">0</meter></div></article>
           <article class="metric gpu-card">
             <div><label>GPU <strong id="gpu-name">none detected</strong></label>
             <dl id="gpu-params" class="gpu-params" hidden></dl>
@@ -200,10 +207,10 @@
         <div class="charts">
           <figure class="chart">
             <div class="chart-head">
-              <div class="chart-title"><h3>CPU load</h3><p>per core, stacked percent</p></div>
+              <div class="chart-title"><h3>CPU load</h3><p>per process, stacked percent</p></div>
               <div class="lookback" role="radiogroup" aria-label="Time window" data-lookback></div>
             </div>
-            <canvas id="chart-cpu" tabindex="0" role="img" aria-label="Stacked per-core CPU usage bars"></canvas>
+            <canvas id="chart-cpu" tabindex="0" role="img" aria-label="Stacked per-process CPU usage bars"></canvas>
             <ul id="core-legend" class="legend"></ul>
           </figure>
           <figure class="chart">
@@ -227,17 +234,27 @@
       </section>
 
       <section data-page="chat" hidden class="chat-page" aria-labelledby="chat-title">
-        <div class="page-heading"><h1 id="chat-title">Chat</h1><button id="chat-clear" class="secondary" type="button"><svg class="icon"><use href="/icons.svg#i-trash-2"/></svg><span>Clear</span></button></div>
+        <div class="page-heading">
+          <h1 id="chat-title">Chat</h1>
+          <div class="page-heading-actions">
+            <button id="chat-copy" class="secondary" type="button" aria-label="Copy chat as Markdown"><svg class="icon"><use href="/icons.svg#i-copy"/></svg><span>Copy</span></button>
+            <button id="chat-clear" class="secondary" type="button"><svg class="icon"><use href="/icons.svg#i-trash-2"/></svg><span>Clear</span></button>
+          </div>
+        </div>
         <ul id="chat-log" class="chat-log" aria-live="polite"></ul>
         <div id="chat-stats" class="stats-strip">0 queries · 0 prompt + 0 completion tokens · 0 s thinking</div>
         <form id="chat-form" class="chat-form">
-          <textarea id="chat-input" rows="2" maxlength="4096" placeholder="Message Virtual Me… (Enter to send, Shift+Enter for a new line)" aria-label="Chat message" disabled></textarea>
-          <div class="chat-actions">
-            <span id="chat-count">0 / 4096</span>
-            <button id="chat-stop" type="button" hidden><svg class="icon"><use href="/icons.svg#i-square"/></svg>Stop</button>
-            <button id="chat-send" type="submit" disabled><svg class="icon"><use href="/icons.svg#i-send"/></svg>Send</button>
+          <div id="chat-composer" class="composer">
+            <textarea id="chat-input" rows="2" maxlength="4096" placeholder="Message Virtual Me… (Enter to send, Shift+Enter for a new line)" aria-label="Chat message" disabled></textarea>
+            <div class="chat-actions">
+              <span id="chat-count">0 / 4096</span>
+              <button id="chat-send" type="submit" disabled><svg class="icon"><use href="/icons.svg#i-send"/></svg>Send</button>
+            </div>
           </div>
-          <p id="llm-status" class="llm-status" aria-live="polite"></p>
+          <div id="chat-busy" class="chat-busy" hidden>
+            <p id="llm-status" class="llm-status" aria-live="polite"></p>
+            <button id="chat-stop" type="button"><svg class="icon"><use href="/icons.svg#i-square"/></svg>Stop</button>
+          </div>
         </form>
       </section>
 
@@ -249,7 +266,7 @@
           <textarea id="speech-input" rows="8" maxlength="4096" placeholder="Enter text to speak aloud"></textarea>
           <div class="speech-controls">
             <span id="speech-count">0 / 4096</span>
-            <label for="speech-voice">Voice</label><select id="speech-voice"><option value="en_US-lessac-medium">Lessac (en-US)</option><option value="en_US-ryan-medium">Ryan (en-US)</option></select>
+            <label for="speech-voice">Voice</label><select id="speech-voice"><option value="en_US-lessac-medium">Lessac (en-US)</option><option value="en_GB-alba-medium">Alba (en-GB)</option></select>
           </div>
           <div class="speech-actions">
             <button id="speech-clear" class="secondary" type="button"><svg class="icon"><use href="/icons.svg#i-trash-2"/></svg>Clear</button>

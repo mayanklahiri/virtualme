@@ -141,3 +141,29 @@ Requirement: leave open the future option of four Chromium **windows** (not tabs
   `about:blank` CDP page target. The execution host selected sandbox fallback
   in automatic mode, so the userns-sandbox-host half of that acceptance item
   remains unverified. All four live soak flows passed.
+
+### 2026-07-24 — Drop `--enable-automation` (infobar regression)
+
+Live desktop feedback: every session showed the persistent "Chrome is being
+controlled by automated test software" infobar, stealing a strip of the
+1600×900 deterministic surface and shifting page geometry under the
+vision/xdotool agent.
+
+- **Change.** `--enable-automation` is removed from the `FLAGS` array in
+  `docker/rootfs/etc/s6-overlay/s6-rc.d/svc-chromium/run`. It is the
+  documented trigger of that infobar, and modern Chromium ignores
+  `--disable-infobars` for it, so the flag cannot be kept and silenced.
+- **Determinism preserved.** Every concrete behavior §2 wanted from the
+  marker is still pinned by an explicit remaining flag: no first-run or
+  default-browser UX (`--no-first-run`, `--no-default-browser-check`), no
+  background networking or component/variations churn
+  (`--disable-background-networking`, `--disable-component-update`,
+  `--disable-field-trial-config`), no throttling
+  (`--disable-background*`), no surprise UI (`--noerrdialogs`,
+  `--disable-features=…`), and predictable password plumbing
+  (`--password-store=basic`).
+- **CDP unaffected.** Observation-only CDP is provided by
+  `--remote-debugging-port=9222 --remote-debugging-address=127.0.0.1`,
+  which does not depend on the automation marker.
+- Consequence: `navigator.webdriver` is no longer forced true, which is
+  acceptable (and mildly beneficial) for an agent browsing consumer sites.

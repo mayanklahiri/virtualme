@@ -153,3 +153,37 @@ Queue-backed manual calls record the same `tool` activity detail as agent
 calls: tool name, arguments, bounded result text, duration, status, and the
 `manual-tool` job ID. The Tools page keeps only in-memory per-tool output;
 the activity ledger remains the durable operator record.
+
+### 2026-07-24 — Queue grouping, short job names, pill and pulse polish
+
+Console feedback pass (specs 012–025 amendments). Files:
+`controller/web/static/index.html`, `js/jobs.js`, `css/app.css`,
+`test/jobs-ui.test.js`.
+
+1. **Three unmistakable queue groups.** The Queue card renders three
+   `.queue-group` blocks in order **Running now** (at most one row — the
+   queue is sequential by design), **Up next**, and **Recently finished**,
+   each with a small uppercase muted `<h3 class="queue-group-title">`.
+   Empty groups are hidden (`renderGroup` toggles `hidden` on the wrapper);
+   the "Queue idle" note shows only when all three are empty.
+2. **Only the running row pulses.** `.job-row.running` keeps its accent left
+   border and animates `background-color` via a dedicated `rowpulse`
+   keyframe (50% stop at `color-mix(in srgb, var(--accent) 14%,
+   transparent)`, period `calc(10 * var(--motion))`, disabled under
+   `prefers-reduced-motion`). Finished rows show exactly one small ok/error
+   `job-result-dot` and no clock icon, eliminating the previous
+   many-green-lights reading.
+3. **Short type-derived primary labels.** New exported `jobName(job)` maps
+   envelope types to "Chat", "Project: <name>", "Tool: <name>", "Queue
+   probe"; new `jobSecondary(job)` supplies the truncated muted secondary
+   text (chat prompt, project selector or "manual run", serialized tool
+   args, probe echo). Queue rows are now icon/dot · type pill · bold name ·
+   ellipsized secondary · meta. `queueSummary` is unchanged and remains the
+   detail-pane title. Unit tests cover both helpers.
+4. **Activity rows get kind pills.** The per-kind icon is replaced by the
+   same `.job-chip` pill used on queue rows, classed `type-llm`, `type-tool`,
+   `type-tts`, `type-mail` with theme-ramp colors, so ledger rows and queue
+   rows share one visual language.
+5. **Pill elongation fix.** `.job-chip` gains `align-self: center`, tighter
+   vertical padding (`.08rem`), and `line-height: 1.25`, so pills keep a
+   capsule shape instead of stretching to the row height in grid/flex rows.

@@ -1,6 +1,6 @@
 # Virtual Me
 
-![Virtual Me wordmark](controller/web/static/brand/wordmark.svg)
+<img src="controller/web/static/brand/virtualme-mark.svg" alt="Virtual Me icon" width="44" height="44"> <img src="controller/web/static/brand/wordmark.svg" alt="Virtual Me wordmark" height="40">
 
 [![CI](https://github.com/mayanklahiri/virtualme/actions/workflows/ci.yml/badge.svg)](https://github.com/mayanklahiri/virtualme/actions/workflows/ci.yml)
 [![Release](https://github.com/mayanklahiri/virtualme/actions/workflows/release.yml/badge.svg)](https://github.com/mayanklahiri/virtualme/actions/workflows/release.yml)
@@ -196,7 +196,7 @@ persists in Valkey across container restarts.
 
 The `/speech` tab streams sentence-level audio from the fully local
 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) engine with baked Piper
-Lessac and Ryan en-US voices. Seed texts fill the editor, and the global
+Lessac (en-US) and Alba (en-GB) voices. Seed texts fill the editor, and the global
 newest-first history persists in Valkey with cached replay. The browser starts
 playing after the first sentence while later sentences synthesize. Agent chat
 can use the `speak` tool when asked for an audible response; its audio bubble
@@ -204,7 +204,7 @@ supports replay.
 
 OpenAI-compatible clients can call `POST /v1/audio/speech`; `wav` is the
 default response format and `pcm` returns raw 16-bit mono PCM. Set `voice` to
-`en_US-lessac-medium` or `en_US-ryan-medium`; unknown values fall back to
+`en_US-lessac-medium` or `en_GB-alba-medium`; unknown values fall back to
 Lessac. Exact sentence/voice/speed renders are cached under
 `~/.virtualme/tts-cache/`; `VM_TTS_CACHE_MAX_MB` sets the LRU cap (default
 256 MiB), and deleting the cache is safe.

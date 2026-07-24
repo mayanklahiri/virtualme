@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { CONTAINER, DATA_MOUNT, IMAGE, PORT, TAG } from "../config.js";
-import { containerState, daemonUp, haveDocker, run as runDocker } from "../docker.js";
+import { containerState, daemonUp, haveDocker, hostNvidia, run as runDocker } from "../docker.js";
 import { green, red } from "../ansi.js";
 
 /**
@@ -17,10 +17,10 @@ function resolveDataDir(flag) {
 /**
  * @param {string[]} argv
  * @param {(args: string[]) => number} [docker]
- * @param {{ haveDocker: () => boolean, daemonUp: () => boolean, containerState: () => string }} [probes]
+ * @param {{ haveDocker: () => boolean, daemonUp: () => boolean, containerState: () => string, nvidiaGPU?: () => boolean }} [probes]
  */
-export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, containerState }) {
-  /** @type {{ data?: string, "no-browser-sandbox"?: boolean, gpus?: string }} */
+export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, containerState, nvidiaGPU: hostNvidia }) {
+  /** @type {{ data?: string, "no-browser-sandbox"?: boolean, gpus?: string, "no-gpu"?: boolean }} */
   let flags;
   try {
     flags = parseArgs({
@@ -29,10 +29,12 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
         data: { type: "string" },
         "no-browser-sandbox": { type: "boolean" },
         gpus: { type: "string" },
+        "no-gpu": { type: "boolean" },
       },
     }).values;
+    if (flags.gpus && flags["no-gpu"]) throw new Error("--gpus conflicts with --no-gpu");
   } catch {
-    console.error(red("error: usage: start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>]"));
+    console.error(red("error: usage: start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>] [--no-gpu]"));
     return 2;
   }
   if (!probes.haveDocker()) {
@@ -68,8 +70,13 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
   if (flags["no-browser-sandbox"]) {
     dockerArgs.push("-e", "VM_CHROMIUM_NO_SANDBOX=1");
   }
-  if (flags.gpus) {
-    dockerArgs.push("--gpus", flags.gpus, "-e", "VM_LLAMA_GPU=1");
+  // GPU passthrough: explicit --gpus wins, --no-gpu opts out, otherwise a
+  // detected host NVIDIA stack defaults to full passthrough. The capability
+  // env exposes the NVIDIA Vulkan ICD for the GPU llama runtime (spec 018).
+  const gpuSpec = flags["no-gpu"] ? "" : flags.gpus ?? (probes.nvidiaGPU?.() ? "all" : "");
+  if (gpuSpec) {
+    dockerArgs.push("--gpus", gpuSpec,
+      "-e", "VM_LLAMA_GPU=1", "-e", "NVIDIA_DRIVER_CAPABILITIES=all");
   }
   if (process.env.VM_MAIL_SMARTHOST) {
     dockerArgs.push("--add-host", "vmhost:host-gateway");

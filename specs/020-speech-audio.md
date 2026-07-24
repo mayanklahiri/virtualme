@@ -151,3 +151,33 @@ Repo ground truth: there are **no** sound assets and no `new Audio()`/oscillator
   and verified speech history plus cache files across a stop/start cycle.
 - The only unperformed acceptance action is subjective headphone listening;
   no host audio device is exposed in the execution environment.
+
+## Amendments
+
+### 2026-07-24 — Alba replaces Ryan; trimmed seed texts
+
+Live listening feedback: the second voice should be a distinct-sounding
+British English female voice rather than a second American male voice, and
+the seed texts were about twice as long as needed for a quick audition.
+
+1. **Voice swap.** `en_US-ryan-medium` is replaced everywhere by
+   **`en_GB-alba-medium`** (Piper VITS, medium tier — comfortably real-time
+   on the same hardware class as Lessac). Docker layer
+   `docker/layers/017-tts-voice-ryan.sh` is replaced by
+   `017-tts-voice-alba.sh`, fetching
+   `vits-piper-en_GB-alba-medium.tar.bz2` from the sherpa-onnx `tts-models`
+   release, pinned sha256
+   `fcd45962906933eec4431d3688f7d74aaac8713c87c6717f91fd3b23463aa1a1`.
+   Editing layer 017 in place (same number, new voice) is recorded here as
+   the constitution rule 6 spec amendment; the layer's role (baked-in second
+   TTS voice) is unchanged.
+2. **Touchpoints.** `tts.Voices` whitelist, the speech page `<select>`
+   (label "Alba (en-GB)"), the agent `speak` tool voice enum, the speech
+   history short-name mapping, README/AGENTS.md wording, and all probes/tests
+   (`tts-probe.mjs`, `speech-log-probe.mjs`, `speech-audio.test.js`, Go tts
+   and controller tests) now reference alba. Cached Ryan renders simply
+   become unused LRU entries and age out.
+3. **Seed trim.** The three seed texts are cut to one stanza/paragraph each
+   (Kipling first stanza; road and bridge first passages), roughly halving
+   their length; the Node test asserts both the retained openings and the
+   absence of the removed endings.

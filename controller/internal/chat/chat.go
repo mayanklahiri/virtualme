@@ -283,6 +283,11 @@ func (s *Service) HandleClientMessage(c *ws.Conn, payload []byte) {
 		Type string `json:"type"`
 		Message
 	}{Type: "chat-message", Message: userMessage}))
+	// Count the query as soon as it is submitted so the stats strip moves on
+	// every turn, not only after the reply lands.
+	if _, err := s.valkey.HIncrBy(statsKey, "queries", 1); err == nil {
+		s.broadcast(s.StatsMessage())
+	}
 	payloadBody, _ := json.Marshal(map[string]string{"text": text})
 
 	if s.jobs == nil {
@@ -456,7 +461,6 @@ func (s *Service) updateStats(promptTokens, completionTokens int, elapsed time.D
 		field string
 		value int64
 	}{
-		{"queries", 1},
 		{"promptTokens", int64(promptTokens)},
 		{"completionTokens", int64(completionTokens)},
 		{"genMs", elapsed.Milliseconds()},

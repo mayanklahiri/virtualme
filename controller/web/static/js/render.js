@@ -54,6 +54,11 @@ function formatUptime(seconds) {
   ].filter(Boolean).join(" ");
 }
 
+// Short form for the home fact tiles: the two most significant units only.
+function formatUptimeShort(seconds) {
+  return formatUptime(seconds).split(" ").slice(0, 2).join(" ");
+}
+
 function gpuName(gpu) {
   const vendor = { nvidia: "NVIDIA", amd: "AMD", intel: "Intel" }[gpu?.vendor] ?? "";
   return [vendor, gpu?.model].filter(Boolean).join(" ");
@@ -72,7 +77,7 @@ export function renderState(snapshot) {
   document.querySelector("#status-title").textContent = snapshot.ok ? "All systems operational" : "Service attention required";
   document.querySelector("#status-detail").textContent = snapshot.ok ? `All ${snapshot.services.length} supervised services are healthy.` : "One or more supervised services are unavailable.";
   document.querySelector("#uptime").textContent = formatUptime(snapshot.uptimeSec);
-  document.querySelector("#home-uptime").textContent = formatUptime(snapshot.uptimeSec);
+  document.querySelector("#home-uptime").textContent = formatUptimeShort(snapshot.uptimeSec);
   document.querySelector("#home-host").textContent = snapshot.hostname || "…";
   const port = Number(snapshot.net?.port) || 8080;
   const containerAddresses = (snapshot.net?.addrs ?? []).map((address) => addressWithPort(address, port));
@@ -117,9 +122,11 @@ export function renderState(snapshot) {
   const diskFree = Number(system.diskFreeMB) || 0;
   const diskTotal = Number(system.diskTotalMB) || 0;
   const cores = Array.isArray(snapshot.cores) ? snapshot.cores.length : 0;
-  document.querySelector("#home-cpu").textContent = `${cores} cores · load ${load.toFixed(2)}`;
+  document.querySelector("#home-cpu").textContent = `${cores} cores`;
+  document.querySelector("#home-cpu-load").textContent = `load ${load.toFixed(2)}`;
   document.querySelector("#home-memory").textContent = `${(used / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} GB`;
-  document.querySelector("#home-disk").textContent = `${(diskFree / 1024).toFixed(1)} GB free of ${(diskTotal / 1024).toFixed(1)} GB`;
+  document.querySelector("#home-disk").textContent = `${(diskFree / 1024).toFixed(1)} GB free`;
+  document.querySelector("#home-disk-total").textContent = `of ${(diskTotal / 1024).toFixed(1)} GB`;
   const gpu = snapshot.gpu ?? {};
   const name = document.querySelector("#gpu-name");
   const params = document.querySelector("#gpu-params");
@@ -150,15 +157,6 @@ export function renderState(snapshot) {
     caption.hidden = false;
     homeGPURow.hidden = true;
   }
-  const loadMeter = document.querySelector("#load");
-  loadMeter.value = Math.min(load, Number(loadMeter.max));
-  loadMeter.setAttribute("aria-valuenow", String(load));
-  document.querySelector("#load-value").textContent = load.toFixed(2);
-  const memoryMeter = document.querySelector("#memory");
-  memoryMeter.max = Math.max(total, 1);
-  memoryMeter.value = Math.min(used, memoryMeter.max);
-  memoryMeter.setAttribute("aria-valuenow", String(used));
-  document.querySelector("#memory-value").textContent = `${used} / ${total} MB`;
   const scheduler = snapshot.scheduler ?? {};
   const clock = document.querySelector("#scheduler-clock");
   const instant = new Date(scheduler.localTime);
@@ -167,10 +165,11 @@ export function renderState(snapshot) {
     : `${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" }).format(instant)} · ${scheduler.tz || "local"}`;
   const selectorList = document.querySelector("#scheduler-active");
   selectorList.replaceChildren();
-  for (const [index, token] of (scheduler.active ?? []).entries()) {
+  for (const token of scheduler.active ?? []) {
     const item = document.createElement("li");
     item.textContent = token;
-    if (index === 0) item.className = "current";
+    // Every listed token is currently active; highlight them all.
+    item.className = "current";
     selectorList.append(item);
   }
   document.querySelector("#jiggler-switch").setAttribute(

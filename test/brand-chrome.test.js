@@ -26,7 +26,8 @@ test("brand chrome markup and responsive contracts stay intact", async () => {
   assert.match(conn, /requestAnimationFrame/);
   assert.match(render, /snapshot\.services\.length/);
   assert.doesNotMatch(wordmark, /<text\b/);
-  assert.match(wordmark, /wordmark-m-slice/);
+  assert.match(wordmark, /var\(--wordmark-fill/);
+  assert.match(wordmark, /#d63b2f/);
 });
 
 test("SPA-visible copy has no banned phrases or em dashes", async () => {

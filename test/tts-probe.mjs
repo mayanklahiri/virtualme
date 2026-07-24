@@ -43,7 +43,7 @@ function request(id, text, voice) {
   socket.send(JSON.stringify({ type: "tts-req", id, text, voice }));
 }
 
-async function checkHTTP(voice = "en_US-ryan-medium") {
+async function checkHTTP(voice = "en_GB-alba-medium") {
   const response = await fetch(`${base}/v1/audio/speech`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -100,13 +100,13 @@ socket.addEventListener("message", async (event) => {
   } else if (phase === "voice-lessac" && message.id === "probe-voice-lessac") {
     if (message.type === "tts-chunk") lessacPCM += message.pcm;
     if (message.type === "tts-done") {
-      phase = "voice-ryan";
-      request("probe-voice-ryan", voiceText, "en_US-ryan-medium");
+      phase = "voice-alba";
+      request("probe-voice-alba", voiceText, "en_GB-alba-medium");
     }
-  } else if (phase === "voice-ryan" && message.id === "probe-voice-ryan") {
+  } else if (phase === "voice-alba" && message.id === "probe-voice-alba") {
     if (message.type === "tts-chunk") voicePCM += message.pcm;
     if (message.type === "tts-done") {
-      if (!voicePCM || voicePCM === lessacPCM) fail("Ryan render is empty or identical to Lessac");
+      if (!voicePCM || voicePCM === lessacPCM) fail("Alba render is empty or identical to Lessac");
       try {
         await checkHTTP();
       } catch (error) {

@@ -1,4 +1,4 @@
-// Package jiggler provides opt-in ambient OS-level mouse movement.
+// Package jiggler provides ambient OS-level mouse movement, on by default.
 package jiggler
 
 import (
@@ -22,18 +22,11 @@ import (
 
 const enabledKey = "virtualme:jiggler:enabled"
 
-var (
-	errDisabled   = errors.New("jiggler disabled")
-	errJobRunning = errors.New("job started")
-)
+var errDisabled = errors.New("jiggler disabled")
 
 // Runner executes an xdotool process and returns captured output.
 type Runner interface {
 	Run(context.Context, string, []string, []string, string) ([]byte, []byte, error)
-}
-
-type jobState interface {
-	IsRunning() bool
 }
 
 // Service owns jiggler state and its background cadence.
@@ -48,7 +41,6 @@ type Service struct {
 
 	mu       sync.RWMutex
 	enabled  bool
-	jobs     jobState
 	activity jobs.ActivityRecorder
 	rng      *mathrand.Rand
 	wake     chan struct{}
@@ -60,7 +52,7 @@ type Service struct {
 	pauseMax   time.Duration
 }
 
-// New constructs a disabled jiggler service.
+// New constructs a jiggler service (enabled by default once started).
 func New(runner Runner, client *valkey.Client, broadcast func([]byte), width, height int) *Service {
 	var seedBytes [8]byte
 	if _, err := rand.Read(seedBytes[:]); err != nil {
@@ -71,7 +63,7 @@ func New(runner Runner, client *valkey.Client, broadcast func([]byte), width, he
 		display: ":99", xdotool: "xdotool",
 		rng:  mathrand.New(mathrand.NewSource(int64(binary.LittleEndian.Uint64(seedBytes[:])))),
 		wake: make(chan struct{}, 1), sleep: sleepContext,
-		silenceMin: 45 * time.Second, silenceMax: 4 * time.Minute,
+		silenceMin: 8 * time.Second, silenceMax: 27 * time.Second,
 		pauseMin: 300 * time.Millisecond, pauseMax: 1500 * time.Millisecond,
 	}
 }
@@ -81,11 +73,6 @@ func (s *Service) SetDisplay(display string) {
 	if display != "" {
 		s.display = display
 	}
-}
-
-// SetJobManager supplies the queue-running guard.
-func (s *Service) SetJobManager(manager *jobs.Manager) {
-	s.jobs = manager
 }
 
 // SetActivity supplies the durable activity ledger.
@@ -227,9 +214,6 @@ func (s *Service) move(ctx context.Context, from, to Point) error {
 		if !s.Enabled() {
 			return errDisabled
 		}
-		if s.jobs != nil && s.jobs.IsRunning() {
-			return errJobRunning
-		}
 		stdout, stderr, err := s.runner.Run(ctx, s.xdotool,
 			[]string{"mousemove", strconv.Itoa(point.X), strconv.Itoa(point.Y)},
 			[]string{"DISPLAY=" + s.display}, "")
@@ -243,21 +227,20 @@ func (s *Service) move(ctx context.Context, from, to Point) error {
 	return nil
 }
 
+// burst runs unconditionally while enabled; the only yield is the agent's
+// xdotool actuation lock, which protects in-flight agent input.
 func (s *Service) burst(ctx context.Context) int {
-	if !s.Enabled() || (s.jobs != nil && s.jobs.IsRunning()) || !actuation.TryLock() {
+	if !s.Enabled() || !actuation.TryLock() {
 		return 0
 	}
 	defer actuation.Unlock()
-	if s.jobs != nil && s.jobs.IsRunning() {
-		return 0
-	}
 	count := s.movementCount()
 	from := s.currentPosition(ctx)
 	completed := 0
 	for index := range count {
 		to := s.target()
 		if err := s.move(ctx, from, to); err != nil {
-			if ctx.Err() == nil && !errors.Is(err, errDisabled) && !errors.Is(err, errJobRunning) {
+			if ctx.Err() == nil && !errors.Is(err, errDisabled) {
 				log.Println("jiggler: movement failed:", err)
 			}
 			break
@@ -279,12 +262,13 @@ func (s *Service) burst(ctx context.Context) int {
 }
 
 // Start loads persisted state and runs until ctx is cancelled.
+// The jiggler defaults to enabled: only an explicit persisted "0" disables it.
 func (s *Service) Start(ctx context.Context) error {
 	value, err := s.valkey.Get(enabledKey)
 	if err != nil {
 		return fmt.Errorf("load enabled state: %w", err)
 	}
-	s.setCached(value != nil && *value == "1")
+	s.setCached(value == nil || *value != "0")
 	go s.run(ctx)
 	return nil
 }

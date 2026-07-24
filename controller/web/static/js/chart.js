@@ -11,6 +11,9 @@ const TICK_STEPS = {
   "7d": [86400e3, 172800e3],
   "30d": [604800e3, 864000e3],
 };
+// Finer steps (descending) used when a short data span crosses no preferred
+// boundary, so the x-axis is never left without labels.
+const FALLBACK_STEPS = [1800e3, 900e3, 600e3, 300e3, 120e3, 60e3, 30e3, 10e3];
 const LOOKBACK_TITLES = {
   "15m": "Last 15 minutes",
   "1h": "Last hour",
@@ -44,6 +47,19 @@ export function chooseTicks(firstTs, lastTs, widthPx, lookback, timezoneOffsetMi
     ticks = candidateTicks;
     if (ticks.length <= bound) break;
   }
+  if (ticks.length < 2) {
+    for (const candidate of FALLBACK_STEPS) {
+      if (candidate >= stepMs) continue;
+      const finer = boundaryTicks(firstTs, lastTs, candidate, timezoneOffsetMinutes);
+      if (finer.length >= 2) {
+        return { stepMs: candidate, ticks: finer.slice(0, bound) };
+      }
+      if (finer.length > ticks.length) {
+        stepMs = candidate;
+        ticks = finer;
+      }
+    }
+  }
   return { stepMs, ticks: ticks.slice(0, bound) };
 }
 
@@ -63,7 +79,7 @@ function metricSample(snapshot) {
   const byName = new Map((snapshot.processes ?? []).map((process) => [process.name, process]));
   return {
     ts: Number(snapshot.ts),
-    cores: (snapshot.cores ?? []).map(Number),
+    procCPU: PROCESSES.map((name) => Number(byName.get(name)?.cpuPct) || 0),
     procMemMB: PROCESSES.map((name) => Number(byName.get(name)?.memMB) || 0),
     gpuUtil: Number(snapshot.system?.gpuUtil) || 0,
     gpuMemMB: Number(snapshot.system?.gpuMemMB) || 0,
@@ -89,7 +105,7 @@ function setup(canvas) {
   return { context, width, height };
 }
 
-function drawYAxes(context, width, height, max, unit) {
+function drawYAxes(context, width, height, max, unit, formatTick) {
   const plotHeight = height - PAD.top - PAD.bottom;
   context.font = `10px ${css("--font-body")}`;
   context.strokeStyle = css("--border");
@@ -103,13 +119,17 @@ function drawYAxes(context, width, height, max, unit) {
     context.stroke();
     context.textAlign = "right";
     context.textBaseline = "middle";
-    context.fillText(`${Math.round(max * line / 4)}${unit}`, PAD.left - 5, y);
+    const value = max * line / 4;
+    context.fillText(formatTick ? formatTick(value) : `${Math.round(value)}${unit}`, PAD.left - 5, y);
   }
 }
 
-function scales(samples, width, height, max) {
-  const first = samples[0]?.ts ?? 0;
-  const last = samples.at(-1)?.ts ?? first + 1;
+// The x-domain is always the full lookback window (anchored at the newest
+// sample, or now), so switching windows visibly rescales sparse data instead
+// of drawing an identical data-extent chart.
+function scales(samples, width, height, max, spanMs) {
+  const last = samples.at(-1)?.ts ?? Date.now();
+  const first = spanMs ? last - spanMs : (samples[0]?.ts ?? last - 1);
   const span = Math.max(last - first, 1);
   const plotWidth = width - PAD.left - PAD.right;
   return {
@@ -173,7 +193,7 @@ function makeLegendItem(name, index) {
 
 function makeChart({
   canvas, legend, title, series, seriesNames, unit, maxFn, getSamples, getResolution,
-  getLookback, tooltip, collapseLegend = false, renderSeries, formatValue,
+  getLookback, tooltip, collapseLegend = false, renderSeries, formatValue, formatTick,
 }) {
   let hover = -1;
   let expanded = false;
@@ -242,9 +262,9 @@ function makeChart({
     const names = seriesNames();
     const { context, width, height } = setup(canvas);
     const max = maxFn(samples, names);
-    const scale = scales(samples, width, height, max);
+    const scale = scales(samples, width, height, max, SPANS[getLookback()]);
     const parts = segments(samples, getResolution());
-    drawYAxes(context, width, height, max, unit);
+    drawYAxes(context, width, height, max, unit, formatTick);
     (renderSeries ?? defaultRenderer)({
       context, width, height, scale, parts, names, resSec: getResolution(), barBounds,
     });
@@ -260,9 +280,14 @@ function makeChart({
       return;
     }
     const names = seriesNames();
-    const values = series(sample).map((value, valueIndex) =>
+    // Only the five largest series at this instant; the rest collapse to one line.
+    const ranked = series(sample)
+      .map((value, valueIndex) => ({ value, valueIndex }))
+      .sort((a, b) => b.value - a.value);
+    const top = ranked.slice(0, 5).map(({ value, valueIndex }) =>
       `${names[valueIndex]}: ${formatValue ? formatValue(value, valueIndex) : value}`);
-    tooltip.textContent = [title, tooltipFormatter.format(sample.ts), ...values].join("\n");
+    if (ranked.length > 5) top.push(`+${ranked.length - 5} more`);
+    tooltip.textContent = [title, tooltipFormatter.format(sample.ts), ...top].join("\n");
     tooltip.hidden = false;
     tooltip.style.left = `${Math.min(clientX + 12, innerWidth - tooltip.offsetWidth - 8)}px`;
     tooltip.style.top = `${Math.min(clientY + 12, innerHeight - tooltip.offsetHeight - 8)}px`;
@@ -271,7 +296,7 @@ function makeChart({
   canvas.addEventListener("mousemove", (event) => {
     const samples = getSamples();
     const rect = canvas.getBoundingClientRect();
-    const scale = scales(samples, rect.width, rect.height, 1);
+    const scale = scales(samples, rect.width, rect.height, 1, SPANS[getLookback()]);
     const x = Math.max(PAD.left, Math.min(rect.width - PAD.right, event.clientX - rect.left));
     show(nearestSampleIndex(samples, scale.invertX(x)), event.clientX, event.clientY);
   });
@@ -301,6 +326,8 @@ export function initCharts(send) {
   let live = false;
   let gpuEnabled;
   let gpuMemTotalMB = 0;
+  let memTotalMB = 0;
+  let lastDrawMs = 0;
 
   function request() {
     if (live) {
@@ -355,14 +382,14 @@ export function initCharts(send) {
     canvas: document.querySelector("#chart-cpu"),
     legend: document.querySelector("#core-legend"),
     title: "CPU load",
-    series: (sample) => sample.cores,
-    seriesNames: () => Array.from(
-      { length: Math.max(0, ...samples.map((sample) => sample.cores.length)) },
-      (_, index) => `cpu${index}`,
-    ),
+    series: (sample) => sample.procCPU,
+    seriesNames: () => PROCESSES,
     unit: "%",
-    maxFn: (_chartSamples, names) => Math.max(names.length * 100, 100),
-    collapseLegend: true,
+    maxFn: (chartSamples) => {
+      const peak = Math.max(100, ...chartSamples.map((sample) =>
+        sample.procCPU.reduce((sum, value) => sum + (value || 0), 0)));
+      return Math.ceil(peak / 100) * 100;
+    },
     formatValue: (value) => `${value.toFixed(1)}%`,
   });
   const memoryChart = makeChart({
@@ -372,9 +399,16 @@ export function initCharts(send) {
     title: "Memory",
     series: (sample) => sample.procMemMB,
     seriesNames: () => PROCESSES,
-    unit: "",
-    maxFn: (chartSamples) => Math.max(1, ...chartSamples.map((sample) =>
-      sample.procMemMB.reduce((sum, value) => sum + (value || 0), 0))),
+    unit: "MiB",
+    // Fixed 0 → system total so process memory reads against real capacity.
+    maxFn: (chartSamples) => Math.max(
+      memTotalMB,
+      1,
+      ...chartSamples.map((sample) => sample.procMemMB.reduce((sum, value) => sum + (value || 0), 0)),
+    ),
+    formatTick: (value) => value >= 1024
+      ? `${(value / 1024).toFixed(value % 1024 === 0 ? 0 : 1)}GiB`
+      : `${Math.round(value)}MiB`,
     formatValue: (value) => `${value} MiB`,
   });
   const gpuChart = makeChart({
@@ -389,7 +423,7 @@ export function initCharts(send) {
     formatValue: (value, index) => index === 0 ? `${value.toFixed(1)}%` : `${value.toFixed(1)} MiB`,
     renderSeries({ context, width, scale, parts, resSec: resolution, barBounds }) {
       const memoryMax = Math.max(gpuMemTotalMB, 1, ...samples.map((sample) => sample.gpuMemMB || 0));
-      const memoryScale = scales(samples, width, context.canvas.getBoundingClientRect().height, memoryMax);
+      const memoryScale = scales(samples, width, context.canvas.getBoundingClientRect().height, memoryMax, SPANS[lookback]);
       context.fillStyle = css("--p1");
       for (const part of parts) {
         part.forEach((sample, index) => {
@@ -416,6 +450,7 @@ export function initCharts(send) {
   });
 
   function draw() {
+    lastDrawMs = Date.now();
     cpuChart.draw();
     memoryChart.draw();
     if (gpuEnabled) gpuChart.draw();
@@ -435,11 +470,13 @@ export function initCharts(send) {
       if (message.lookback !== lookback) return;
       resSec = Number(message.resSec) || 2;
       samples = (message.samples ?? []).map((sample) => ({
-        ts: Number(sample.ts), cores: (sample.cores ?? []).map(Number),
+        ts: Number(sample.ts),
+        procCPU: (sample.procCPU ?? []).map(Number),
         procMemMB: (sample.procMemMB ?? []).map(Number),
         gpuUtil: Number(sample.gpuUtil) || 0,
         gpuMemMB: Number(sample.gpuMemMB) || 0,
       }));
+      memTotalMB = Number(message.samples?.at(-1)?.memTotalMB) || memTotalMB;
       draw();
     },
     push(snapshot) {
@@ -452,6 +489,7 @@ export function initCharts(send) {
       if (gpuEnabled) {
         gpuMemTotalMB = Number(snapshot.system?.gpuMemTotalMB) || gpuMemTotalMB;
       }
+      memTotalMB = Number(snapshot.system?.memTotalMB) || memTotalMB;
       if (!["15m", "1h"].includes(lookback)) {
         if (configured) draw();
         return;
@@ -460,7 +498,9 @@ export function initCharts(send) {
       const cutoff = Date.now() - SPANS[lookback];
       while (samples[0]?.ts < cutoff) samples.shift();
       resSec = 2;
-      draw();
+      // Samples accumulate at the 2 s state cadence, but the charts repaint
+      // at most once per 15 s to keep the page calm.
+      if (configured || Date.now() - lastDrawMs >= 15000) draw();
     },
     draw,
   };

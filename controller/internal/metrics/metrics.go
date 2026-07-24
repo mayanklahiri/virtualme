@@ -15,6 +15,7 @@ import (
 type Sample struct {
 	Ts         int64     `json:"ts"`
 	Cores      []float64 `json:"cores"`
+	ProcCPU    []float64 `json:"procCPU"`
 	ProcMemMB  []int     `json:"procMemMB"`
 	Load1      float64   `json:"load1"`
 	MemUsedMB  int       `json:"memUsedMB"`
@@ -71,26 +72,34 @@ func NewStore(dir string) *Store {
 
 func cloneSample(sm Sample) Sample {
 	sm.Cores = append([]float64(nil), sm.Cores...)
+	sm.ProcCPU = append([]float64(nil), sm.ProcCPU...)
 	sm.ProcMemMB = append([]int(nil), sm.ProcMemMB...)
 	return sm
 }
 
 func mean(samples []Sample) Sample {
 	result := Sample{Ts: samples[len(samples)-1].Ts}
-	coreN, procN := 0, 0
+	coreN, procCPUN, procN := 0, 0, 0
 	for _, sm := range samples {
 		if len(sm.Cores) > coreN {
 			coreN = len(sm.Cores)
+		}
+		if len(sm.ProcCPU) > procCPUN {
+			procCPUN = len(sm.ProcCPU)
 		}
 		if len(sm.ProcMemMB) > procN {
 			procN = len(sm.ProcMemMB)
 		}
 	}
 	result.Cores = make([]float64, coreN)
+	result.ProcCPU = make([]float64, procCPUN)
 	procSums := make([]int64, procN)
 	for _, sm := range samples {
 		for i, value := range sm.Cores {
 			result.Cores[i] += value
+		}
+		for i, value := range sm.ProcCPU {
+			result.ProcCPU[i] += value
 		}
 		for i, value := range sm.ProcMemMB {
 			procSums[i] += int64(value)
@@ -104,6 +113,9 @@ func mean(samples []Sample) Sample {
 	n := float64(len(samples))
 	for i := range result.Cores {
 		result.Cores[i] /= n
+	}
+	for i := range result.ProcCPU {
+		result.ProcCPU[i] /= n
 	}
 	result.ProcMemMB = make([]int, procN)
 	for i, total := range procSums {

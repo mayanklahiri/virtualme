@@ -11,6 +11,48 @@ function fieldID(name) {
   return `tool-field-${name.replaceAll(/[^a-z0-9_-]/gi, "-")}`;
 }
 
+/** Full-screen image overlay with a download control. @param {string} src @param {string} alt */
+function openLightbox(src, alt) {
+  const previous = /** @type {HTMLElement | null} */ (document.activeElement);
+  const overlay = document.createElement("div");
+  overlay.className = "lightbox";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-label", alt);
+  const image = document.createElement("img");
+  image.src = src;
+  image.alt = alt;
+  const actions = document.createElement("div");
+  actions.className = "lightbox-actions";
+  const download = document.createElement("a");
+  download.textContent = "Download";
+  download.href = src;
+  download.download = `${alt.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/^-|-$/g, "") || "tool-result"}.png`;
+  const close = document.createElement("button");
+  close.type = "button";
+  close.textContent = "Close";
+  actions.append(download, close);
+  overlay.append(image, actions);
+  function dismiss() {
+    overlay.remove();
+    document.removeEventListener("keydown", onKey);
+    previous?.focus();
+  }
+  /** @param {KeyboardEvent} event */
+  function onKey(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      dismiss();
+    }
+  }
+  overlay.addEventListener("click", (event) => {
+    if (event.target !== download) dismiss();
+  });
+  close.addEventListener("click", dismiss);
+  document.addEventListener("keydown", onKey);
+  document.body.append(overlay);
+  close.focus();
+}
+
 /** @param {(value: Data) => void} send */
 export function initTools(send) {
   const list = /** @type {HTMLElement} */ (document.querySelector("#tools-list"));
@@ -43,10 +85,17 @@ export function initTools(send) {
     const body = document.createElement("div");
     body.className = "tool-output-body";
     if (result.image) {
+      const alt = `${selected?.name ?? "Tool"} result`;
+      const zoom = document.createElement("button");
+      zoom.type = "button";
+      zoom.className = "tool-image-zoom";
+      zoom.setAttribute("aria-label", `Open ${alt} full screen`);
       const image = document.createElement("img");
       image.src = String(result.image);
-      image.alt = `${selected?.name ?? "Tool"} result`;
-      body.append(image);
+      image.alt = alt;
+      zoom.append(image);
+      zoom.addEventListener("click", () => openLightbox(String(result.image), alt));
+      body.append(zoom);
     }
     const text = String(result.text || result.error || "");
     if (text) {

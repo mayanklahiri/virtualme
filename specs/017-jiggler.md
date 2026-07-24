@@ -92,3 +92,26 @@ deterministic. Disabling during a burst stops further points promptly.
 The console already had a project-specific switch from spec 014. Spec 017
 promotes it to the reusable `.switch`/`.knob` component and uses that component
 for both projects and the Status-page jiggler control.
+
+### 2026-07-24 — Always-on default, faster cadence, no queue yield
+
+Live-usage feedback: the jiggler should behave like a person is always at the
+desk, not like a occasionally-permitted background task.
+
+1. **Default enabled.** `Start` now treats an absent
+   `virtualme:jiggler:enabled` key as **on**; only a persisted literal `"0"`
+   disables. A fresh data directory therefore jiggles immediately, and an
+   explicit Status-page opt-out still round-trips across restarts (e2e
+   restart assertion unchanged: enable→disable persists `"0"`).
+2. **Burst cadence 8–27 s.** The inter-burst silence window drops from
+   45 s–4 min to a uniform 8–27 s, making ambient motion near-constant.
+3. **No queue yield.** The `jobs.IsRunning()` guard is removed entirely (from
+   both the burst gate and mid-trajectory checks), along with
+   `SetJobManager`; queued or running LLM work no longer pauses ambient
+   motion. The only remaining yield is the agent's xdotool actuation lock
+   (`actuation.TryLock()`), which prevents the jiggler from corrupting
+   in-flight agent mouse/keyboard actuation; a held lock skips that burst and
+   the loop retries on the next cadence tick.
+
+Unit tests cover the enabled-by-default load, the explicit-"0" opt-out, the
+8–27 s cadence bounds, and the actuation-lock yield.

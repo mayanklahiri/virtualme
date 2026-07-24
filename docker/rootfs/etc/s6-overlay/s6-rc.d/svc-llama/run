@@ -1,10 +1,23 @@
 #!/command/with-contenv bash
-export LD_LIBRARY_PATH=/opt/llama
-exec /opt/llama/llama-server \
+# Runtime selection (spec 018 amendment 2026-07-24): use the Vulkan build with
+# full GPU offload when the CLI passed a GPU through (VM_LLAMA_GPU=1) and an
+# NVIDIA device node is actually injected; otherwise the CPU build.
+LLAMA_DIR=/opt/llama
+GPU_FLAGS=()
+if [ "${VM_LLAMA_GPU:-0}" = "1" ] \
+  && [ -e /dev/nvidiactl ] \
+  && [ -x /opt/llama-vulkan/llama-server ]; then
+  LLAMA_DIR=/opt/llama-vulkan
+  GPU_FLAGS=(--n-gpu-layers 999)
+fi
+echo "svc-llama: runtime ${LLAMA_DIR} ${GPU_FLAGS[*]:-cpu-only}"
+export LD_LIBRARY_PATH="$LLAMA_DIR"
+exec "$LLAMA_DIR/llama-server" \
   --model "$VM_MODEL_PATH" \
   --mmproj "$VM_MMPROJ_PATH" \
   --host 127.0.0.1 --port "$VM_LLAMA_PORT" \
   --ctx-size "$VM_LLAMA_CTX" \
   --threads "${VM_THREADS:-$(nproc)}" \
   --slots \
-  --no-webui
+  --no-webui \
+  "${GPU_FLAGS[@]}"

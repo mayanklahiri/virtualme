@@ -216,6 +216,10 @@ func TestAgentRoutingPersistsFinalReply(t *testing.T) {
 	})
 	service.HandleClientMessage(nil, []byte(`{"type":"chat","text":"use agent"}`))
 	waitEvent(t, events, "chat-message")
+	early := waitEvent(t, events, "chat-stats")
+	if !strings.Contains(string(early), `"queries":1`) {
+		t.Fatalf("early chat-stats = %s, want queries counted at submit", early)
+	}
 	waitEvent(t, events, "agent-status")
 	waitEvent(t, events, "chat-delta")
 	waitEvent(t, events, "agent-status")
@@ -332,15 +336,21 @@ func TestChatEnqueuesWithInitiatorAndQueuedFeedback(t *testing.T) {
 	conn := &ws.Conn{}
 	service.HandleClientMessage(conn, []byte(`{"type":"chat","text":"queued"}`))
 	waitEvent(t, events, "chat-message")
+	waitEvent(t, events, "chat-stats")
 	status := waitEvent(t, events, "llm-status")
 	if !strings.Contains(string(status), `"phase":"queued"`) || !strings.Contains(string(status), `"queued behind 2 jobs"`) {
 		t.Fatalf("status = %s", status)
 	}
 	var pushed []string
-	for range 5 {
-		command := <-server.commands
-		if command[0] == "RPUSH" && command[1] == "virtualme:jobs:ready:interactive" {
-			pushed = command
+	timeout := time.After(2 * time.Second)
+	for pushed == nil {
+		select {
+		case command := <-server.commands:
+			if command[0] == "RPUSH" && command[1] == "virtualme:jobs:ready:interactive" {
+				pushed = command
+			}
+		case <-timeout:
+			t.Fatal("ready-queue RPUSH never observed")
 		}
 	}
 	if len(pushed) != 3 || pushed[1] != "virtualme:jobs:ready:interactive" {
@@ -524,7 +534,8 @@ func TestStatusSequenceAndTimingsStats(t *testing.T) {
 				}
 			case "chat-stats":
 				_ = json.Unmarshal(payload, &stats)
-				if stats.Queries == 1 {
+				// Skip the submit-time stats bump; wait for the completion totals.
+				if stats.Queries == 1 && stats.CompletionTokens > 0 {
 					if strings.Join(phases, ",") != "sending,processing,generating" &&
 						strings.Join(phases, ",") != "sending,processing,generating,idle" {
 						t.Fatalf("phases = %v", phases)

@@ -185,22 +185,72 @@ test("start forwards configured TTS cache environment", () => {
   }
 });
 
-test("start forwards an optional GPU specification and marker env", () => {
+test("start forwards an explicit GPU specification with marker and capability env", () => {
   const parent = mkdtempSync(join(tmpdir(), "virtualme-test-"));
   const dataDir = join(parent, "data");
   try {
     /** @type {string[] | undefined} */
     let invocation;
-    const probes = { haveDocker: () => true, daemonUp: () => true, containerState: () => "absent" };
-    const code = start(["--data", dataDir, "--gpus", "all"], (args) => {
+    // Explicit --gpus wins even when detection says no GPU.
+    const probes = {
+      haveDocker: () => true, daemonUp: () => true, containerState: () => "absent",
+      nvidiaGPU: () => false,
+    };
+    const code = start(["--data", dataDir, "--gpus", "device=0"], (args) => {
       invocation = args;
       return 0;
     }, probes);
     assert.equal(code, 0);
     assert.ok(invocation);
-    assert.deepEqual(invocation.slice(-5), [
-      "--gpus", "all", "-e", "VM_LLAMA_GPU=1", "mayanklahiri/virtualme:latest",
+    assert.deepEqual(invocation.slice(-7), [
+      "--gpus", "device=0", "-e", "VM_LLAMA_GPU=1",
+      "-e", "NVIDIA_DRIVER_CAPABILITIES=all", "mayanklahiri/virtualme:latest",
     ]);
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+test("start auto-passes the whole GPU through when the host has NVIDIA", () => {
+  const parent = mkdtempSync(join(tmpdir(), "virtualme-test-"));
+  try {
+    /** @type {string[] | undefined} */
+    let invocation;
+    const probes = {
+      haveDocker: () => true, daemonUp: () => true, containerState: () => "absent",
+      nvidiaGPU: () => true,
+    };
+    assert.equal(start(["--data", join(parent, "data")], (args) => {
+      invocation = args;
+      return 0;
+    }, probes), 0);
+    assert.ok(invocation);
+    assert.deepEqual(invocation.slice(-7), [
+      "--gpus", "all", "-e", "VM_LLAMA_GPU=1",
+      "-e", "NVIDIA_DRIVER_CAPABILITIES=all", "mayanklahiri/virtualme:latest",
+    ]);
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+test("start --no-gpu suppresses auto GPU passthrough and conflicts with --gpus", () => {
+  const parent = mkdtempSync(join(tmpdir(), "virtualme-test-"));
+  try {
+    /** @type {string[] | undefined} */
+    let invocation;
+    const probes = {
+      haveDocker: () => true, daemonUp: () => true, containerState: () => "absent",
+      nvidiaGPU: () => true,
+    };
+    assert.equal(start(["--data", join(parent, "data"), "--no-gpu"], (args) => {
+      invocation = args;
+      return 0;
+    }, probes), 0);
+    assert.ok(invocation);
+    assert.equal(invocation.includes("--gpus"), false);
+    assert.equal(invocation.includes("VM_LLAMA_GPU=1"), false);
+    assert.equal(start(["--gpus", "all", "--no-gpu"], () => 0, probes), 2);
   } finally {
     rmSync(parent, { recursive: true, force: true });
   }

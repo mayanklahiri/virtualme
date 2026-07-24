@@ -42,6 +42,18 @@ test("chart ticks choose the smallest candidate satisfying the width bound", () 
   assert.equal(chooseTicks(lastTs - LOOKBACKS["30d"].span, lastTs, 375, "30d", 420).stepMs, 10 * 24 * 60 * MINUTE);
 });
 
+test("short data spans fall back to finer steps so the axis keeps labels", () => {
+  // A freshly restarted instance may only have a few minutes of data; the
+  // preferred 15m step for the 1h window would then produce zero ticks.
+  const lastTs = Date.UTC(2026, 6, 23, 22, 27, 31);
+  const { stepMs, ticks } = /** @type {{stepMs: number, ticks: number[]}} */ (
+    chooseTicks(lastTs - 4 * MINUTE, lastTs, 900, "1h", 420)
+  );
+  assert.ok(ticks.length >= 2, `fallback produced ${ticks.length} ticks`);
+  assert.ok(stepMs < 15 * MINUTE, `fallback step ${stepMs} is finer than 15m`);
+  assert.ok(ticks.every((tick) => (tick - 420 * MINUTE) % stepMs === 0), "local boundary");
+});
+
 test("a trailing bucket before a synthetic gap keeps server resolution width", () => {
   // Regression: gap-splitting must not widen the last sample toward the next segment.
   const beforeGap = [{ ts: 10_000 }, { ts: 12_000 }];

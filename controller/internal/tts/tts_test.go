@@ -212,7 +212,7 @@ func TestClientStreamsEvents(t *testing.T) {
 	store := new(memoryList)
 	client := &Client{URL: server.URL, Log: NewLog(store, nil)}
 	summary, err := client.Synthesize(context.Background(), Request{
-		Text: "hello", Voice: "en_US-ryan-medium", Origin: "api",
+		Text: "hello", Voice: "en_GB-alba-medium", Origin: "api",
 	}, func(event Event) error {
 		events = append(events, event.Type)
 		return nil
@@ -221,7 +221,7 @@ func TestClientStreamsEvents(t *testing.T) {
 		t.Fatalf("Synthesize = %+v, %v, %v", summary, events, err)
 	}
 	if len(store.values) != 1 || !strings.Contains(store.values[0], `"origin":"api"`) ||
-		!strings.Contains(store.values[0], `"voice":"en_US-ryan-medium"`) ||
+		!strings.Contains(store.values[0], `"voice":"en_GB-alba-medium"`) ||
 		!strings.Contains(store.values[0], `"cached":true`) {
 		t.Fatalf("speech log = %v", store.values)
 	}

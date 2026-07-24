@@ -335,3 +335,39 @@ The pinned Lucide `1.26.0` archive does not contain `github.svg`; Lucide intenti
 ### 2026-07-23 — Time-series charts use stacked filled bars
 
 Section 7's area/line rendering is superseded. Both CPU-per-core and memory-per-process charts render stacked filled time-bucket bars. CPU retains its `0 → cores × 100%` scale; memory auto-scales to the maximum total memory across all process series. Each chart's tooltip lists only that chart's series, and legend entries remain visually separated without splitting a swatch from its label.
+
+### 2026-07-24 — Chat turn-level stats, transcript copy, and composer regroup
+
+Feedback pass over the executed chat page (§5/§6); all changes land together:
+
+1. **Stats update every turn.** The server increments and broadcasts the
+   `queries` field of `virtualme:chat-stats` immediately when a user message is
+   accepted (in `HandleClientMessage`, right after the `chat-message`
+   broadcast); `updateStats` no longer increments `queries` at completion.
+   During generation the client merges the live `llm-status` token count and
+   elapsed time into the stats strip (`serverStats + liveGen` in `chat.js`), so
+   completion tokens and "thinking" seconds tick in real time and settle to the
+   server totals on `chat-done`/`chat-stats`.
+2. **No copy affordance on the streaming placeholder.** `addMessage` skips the
+   per-message copy button while the message has the `streaming` role; the
+   button is attached once in `done()` with the final text.
+3. **Copy-chat button.** `#chat-copy` sits beside `#chat-clear` in a
+   `.page-heading-actions` group and copies the entire transcript as Markdown:
+   `**You:** / **Virtual Me:**` sections separated by `---` rules, with
+   `<think>…</think>` blocks stripped from assistant messages (unterminated
+   blocks strip to end-of-message). The client keeps a `transcript` array
+   mirroring `chat-history`/`chat-message`/`chat-done` frames; the button
+   disables when the transcript is empty and flashes a check icon on copy.
+4. **Server-global history (verified invariant).** Chat history and stats live
+   only in Valkey (`virtualme:chat`, `virtualme:chat-stats`) and in-memory on
+   the controller; the SPA holds no chat state in `localStorage`. All clients
+   render the same conversation from websocket frames.
+5. **Composer regroup and in-flight replacement.** The textarea, character
+   counter, and Send button share one bordered `.composer` card
+   (`:focus-within` accent). While a reply is in flight the composer is hidden
+   entirely and a `.chat-busy` row (live `#llm-status` text + a red-accented
+   Stop button) takes its place; the bare `queued…` phase text is dropped
+   (only `queued behind N jobs…` remains, when N > 0).
+6. **Heading alignment.** `.page-heading` owns the bottom margin
+   (`h1` margin zeroed) so Copy/Clear center against the title text across all
+   pages; an armed Clear shows the `--err` accent (`.secondary.armed`).

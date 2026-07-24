@@ -106,3 +106,79 @@ Items not owned by other specs (019 owns chart defects, 023 owns mail, 020 owns 
 - [ ] Watch indicator: hand sweeps when live and freezes when the container stops; pip color tracks connection state; meta line shows uptime + connected duration; reduced-motion honored.
 - [ ] `GET /desktop/` redirects to the noVNC client; no directory listing reachable.
 - [ ] 375 px: home quick links full-width; nothing overlaps on any page in the tab sweep.
+
+## Amendments
+
+### 2026-07-24 — Two-face wordmark ("Virtual" block + red "me" script)
+
+Supersedes §4's single-face Space Grotesk recipe. The wordmark is now two words
+in two faces, still committed as outlined paths with no runtime font loading:
+
+- **`Virtual`** — Archivo Black (decorative block face), cap height 20 units,
+  slight logo tracking (−0.012 em), filled `var(--wordmark-fill, #7d8590)`.
+  The console sets `--wordmark-fill: var(--fg)`; the `#7d8590` fallback keeps
+  the standalone file legible on both GitHub light and dark backgrounds.
+- **`me`** — Caveat (casual handwritten face; no italic cut exists, so a
+  `skewX(-7)` transform supplies the lean, baseline-compensated), oversized to
+  34 units on the shared baseline, filled the fixed brand red `#d63b2f` in
+  every theme (including `contrast`). The red is part of the mark, not a theme
+  token.
+- Generation is reproducible: `scripts/gen-wordmark.mjs` (run manually, never
+  by the gate) fetches Archivo Black and Caveat TTFs from pinned
+  `google/fonts` commits (`94a7d813…` and `5571d84c…`) with sha256
+  verification, outlines the text with the exact-pinned `opentype.js@1.3.4`
+  devDependency, and rewrites `controller/web/static/brand/wordmark.svg`
+  (committed). Font downloads cache under gitignored `scripts/.cache/`.
+- The old `--brand-a`→`--brand-b` gradient fill and the sliced-M mask are
+  retired. `.wordmark-svg` is 110×19 px in the sidebar (new aspect ≈ 5.8:1);
+  the outer `<svg>` carries no viewBox and scales the sprite symbol.
+- `virtualme-mark.svg` (the checkbox/V project icon) is retained everywhere
+  and now paints via `var(--mark-fill, #7d8590)` / `var(--mark-dot, #d63b2f)`
+  so the standalone file renders on GitHub; the console maps `--mark-fill` to
+  `var(--brand-a)`. README shows the mark inline beside the wordmark image.
+- The sidebar brand row became `<a class="brand" href="/" data-nav>` with a
+  subtle resting background and hover state; clicking it routes to the home
+  page like any nav link.
+
+### 2026-07-24 — Home layout: uniform top alignment, fact tiles, hero health pill, pinned footer
+
+Feedback pass over the executed home page (§2):
+
+- **Uniform top alignment.** `.hero-copy` stretches as a flex column
+  (was `align-self:center`) and `.quick-links a` uses `align-content:start`
+  (was `center`); fact tiles were already top-aligned. No card on the page
+  centers vertically anymore.
+- **Modular fact tiles.** Each `.fact` becomes a bordered tile
+  (`--bg` fill, radius, compact padding) in an equal-height grid. Values are
+  shortened for scannability: Uptime shows the two most significant units
+  (`formatUptimeShort`), CPU is `N cores` with `load X.XX` demoted to the
+  small line, Disk is `X GB free` with `of Y GB` demoted. Address and
+  container addresses are unchanged. The Status page keeps full-precision
+  uptime.
+- **Health pill relocation.** `#home-health` moves from the status band into
+  the bottom of the hero's left column (`.hero-health`, `margin-top:auto`);
+  the status band is now facts only.
+- **Viewport-pinned footer.** `[data-page=home]` is a flex column with
+  `min-height` derived from the main padding (desktop and ≤64rem variants);
+  the footer carries `margin-top:auto` so it sits at the viewport bottom even
+  on short content. The footer adds an "MIT license" link (to `LICENSE` on
+  GitHub) beside the existing GitHub link.
+
+### 2026-07-24 — Wider desktop layout and clickable brand
+
+Console feedback pass (specs 012–025 amendments). Files:
+`controller/web/static/css/app.css`, `index.html`.
+
+1. **Content cap raised.** `main > section` grows from `min(100%, 72rem)` to
+   `min(100%, 100rem)`, and the `main` gutter clamp tightens from
+   `clamp(1.25rem, 4vw, 3rem)` to `clamp(1.25rem, 3vw, 2.25rem)` so wide
+   desktop viewports spend the reclaimed space on content, not padding. The
+   home page's flex `min-height` calc uses the same clamp.
+2. **Grids scale with the new width.** `.jobs-grid` becomes
+   `minmax(0, 2.2fr) minmax(24rem, 1fr)` (detail pane grows past its old
+   fixed 24rem), and `.tools-grid` becomes
+   `minmax(16rem, 22rem) minmax(0, 1.4fr) minmax(24rem, 1fr)` so the form
+   and output columns absorb extra width. Mobile breakpoints are unchanged.
+3. **Clickable brand.** The sidebar brand block is an `<a href="/" data-nav>`
+   with a subtle hover background (documented here; implemented with the
+   wordmark amendment above).

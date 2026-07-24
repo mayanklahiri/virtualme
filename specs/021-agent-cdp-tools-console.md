@@ -114,3 +114,22 @@ Add to `test/soak.mjs` (raw-WS `run()` flow like `jobs-queue-probe`): **`tools-r
   successful queue dispatches, rather than retried infrastructure failures.
   Their failed status, arguments, text, and duration remain authoritative in
   the persistent activity ledger.
+
+### 2026-07-24 — Wider layout and result-image lightbox
+
+Console feedback pass (specs 012–025 amendments). Files:
+`controller/web/static/js/tools.js`, `css/app.css`.
+
+1. **Wider three-column layout.** With the site-wide `main > section` cap
+   raised to 100rem (spec 024 amendment), `.tools-grid` becomes
+   `minmax(16rem, 22rem) minmax(0, 1.4fr) minmax(24rem, 1fr)`: the tool list
+   stays compact while the form and output panes grow with the viewport.
+2. **Result-image lightbox.** The result image in the output pane is wrapped
+   in a borderless `.tool-image-zoom` button (`cursor: zoom-in`, labelled
+   "Open <tool> result full screen"). Clicking it appends a
+   `role="dialog"` `.lightbox` overlay: dimmed full-viewport backdrop,
+   the image at up to 96vw × 85vh, and a fixed top-right action row with a
+   **Download** link (`<a download="<slug>.png">` pointing at the same data
+   URI) and a **Close** button. Escape, the Close button, or clicking
+   anywhere except the Download link dismisses the overlay and restores
+   focus to the zoom button. No new endpoints; purely client-side.

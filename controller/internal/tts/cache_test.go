@@ -75,20 +75,20 @@ func TestSentenceCacheEvictsLeastRecentlyUsed(t *testing.T) {
 }
 
 func TestVoiceWhitelistAndFallback(t *testing.T) {
-	if NormalizeVoice("en_US-ryan-medium") != "en_US-ryan-medium" {
-		t.Fatal("Ryan voice rejected")
+	if NormalizeVoice("en_GB-alba-medium") != "en_GB-alba-medium" {
+		t.Fatal("Alba voice rejected")
 	}
 	if NormalizeVoice("unknown") != DefaultVoice {
 		t.Fatal("unknown voice did not fall back")
 	}
 	runner := &fixtureRunner{}
 	service := NewService(Config{ModelDir: "/models", Runner: runner})
-	_, _, _, _, err := service.synthesize(context.Background(), "Ryan sentence.", "en_US-ryan-medium", 1)
+	_, _, _, _, err := service.synthesize(context.Background(), "Alba sentence.", "en_GB-alba-medium", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	argv := strings.Join(runner.args[0], " ")
-	if !strings.Contains(argv, "/vits-piper-en_US-ryan-medium/en_US-ryan-medium.onnx") {
-		t.Fatalf("Ryan model path missing from %q", argv)
+	if !strings.Contains(argv, "/vits-piper-en_GB-alba-medium/en_GB-alba-medium.onnx") {
+		t.Fatalf("Alba model path missing from %q", argv)
 	}
 }

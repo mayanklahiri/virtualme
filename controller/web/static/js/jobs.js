@@ -29,6 +29,40 @@ export function queueSummary(job) {
   }
 }
 
+/** Short type-derived primary label for a queue row. @param {Data} job */
+export function jobName(job) {
+  const payload = job?.payload ?? {};
+  switch (job?.type) {
+    case "chat":
+      return "Chat";
+    case "project-run":
+      return `Project: ${String(payload.name ?? job.projectId ?? payload.id ?? "?").trim()}`;
+    case "manual-tool":
+      return `Tool: ${String(payload.tool ?? payload.name ?? "?")}`;
+    case "soak-probe":
+      return "Queue probe";
+    default:
+      return String(job?.type ?? "Job");
+  }
+}
+
+/** Truncated secondary summary shown after the primary label. @param {Data} job */
+export function jobSecondary(job) {
+  const payload = job?.payload ?? {};
+  switch (job?.type) {
+    case "chat":
+      return String(payload.text ?? "");
+    case "project-run":
+      return job.selector ? `selector ${job.selector}` : "manual run";
+    case "manual-tool":
+      return payload.args ? JSON.stringify(payload.args) : "";
+    case "soak-probe":
+      return String(payload.echo ?? "");
+    default:
+      return "";
+  }
+}
+
 /** @param {string} name */
 function icon(name) {
   const namespace = "http:" + "//www.w3.org/2000/svg";
@@ -253,8 +287,18 @@ export function initJobs(send) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `job-row ${phase}`;
-    button.append(icon("clock-3"), chip(job.type));
-    appendText(button, "job-row-summary", queueSummary(job));
+    if (phase === "finished") {
+      // Single small status dot; no clock icon, so success is one light per row.
+      const dot = document.createElement("span");
+      dot.className = `job-result-dot ${job.result?.ok ? "ok" : "error"}`;
+      dot.setAttribute("aria-label", job.result?.ok ? "Succeeded" : "Failed");
+      button.append(dot);
+    } else {
+      button.append(icon("clock-3"));
+    }
+    button.append(chip(job.type));
+    appendText(button, "job-row-name", jobName(job));
+    appendText(button, "job-row-summary", jobSecondary(job));
     const meta = appendText(button, "job-row-meta", "");
     if (phase === "upcoming") {
       meta.textContent = Number(job.notBeforeTs) > Date.now()
@@ -268,10 +312,6 @@ export function initJobs(send) {
       button.dataset.elapsed = "";
     } else {
       const duration = Number(job.result?.finishedTs) - Number(job.startedTs || job.enqueuedTs);
-      const dot = document.createElement("span");
-      dot.className = `job-result-dot ${job.result?.ok ? "ok" : "error"}`;
-      dot.setAttribute("aria-label", job.result?.ok ? "Succeeded" : "Failed");
-      button.insertBefore(dot, button.firstChild);
       meta.textContent = `${time(job.result?.finishedTs)} · ${formatDuration(duration)}`;
     }
     button.addEventListener("click", () => openDetail("queue", job, button));
@@ -279,13 +319,20 @@ export function initJobs(send) {
     return item;
   }
 
+  /** @param {HTMLOListElement} list @param {Data[]} jobs @param {string} phase */
+  function renderGroup(list, jobs, phase) {
+    list.replaceChildren(...jobs.map((job) => queueRow(job, phase)));
+    const group = list.closest(".queue-group");
+    if (group instanceof HTMLElement) group.hidden = jobs.length === 0;
+  }
+
   function renderQueue() {
     const next = /** @type {Data[]} */ ((queue.upcoming ?? []).slice(0, 10));
     const current = /** @type {Data[]} */ (queue.running ? [queue.running] : []);
     const recent = /** @type {Data[]} */ ((queue.finished ?? []).slice(0, 10));
-    upcoming.replaceChildren(...next.map((job) => queueRow(job, "upcoming")));
-    running.replaceChildren(...current.map((job) => queueRow(job, "running")));
-    finished.replaceChildren(...recent.map((job) => queueRow(job, "finished")));
+    renderGroup(upcoming, next, "upcoming");
+    renderGroup(running, current, "running");
+    renderGroup(finished, recent, "finished");
     queueEmpty.hidden = next.length + current.length + recent.length > 0;
     if (selected?.kind === "queue") {
       const selectedID = selected.value.id;
@@ -301,9 +348,7 @@ export function initJobs(send) {
     button.type = "button";
     button.className = "activity-row";
     appendText(button, "activity-time", time(event.ts));
-    /** @type {Record<string, string>} */
-    const icons = { tool: "wrench", llm: "brain", tts: "volume-2", mail: "mail" };
-    button.append(icon(icons[event.kind] ?? "activity"));
+    button.append(chip(event.kind || "event"));
     appendText(button, "activity-name", event.name || event.kind);
     appendText(button, "activity-summary", event.summary || "");
     button.addEventListener("click", () => openDetail("activity", event, button));

@@ -112,3 +112,41 @@ server-resolution trailing buckets across a synthetic gap, and timestamp
 nearest-sample selection across that gap. This replaces the destructive
 stop/restart form of the manual gap fixture while asserting the same chart
 primitives directly.
+
+### 2026-07-24 — Status feedback pass: window-anchored domain, per-process CPU, calmer cadence
+
+Live-usage feedback on the executed charts and Status widgets; all decided
+here and landed together:
+
+1. **Window-anchored x-domain.** `scales()` now anchors the x-domain to the
+   full lookback window (`[lastSampleTs − span, lastSampleTs]`, falling back
+   to `now` with no data) instead of the data extent. Switching windows always
+   visibly rescales — the prior data-extent domain made short-history
+   instances render identical charts for several windows, which read as
+   unresponsive lookback buttons.
+2. **X-axis label fallback.** `chooseTicks` gains descending fallback steps
+   (30m … 10s) used when the preferred per-lookback steps yield fewer than two
+   boundary ticks (fresh instances crossed no 15m boundary and drew a bare
+   axis). Node test covers the short-span fallback.
+3. **CPU chart is per-process.** `metrics.Sample` gains `procCPU []float64`
+   (same fixed service order as `procMemMB`; tier means average it; old tier
+   files load with `procCPU: null` → zeros). The CPU chart stacks the eight
+   supervised services' CPU percent (subtitle "per process, stacked percent");
+   y-max is the peak stacked total rounded up to the next 100%. Per-core data
+   remains in snapshots and tiers (`cores`) for capacity facts.
+4. **Repaint cadence ≥ 15 s.** Live `state` frames still append 2 s samples,
+   but charts repaint at most every 15 s (immediately on lookback change,
+   `metrics` replace, resize, and theme change). The 30 s re-poll for tier
+   lookbacks is unchanged.
+5. **Widget removals.** The "One-minute load" and "Memory" meter widgets are
+   deleted from Status (their data remains on Home and in the memory chart).
+6. **All active selectors highlight.** Every token in `scheduler.active`
+   renders with the `current` accent; the previous first-token-only highlight
+   was arbitrary.
+7. **Spacing.** `.charts` gains `margin-top: var(--gap)` so the jiggler card
+   no longer touches the CPU chart on desktop.
+8. **Tooltip top-5.** Chart tooltips list only the five largest series at the
+   hovered instant plus a `+N more` line.
+9. **Y-axis units.** Memory chart y-ticks read MiB/GiB (`formatTick`
+   override); CPU/GPU keep `%`. Memory y-range is fixed 0 → system
+   `memTotalMB` (grown only if stacked process memory ever exceeds it).

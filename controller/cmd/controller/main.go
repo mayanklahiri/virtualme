@@ -442,7 +442,6 @@ func main() {
 	width, height := envResolution()
 	jigglerService := jiggler.New(agent.NewProcessRunner(), valkey.New(cfg.ValkeyAddr), hub.Broadcast, width, height)
 	jigglerService.SetDisplay(envOr("VM_DISPLAY", ":99"))
-	jigglerService.SetJobManager(jobManager)
 	jigglerService.SetActivity(activity)
 	gpuInfo := gpu.Detect()
 	addr := envOr("VM_HTTP_ADDR", ":8080")

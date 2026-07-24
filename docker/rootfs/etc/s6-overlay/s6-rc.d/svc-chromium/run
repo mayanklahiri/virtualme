@@ -27,8 +27,10 @@ source /usr/local/lib/virtualme/chromium-sandbox.sh
 FLAGS=(
   --user-data-dir="$PROFILE"
   --class=chromium
-  # Automation marker: disables consumer behaviors inappropriate for driving by tools.
-  --enable-automation
+  # No --enable-automation: it draws the persistent "controlled by automated
+  # test software" infobar (which --disable-infobars no longer suppresses) and
+  # steals a strip of the deterministic surface. CDP stays available via the
+  # remote-debugging flags below (spec 016 amendment 2026-07-24).
   # Startup determinism: no first-run UX, no default-browser prompt, no crash-restore UI.
   --no-first-run
   --no-default-browser-check

@@ -109,3 +109,47 @@ shared chart component. The GPU chart now receives the common synchronized
 lookback controls, boundary-aligned ticks, timestamp hover selection, and
 `--p1`/`--p2` legend behavior while retaining its utilization bars, memory
 overlay, dual scale, and hardware-gated visibility.
+
+### 2026-07-24 — Default GPU passthrough and a Vulkan llama.cpp runtime
+
+Investigation result: on a host with an RTX 3xxx-class card the console
+showed no GPU because (a) the CLI only passed `--gpus` when explicitly
+given, so no NVIDIA device was injected into the container, and (b) the
+image ships a CPU-only llama.cpp, so even with passthrough the model would
+not use the GPU. Both are fixed here.
+
+1. **CLI auto-passthrough** (`src/commands/start.js`, `src/docker.js`).
+   New `hostNvidia()` probe: a working `nvidia-smi -L` on PATH, or
+   `docker info --format '{{json .Runtimes}}'` listing an `nvidia` runtime
+   (NVIDIA Container Toolkit). When it fires and neither `--gpus` nor the
+   new `--no-gpu` flag is given, `start` defaults to
+   `--gpus all -e VM_LLAMA_GPU=1 -e NVIDIA_DRIVER_CAPABILITIES=all`.
+   An explicit `--gpus <spec>` still wins (and now also sets both env
+   vars); `--no-gpu` opts out entirely; `--gpus` plus `--no-gpu` is a
+   usage error (exit 2). `NVIDIA_DRIVER_CAPABILITIES=all` makes the
+   toolkit mount the NVIDIA Vulkan ICD, which `graphics`-less defaults
+   omit. Unit tests cover the explicit, auto-detected, and opted-out
+   paths. If Docker lacks the NVIDIA runtime despite detection, `docker
+   run` fails loudly rather than silently degrading — acceptable for the
+   trusted-host prototype; rerun with `--no-gpu`.
+2. **GPU llama runtime — Vulkan, a recorded deviation from the "CUDA
+   build" choice.** llama.cpp publishes no Linux CUDA prebuilts (verified
+   against release b10091: CUDA binaries exist only for Windows; Linux
+   offers CPU/Vulkan/ROCm/SYCL), and a from-source CUDA build would add a
+   multi-gigabyte pinned CUDA toolchain layer. The Vulkan prebuilt runs on
+   NVIDIA through the driver's Vulkan ICD with near-CUDA throughput for
+   single-GPU inference, and also covers AMD/Intel GPUs. New append-only
+   layer `docker/layers/018-llama-vulkan.sh` installs pinned
+   `llama-b10091-bin-ubuntu-vulkan-x64.tar.gz` (sha256
+   `8636767e0fdf440247913e4ba46a33fe02b8f13181bb11756ab890d73fdecdb4`)
+   plus `libvulkan1` into `/opt/llama-vulkan`; it exits 0 with a notice on
+   non-x86_64 (no upstream Vulkan prebuilt), leaving those hosts CPU-only.
+   The existing CPU layer 002 is untouched.
+3. **Runtime selection** (`svc-llama/run`). At service start: if
+   `VM_LLAMA_GPU=1`, `/dev/nvidiactl` exists (a device was actually
+   injected), and `/opt/llama-vulkan/llama-server` is present, exec the
+   Vulkan build with `--n-gpu-layers 999` (full offload); otherwise exec
+   the CPU build exactly as before. The chosen runtime is echoed to the
+   service log (`svc-llama: runtime …`) for smoke/soak grepping. A
+   passthrough failure therefore degrades to the CPU path, never a crash
+   loop.

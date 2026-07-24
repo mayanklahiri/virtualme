@@ -22,6 +22,18 @@ test("Tools page is server-driven and schema-generated", async () => {
   assert.match(tools, /JSON\.parse\(value\)/);
   assert.match(tools, /queued…/);
   assert.match(tools, /120000/);
-  assert.match(css, /grid-template-columns:16rem minmax\(0,1fr\) 24rem/);
+  assert.match(css, /\.tools-grid\{display:grid;grid-template-columns:minmax\(16rem,22rem\) minmax\(0,1\.4fr\) minmax\(24rem,1fr\)/);
   assert.doesNotMatch(tools, /dom_query|dom_validate|page_eval|layout_debug/);
+});
+
+test("Tools result images open a lightbox with a download control", async () => {
+  const [tools, css] = await Promise.all([
+    readFile(new URL("js/tools.js", root), "utf8"),
+    readFile(new URL("css/app.css", root), "utf8"),
+  ]);
+  assert.match(tools, /openLightbox/);
+  assert.match(tools, /download = /);
+  assert.match(tools, /Escape/);
+  assert.match(css, /\.lightbox\{position:fixed;inset:0/);
+  assert.match(css, /\.tool-image-zoom\{[^}]*cursor:zoom-in/);
 });

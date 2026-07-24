@@ -16,6 +16,7 @@ func TestTierWindowMean(t *testing.T) {
 		store.Add(Sample{
 			Ts:        base.Add(time.Duration(i) * 2 * time.Second).UnixMilli(),
 			Cores:     []float64{float64(i), float64(i * 2)},
+			ProcCPU:   []float64{float64(i * 4)},
 			ProcMemMB: []int{i, i * 2}, Load1: float64(i),
 			MemUsedMB: i * 10, MemTotalMB: 100,
 			GPUUtil: float64(i * 3), GPUMemMB: float64(i * 20),
@@ -25,7 +26,7 @@ func TestTierWindowMean(t *testing.T) {
 		t.Fatalf("tier 1 samples = %d, want 1", len(store.tiers[1].samples))
 	}
 	got := store.tiers[1].samples[0]
-	if got.Cores[0] != 7 || got.Cores[1] != 14 || got.ProcMemMB[0] != 7 ||
+	if got.Cores[0] != 7 || got.Cores[1] != 14 || got.ProcCPU[0] != 28 || got.ProcMemMB[0] != 7 ||
 		got.GPUUtil != 21 || got.GPUMemMB != 140 {
 		t.Fatalf("mean = %+v", got)
 	}
@@ -105,7 +106,7 @@ func TestGPUFieldsOmittedAndOldTierLoads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(payload) != `{"ts":1,"cores":null,"procMemMB":null,"load1":0,"memUsedMB":0,"memTotalMB":0}` {
+	if string(payload) != `{"ts":1,"cores":null,"procCPU":null,"procMemMB":null,"load1":0,"memUsedMB":0,"memTotalMB":0}` {
 		t.Fatalf("absent GPU JSON = %s", payload)
 	}
 

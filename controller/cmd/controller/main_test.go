@@ -120,12 +120,12 @@ func TestSpeechEndpointMapsVoice(t *testing.T) {
 	defer server.Close()
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/v1/audio/speech",
-		strings.NewReader(`{"input":"Hello.","voice":"en_US-ryan-medium","response_format":"pcm"}`))
+		strings.NewReader(`{"input":"Hello.","voice":"en_GB-alba-medium","response_format":"pcm"}`))
 	speechHandler(&tts.Client{URL: server.URL}).ServeHTTP(response, request)
-	if response.Header().Get("X-VM-Voice") != "en_US-ryan-medium" {
+	if response.Header().Get("X-VM-Voice") != "en_GB-alba-medium" {
 		t.Fatalf("voice header = %q", response.Header().Get("X-VM-Voice"))
 	}
-	if input := <-requestBody; input.Voice != "en_US-ryan-medium" {
+	if input := <-requestBody; input.Voice != "en_GB-alba-medium" {
 		t.Fatalf("ttsd request voice = %q", input.Voice)
 	}
 }

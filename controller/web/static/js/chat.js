@@ -20,6 +20,9 @@ export function initChat(send) {
   const sendButton = document.querySelector("#chat-send");
   const stopButton = document.querySelector("#chat-stop");
   const clearButton = document.querySelector("#chat-clear");
+  const copyChatButton = document.querySelector("#chat-copy");
+  const composer = document.querySelector("#chat-composer");
+  const busyRow = document.querySelector("#chat-busy");
   const clearLabel = clearButton.querySelector("span");
   const counter = document.querySelector("#chat-count");
   const stats = document.querySelector("#chat-stats");
@@ -28,13 +31,20 @@ export function initChat(send) {
   let live = false;
   let streaming = null;
   let clearTimer;
+  let serverStats = {};
+  let liveGen = null;
+  const transcript = [];
   const audio = new Map();
 
   function setEnabled() {
+    // The composer disappears entirely while a reply is in flight; only the
+    // Stop control (and live status) remains.
+    composer.hidden = busy;
+    busyRow.hidden = !busy;
     input.disabled = !live || busy;
     sendButton.disabled = !live || busy;
-    stopButton.hidden = !busy;
     clearButton.disabled = !live || busy;
+    copyChatButton.disabled = transcript.length === 0;
   }
   function nearBottom() {
     return log.scrollHeight - log.scrollTop - log.clientHeight < 40;
@@ -63,7 +73,9 @@ export function initChat(send) {
     const body = document.createElement("div");
     body.className = "message-body";
     if (markdown) body.append(renderMarkdown(text)); else body.textContent = text;
-    item.append(body, copyButton(text));
+    item.append(body);
+    // Streaming placeholders ("…") get their copy button once finalized.
+    if (!role.includes("streaming")) item.append(copyButton(text));
     if (stopped) {
       const marker = document.createElement("small");
       marker.className = "stopped";
@@ -81,6 +93,22 @@ export function initChat(send) {
   }
   function updateCounter() {
     counter.textContent = `${input.value.length} / ${MAX_LEN}`;
+  }
+  function stripThinking(text) {
+    return text.replace(/<think>[\s\S]*?(<\/think>|$)/g, "").trim();
+  }
+  function chatMarkdown() {
+    const parts = transcript.map((message) => {
+      const speaker = message.role === "user" ? "You" : "Virtual Me";
+      const body = message.role === "user" ? message.text.trim() : stripThinking(message.text);
+      return `**${speaker}:**\n\n${body}`;
+    });
+    return `${parts.join("\n\n---\n\n")}\n`;
+  }
+  function renderStats() {
+    const completion = (serverStats.completionTokens ?? 0) + (liveGen?.tokens ?? 0);
+    const thinkingMs = (serverStats.genMs ?? 0) + (liveGen?.elapsedMs ?? 0);
+    stats.textContent = `${serverStats.queries ?? 0} queries · ${serverStats.promptTokens ?? 0} prompt + ${completion} completion tokens · ${(thinkingMs / 1000).toFixed(1)} s thinking`;
   }
 
   form.addEventListener("submit", (event) => {
@@ -102,6 +130,12 @@ export function initChat(send) {
   });
   input.addEventListener("input", updateCounter);
   stopButton.addEventListener("click", () => send({ type: "chat-stop" }));
+  copyChatButton.addEventListener("click", async () => {
+    await navigator.clipboard.writeText(chatMarkdown());
+    const icon = copyChatButton.querySelector("svg");
+    icon.replaceWith(svgIcon("check"));
+    setTimeout(() => copyChatButton.querySelector("svg").replaceWith(svgIcon("copy")), 1500);
+  });
   clearButton.addEventListener("click", () => {
     if (!clearButton.classList.contains("armed")) {
       clearButton.classList.add("armed");
@@ -133,13 +167,16 @@ export function initChat(send) {
       log.replaceChildren();
       streaming = null;
       busy = false;
+      transcript.length = 0;
       for (const message of messages) {
+        transcript.push({ role: message.role, text: message.text ?? "" });
         addMessage(message.role === "user" ? "user" : "assistant", message.text ?? "");
       }
       log.scrollTop = log.scrollHeight;
       setEnabled();
     },
     message(message) {
+      transcript.push({ role: message.role, text: message.text ?? "" });
       addMessage(message.role === "user" ? "user" : "assistant", message.text ?? "", message.role !== "user");
       if (message.role === "user") {
         busy = true;
@@ -155,6 +192,9 @@ export function initChat(send) {
     },
     done(message) {
       const text = message.text ?? streaming?.body.textContent ?? "";
+      transcript.push({ role: "assistant", text });
+      liveGen = null;
+      renderStats();
       if (streaming) {
         streaming.body.replaceChildren(renderMarkdown(text));
         streaming.item.className = "msg assistant";
@@ -187,18 +227,26 @@ export function initChat(send) {
       finish();
     },
     stats(message) {
-      stats.textContent = `${message.queries ?? 0} queries · ${message.promptTokens ?? 0} prompt + ${message.completionTokens ?? 0} completion tokens · ${((message.genMs ?? 0) / 1000).toFixed(1)} s thinking`;
+      serverStats = message;
+      renderStats();
     },
     llm(message) {
       const elapsed = ((message.elapsedMs ?? 0) / 1000).toFixed(1);
       const labels = {
         idle: "",
         sending: "sending…",
-        queued: message.detail ? `${message.detail}…` : "queued…",
+        queued: message.detail ? `${message.detail}…` : "",
         processing: `reading prompt (${message.promptN ?? 0}/${message.promptTotal ?? 0})…`,
         generating: `generating: ${message.tokens ?? 0} tokens · ${Number(message.tokPerSec ?? 0).toFixed(1)} tok/s · ${elapsed}s`,
       };
       statusLine.textContent = labels[message.phase] ?? "";
+      if (message.phase === "generating") {
+        liveGen = { tokens: message.tokens ?? 0, elapsedMs: message.elapsedMs ?? 0 };
+        renderStats();
+      } else if (message.phase === "idle") {
+        liveGen = null;
+        renderStats();
+      }
     },
     async tts(message) {
       if (message.origin !== "chat") return;
