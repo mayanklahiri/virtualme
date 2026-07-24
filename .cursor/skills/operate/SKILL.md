@@ -24,6 +24,7 @@ prompts or model requests are sent to external providers.
 | `npx virtualme update` | Pull the configured image |
 | `npx virtualme build` | Build `:dev` and the configured start tag from a source checkout |
 | `npx virtualme keygen` | Print a 256-bit base64url token |
+| `./cli.sh soak [--no-build]` | Rebuild, restart on a fresh data dir, and run live soak flows from a source checkout |
 
 Env overrides: `VIRTUALME_IMAGE`, `VIRTUALME_TAG`, `VIRTUALME_DATA`, and `TZ`
 (forwarded to the container; otherwise the detected host timezone is used). The CLI

@@ -80,7 +80,8 @@ const flows = [
     prompt:
       "Navigate to https://www.lahiri.me and wait for the page to load. " +
       "Then read the page's DOM, tell me whose homepage it is and where they currently work, " +
-      "and take a screenshot of the page.",
+      "and take a screenshot of the page. You must call the screenshot tool before your final " +
+      "answer; merely saying that you took a screenshot is not sufficient.",
     hard(r) {
       const problems = [];
       const nav = textOf(r, "navigate");

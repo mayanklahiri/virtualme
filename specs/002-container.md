@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved for execution |
+| Status | Executed (2026-07-22) |
 | Depends on | `specs/001-constitution.md` executed (repo scaffolded, gates green) |
 | Produces | `docker/` (Dockerfile, numbered layer scripts, s6 service tree), stub Go controller with `/healthz`, `test/smoke.sh`, `.dockerignore` |
 | Followed by | `specs/003-controller.md` |

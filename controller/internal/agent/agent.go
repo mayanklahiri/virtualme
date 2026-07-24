@@ -205,6 +205,7 @@ func (a *Agent) handle(ctx context.Context, userText string, includeHistory bool
 	historyEnd := len(messages)
 	var prose strings.Builder
 	promptTokens, completionTokens := 0, 0
+	retriedEmptyCompletion := false
 	for a.step < a.cfg.MaxSteps {
 		a.status("planning")
 		messages = compactTaskMessages(messages, historyEnd)
@@ -238,6 +239,19 @@ func (a *Agent) handle(ctx context.Context, userText string, includeHistory bool
 			}, err
 		}
 		if len(calls) == 0 {
+			if strings.TrimSpace(reply) == "" && strings.TrimSpace(prose.String()) == "" {
+				if !retriedEmptyCompletion {
+					retriedEmptyCompletion = true
+					continue
+				}
+				const message = "I could not produce a response. Please try again."
+				a.broadcast(map[string]any{"type": "chat-delta", "text": message})
+				a.status("failed")
+				return Result{
+					Reply: message, Failed: true,
+					PromptTokens: promptTokens, CompletionTokens: completionTokens,
+				}, nil
+			}
 			if reply != "" && prose.Len() == 0 {
 				prose.WriteString(reply)
 			}

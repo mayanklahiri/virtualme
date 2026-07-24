@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved for execution |
+| Status | Executed (2026-07-22) |
 | Depends on | Nothing (first spec; repo contains only `README.md`) |
 | Produces | Repo constitution, zero-dependency npm CLI, `cli.sh`, quality gates + pre-commit hook, CI/CD workflows, AI skills, README User's Guide |
 | Followed by | `specs/002-container.md`, `specs/003-controller.md` |

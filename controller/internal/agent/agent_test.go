@@ -172,6 +172,31 @@ func TestToolLoopThenFinalReply(t *testing.T) {
 	}
 }
 
+func TestEmptyCompletionRetriesOnce(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		if requests == 1 {
+			sse(w)
+			return
+		}
+		sse(w, map[string]any{"choices": []any{
+			map[string]any{"delta": map[string]string{"content": "recovered"}},
+		}})
+	}))
+	defer server.Close()
+
+	agent := New(Config{
+		LlamaURL: server.URL,
+		DataDir:  t.TempDir(),
+		Executor: noDefinitionsExecutor{},
+	})
+	result, err := agent.Handle(context.Background(), "answer")
+	if err != nil || result.Reply != "recovered" || result.Failed || requests != 2 {
+		t.Fatalf("result=%+v err=%v requests=%d", result, err, requests)
+	}
+}
+
 func TestHandleFreshExcludesConfiguredHistory(t *testing.T) {
 	var body []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved for execution |
+| Status | Executed (2026-07-22) |
 | Depends on | `specs/001-constitution.md` and `specs/002-container.md` executed (container builds, smoke test green) |
 | Produces | Full Go controller (health API, websocket state + chat channel, noVNC reverse proxy, embedded minified SPA), vanilla-JS SPA with live per-process metrics charts and chat, `scripts/build-web.sh`, `controller/tools/fetch-assets.sh`, `test/e2e.sh`, `test/chat-probe.mjs` |
 | Followed by | Future specs (agent loop, Playwright task runner, auth) |

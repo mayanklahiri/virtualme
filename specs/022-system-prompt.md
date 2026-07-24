@@ -106,3 +106,11 @@ You are Virtual Me, a private assistant running locally in the user's own contai
   `readpage-example`, `tools-roundtrip`, and `jobs-queue-probe`.
 - llama.cpp `/tokenize` measured 327 tokens for the interpolated agent prompt
   with the environment-manifest content excluded, below the 350-token limit.
+
+### 2026-07-24 — Empty completion recovery
+
+Live soak validation observed llama.cpp return a successful SSE stream with no
+content and no tool call after a valid DOM observation. The agent now retries
+one such empty terminal completion per task. A second empty completion returns
+an explicit failed response instead of silently persisting a blank assistant
+message. Hermetic coverage locks the retry and recovery path.

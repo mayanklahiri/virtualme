@@ -106,3 +106,11 @@ full-screen rule and an empty WM keyboard map. The watchdog now enforces exact
 screen position and dimensions on the most recently mapped Chromium surface,
 rather than applying the prior approximate size threshold to the first visible
 window. No numbered Docker layer changed.
+
+### 2026-07-24 — Explicit screenshot soak instruction
+
+Cumulative live validation found that the local model intermittently claimed
+to provide the requested screenshot without invoking the screenshot tool. The
+`lahiri-dom` prompt now states the existing hard requirement explicitly: it
+must call the tool before answering, and prose alone does not satisfy the
+request. The hard assertion remains unchanged.
