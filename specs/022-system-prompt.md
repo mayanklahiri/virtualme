@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/008-browser-agent.md` (agent prompt construction), `specs/021-agent-cdp-tools-console.md` (new observation tools referenced by the prompt — execute 021 first, or land the prompt clause with 021 per its §6 note) |
 | Produces | Both system prompts moved from Go string literals to reviewable on-disk sources under `controller/prompts/`, embedded via `go:embed`, linked from the README; a rewrite grounded in small-language-model best practices tuned for this deployment (Gemma-class small model doing computer use and web-task automation) |
 | Followed by | Future specs |
@@ -85,9 +85,24 @@ You are Virtual Me, a private assistant running locally in the user's own contai
 
 ## 7. Acceptance checklist
 
-- [ ] `npm run check` green; `gofmt`/`go vet` clean; prompts package golden tests pass.
-- [ ] `grep -rn "You are Virtual Me" controller/ --include=*.go` returns no string literals (only the embed variables/usages).
-- [ ] README links to `controller/prompts/` and the link resolves on GitHub.
-- [ ] Interpolated agent prompt (log it once at startup at debug level, or verify via test) contains real resolutions and manifest, no `{{` residue.
-- [ ] Full soak suite passes on a rebuilt image.
-- [ ] Token count of the interpolated agent prompt (excluding manifest) is ≤ 350 tokens by llama.cpp's `/tokenize` (measure once, record in the commit message) — the rewrite must not grow past the current budget.
+- [x] `npm run check` green; `gofmt`/`go vet` clean; prompts package golden tests pass.
+- [x] `grep -rn "You are Virtual Me" controller/ --include=*.go` returns no string literals (only the embed variables/usages).
+- [x] README links to `controller/prompts/` and the link resolves on GitHub.
+- [x] Interpolated agent prompt (log it once at startup at debug level, or verify via test) contains real resolutions and manifest, no `{{` residue.
+- [x] Full soak suite passes on a rebuilt image.
+- [x] Token count of the interpolated agent prompt (excluding manifest) is ≤ 350 tokens by llama.cpp's `/tokenize` (measure once, record in the commit message) — the rewrite must not grow past the current budget.
+
+## Amendments
+
+### 2026-07-23 — Execution details
+
+- `controller/prompts` is the canonical package and embeds both normative text
+  files. The agent performs named replacement at construction time while
+  retaining the 4096-byte manifest cap; fallback chat uses the embedded text
+  directly.
+- Hermetic tests lock placeholder cardinality, chat's placeholder-free source,
+  fallback-chat wiring, complete interpolation, and fixed-output golden text.
+- The rebuilt-image soak passed `lahiri-dom`, `hn-top10`,
+  `readpage-example`, `tools-roundtrip`, and `jobs-queue-probe`.
+- llama.cpp `/tokenize` measured 327 tokens for the interpolated agent prompt
+  with the environment-manifest content excluded, below the 350-token limit.

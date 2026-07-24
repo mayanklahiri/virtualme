@@ -20,6 +20,7 @@ import (
 	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 	"github.com/mayanklahiri/virtualme/controller/internal/valkey"
 	"github.com/mayanklahiri/virtualme/controller/internal/ws"
+	"github.com/mayanklahiri/virtualme/controller/prompts"
 )
 
 const (
@@ -29,7 +30,6 @@ const (
 	contextWindow    = 16
 	historyPromptCap = 8 * 1024
 	maxTextLen       = 4096
-	systemPrompt     = "You are Virtual Me, a private assistant running locally inside the user's own container."
 )
 
 // Message is one chat history entry.
@@ -355,7 +355,7 @@ func (s *Service) contextMessages(throughTs int64) []map[string]string {
 	}
 	recent := boundedHistory(s.history[:end])
 	messages := make([]map[string]string, 0, len(recent)+1)
-	messages = append(messages, map[string]string{"role": "system", "content": systemPrompt})
+	messages = append(messages, map[string]string{"role": "system", "content": prompts.Chat})
 	for _, message := range recent {
 		messages = append(messages, map[string]string{"role": message.Role, "content": message.Text})
 	}

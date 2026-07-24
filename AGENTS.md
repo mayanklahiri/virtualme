@@ -26,7 +26,8 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `.cursor/skills/` | Shared AI operating and development procedures |
 | `specs/` | Numbered, authoritative implementation specs |
 | `docker/` | Container image and supervised services (spec 002) |
-| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached multi-voice local TTS, outbound mail, and multi-page console (specs 002–021) |
+| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached multi-voice local TTS, outbound mail, and multi-page console (specs 002–022) |
+| `controller/prompts/` | Embedded plain-text agent and fallback-chat system prompts |
 
 ## Commands
 
@@ -52,6 +53,8 @@ and title, omit layout-only noise, and always fit the model's context;
 navigation; agent screenshots and step logs (including observation text)
 persist under `$VM_DATA_DIR/agent/`. Chromium uses documented deterministic
 automation flags and one undecorated full-screen virtual-desktop surface.
+Its agent and fallback-chat system prompts are embedded from reviewable plain
+text in `controller/prompts/`; wording changes require a spec amendment.
 The server-driven `/tools` console lists every agent definition, generates
 forms from its JSON schema, and serializes manual calls through the job queue;
 manual results and timings enter the persistent activity ledger.
@@ -114,7 +117,7 @@ the theme-defined `--p1` through `--p8` series ramp.
 | [019](specs/019-chart-overhaul.md) | Chart ticks, titles, lookback control, and uniform series color |
 | [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, second voice, and audio hygiene |
 | [021](specs/021-agent-cdp-tools-console.md) | CDP observation tools and the Tools console page |
-| [022](specs/022-system-prompt.md) | On-disk embedded system prompts, SLM-optimized rewrite (draft) |
+| [022](specs/022-system-prompt.md) | On-disk embedded system prompts and SLM-optimized rewrite |
 | [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing (draft) |
 | [024](specs/024-brand-chrome-polish.md) | Brand wordmark, wristwatch live indicator, and console polish (draft) |
 | [025](specs/025-release-presentation.md) | Marvin release notes, registry metadata, and the /do-release skill (draft) |

@@ -89,12 +89,16 @@ requires a new spec.
 | `controller/internal/jiggler` | Opt-in humanlike mouse trajectories, Valkey state, and burst lifecycle |
 | `controller/cmd/ttsd`, `controller/internal/tts` | Whitelisted Lessac/Ryan synthesis, sentence WAV cache, Valkey speech log, NDJSON client, and streaming helpers |
 | `controller/internal/mail` | Stdlib MIME/CID composition, DKIM signing, dma submission, and spool status |
+| `controller/prompts` | Embedded plain-text agent and fallback-chat system prompts |
 | `controller/web/static` | Hand-written multi-page SPA, themes, charts, markdown, agent hooks |
 | `controller/web/static/js/jobs.js` | Queue timeline, live activity, and type-specific job details |
 | `controller/web/static/js/tools.js` | Server-manifest tool list, schema-generated forms, and typed manual results |
 | `controller/web/dist` | Gitignored minified SPA + generated icon sprite |
 | `controller/tools/fetch-assets.sh` | Pinned fonts, selected Lucide SVGs, and hero image fetch |
 | `scripts/build-icons.mjs` | Deterministic Lucide SVG sprite generation |
+
+System-prompt wording in `controller/prompts/` is runtime behavior; changes
+require a spec amendment.
 
 Console themes define two complete light/dark token blocks in `app.css`,
 including `--brand-a`, `--brand-b`, `--font-scale`, and `--p1` through `--p8`.

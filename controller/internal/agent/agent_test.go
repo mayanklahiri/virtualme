@@ -33,6 +33,24 @@ func (recorder *activityRecorder) Record(event jobs.ActivityEvent) error {
 	return nil
 }
 
+func TestAgentSystemPromptGolden(t *testing.T) {
+	manifestPath := filepath.Join(t.TempDir(), "manifest.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"os":"test"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := buildSystemPrompt(Config{Manifest: manifestPath, Resolution: "1600x900x24"})
+	if strings.Contains(got, "{{") {
+		t.Fatalf("interpolated prompt contains an unresolved placeholder: %q", got)
+	}
+	want, err := os.ReadFile(filepath.Join("testdata", "agent-system.golden"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != string(want) {
+		t.Fatalf("interpolated agent prompt changed (-want +got):\nwant:\n%q\ngot:\n%q", want, got)
+	}
+}
+
 func TestSpeakToolDefinitionAndExecution(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = fmt.Fprintln(w, `{"type":"start","sampleRate":22050,"channels":1,"sentences":1}`)

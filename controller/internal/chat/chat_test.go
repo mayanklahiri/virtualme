@@ -18,6 +18,7 @@ import (
 	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 	"github.com/mayanklahiri/virtualme/controller/internal/valkey"
 	"github.com/mayanklahiri/virtualme/controller/internal/ws"
+	"github.com/mayanklahiri/virtualme/controller/prompts"
 )
 
 type respServer struct {
@@ -248,6 +249,15 @@ func TestBoundedHistoryLimitsCountAndTextSize(t *testing.T) {
 	}
 	if !strings.HasPrefix(recent[len(recent)-1].Text, "19:") {
 		t.Fatalf("newest message was not retained: %+v", recent)
+	}
+}
+
+func TestContextMessagesUsesEmbeddedPrompt(t *testing.T) {
+	service := New("127.0.0.1:1", "http://127.0.0.1:1", func([]byte) {})
+	service.history = []Message{{Role: "user", Text: "hello", Ts: 1}}
+	messages := service.contextMessages(1)
+	if len(messages) != 2 || messages[0]["role"] != "system" || messages[0]["content"] != prompts.Chat {
+		t.Fatalf("context messages = %+v", messages)
 	}
 }
 
