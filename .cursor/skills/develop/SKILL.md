@@ -100,6 +100,10 @@ Adding a theme also requires entries in the `theme.js` registry, the
 `index.html` boot registry, and the CSS swatch registry. Pinned web fonts and
 the Earthrise hero image are declared in `controller/tools/fetch-assets.sh`;
 the fetched image is copied by `scripts/build-web.sh` and never committed.
+Charts use the reusable `makeChart` path in `chart.js`: supply sample values,
+series names, units, and a maximum function while retaining the shared
+lookback/tick/hover behavior. Every chart series and legend swatch must use the
+theme's `--p1` through `--p8` ramp; never introduce chart-specific colors.
 
 The controller maps `tts-req`/`tts-stop` websocket requests to per-connection
 `tts-*` streams, serves `POST /v1/audio/speech`, and broadcasts agent `speak`

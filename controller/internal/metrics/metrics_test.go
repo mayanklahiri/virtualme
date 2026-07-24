@@ -61,6 +61,26 @@ func TestQueryLookback(t *testing.T) {
 	}
 }
 
+func TestLookbackResolutions(t *testing.T) {
+	store := NewStore(t.TempDir())
+	want := map[string]int{
+		"15m": 2,
+		"1h":  2,
+		"3h":  30,
+		"12h": 30,
+		"1d":  300,
+		"3d":  300,
+		"7d":  300,
+		"30d": 900,
+	}
+	for lookback, resolution := range want {
+		got, _, ok := store.Query(lookback)
+		if !ok || got != resolution {
+			t.Errorf("Query(%q) resolution = %d, ok = %v; want %d, true", lookback, got, ok, resolution)
+		}
+	}
+}
+
 func TestPersistLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	store := NewStore(dir)

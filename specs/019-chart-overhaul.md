@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/005-console-ui.md` (charts, themes, lookbacks), `specs/011-ui-refresh.md` (theme token set `--p1`–`--p8`) |
 | Produces | A reusable chart component in `controller/web/static/js/chart.js` with bounded boundary-aligned x-axis ticks and locale-aware labels; per-chart economist-style titles placed left of a compact right-aligned labelled lookback button group (desktop) or above it (mobile); the `--p1`–`--p8` series ramp applied uniformly to every multi-series chart (fixing CPU per core); timestamp-true hover hit-testing |
 | Followed by | `specs/018-gpu-observability.md` (GPU chart consumes this component — execute this spec BEFORE 018) |
@@ -89,9 +89,26 @@ Reference behavior: the memory chart's `css(\`--p${i+1}\`)` per-series fill (cor
 
 ## 7. Acceptance checklist
 
-- [ ] `npm run check` green including the new tick test.
-- [ ] Desktop 1600 px, every lookback: ≤5 x labels, aligned to natural boundaries, locale-short format; 375 px: ≤3 labels, nothing overlaps.
-- [ ] Each chart shows its title/subtitle left of (desktop) or above (mobile) a right-aligned segmented lookback group labelled "Window"; the group does not wrap raggedly at 375 px.
-- [ ] CPU and memory charts draw from the same `--p1`–`--p8` ramp in all eight themes × light/dark; the 16-core legend collapses behind `+N more`.
-- [ ] Hover tooltip tracks true timestamps across a data gap (synthetic gap: stop container 2 min, restart, inspect 15m lookback).
-- [ ] Lookback selection persists across reload and applies to all charts simultaneously.
+- [x] `npm run check` green including the new tick test.
+- [x] Desktop 1600 px, every lookback: ≤5 x labels, aligned to natural boundaries, locale-short format; 375 px: ≤3 labels, nothing overlaps.
+- [x] Each chart shows its title/subtitle left of (desktop) or above (mobile) a right-aligned segmented lookback group labelled "Window"; the group does not wrap raggedly at 375 px.
+- [x] CPU and memory charts draw from the same `--p1`–`--p8` ramp in all eight themes × light/dark; the 16-core legend collapses behind `+N more`.
+- [x] Hover tooltip tracks true timestamps across a data gap (synthetic gap: stop container 2 min, restart, inspect 15m lookback).
+- [x] Lookback selection persists across reload and applies to all charts simultaneously.
+
+## Amendments
+
+### 2026-07-23 — Execution after spec 018
+
+Spec 018 had already landed under its direct-execution amendment, so this
+execution integrated the existing GPU chart into the reusable component
+alongside CPU and memory instead of leaving GPU as a future composition step.
+Its utilization bars, memory overlay, dual scale, and first-state visibility
+remain unchanged.
+
+The built SPA was inspected at 1600 px and 375 px. Deterministic browser-free
+tests cover every lookback/width tick bound and local boundary alignment,
+server-resolution trailing buckets across a synthetic gap, and timestamp
+nearest-sample selection across that gap. This replaces the destructive
+stop/restart form of the manual gap fixture while asserting the same chart
+primitives directly.

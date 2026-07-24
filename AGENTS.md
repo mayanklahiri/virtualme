@@ -73,6 +73,9 @@ The controller detects the first visible NVIDIA, AMD, or Intel GPU once at
 startup without affecting health. It includes static GPU identity in state and
 persists utilization/memory metrics when NVIDIA or AMD sysfs sampling is
 available; the console hides the GPU chart for presence-only devices.
+Status charts share a persistent lookback, bounded boundary-aligned locale
+ticks, responsive title/control headers, timestamp-true hover selection, and
+the theme-defined `--p1` through `--p8` series ramp.
 
 ## Skills
 
@@ -104,7 +107,7 @@ available; the console hides the GPU chart for presence-only devices.
 | [016](specs/016-chromium-determinism.md) | Chromium determinism flags and single full-screen window |
 | [017](specs/017-jiggler.md) | Jiggler: humanlike OS-level mouse motion with a Status switch |
 | [018](specs/018-gpu-observability.md) | Multi-vendor GPU detection, status widget, and usage series |
-| [019](specs/019-chart-overhaul.md) | Chart ticks, titles, lookback control, and uniform series color (draft) |
+| [019](specs/019-chart-overhaul.md) | Chart ticks, titles, lookback control, and uniform series color |
 | [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, second voice, and audio hygiene (draft) |
 | [021](specs/021-agent-cdp-tools-console.md) | CDP observation tools and the Tools console page (draft) |
 | [022](specs/022-system-prompt.md) | On-disk embedded system prompts, SLM-optimized rewrite (draft) |

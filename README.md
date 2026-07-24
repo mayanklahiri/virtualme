@@ -115,7 +115,7 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `POST /v1/audio/speech` | OpenAI-compatible local speech API (`wav` or raw `pcm`) |
 | `/desktop/` | Reverse proxy to noVNC and websockify |
 
-History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status history offers `15m` through `30d` lookbacks and shows the server-local scheduler clock and active selector tokens. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, uptime, CPU/load, memory, disk capacity, and a detected GPU beside a theme-tinted Earthrise image.
+History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status charts offer synchronized `15m` through `30d` lookbacks, boundary-aligned locale-aware time ticks, responsive titles and controls, and theme-consistent series colors; the page also shows the server-local scheduler clock and active selector tokens. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, uptime, CPU/load, memory, disk capacity, and a detected GPU beside a theme-tinted Earthrise image.
 
 The Status-page Jiggler switch is off by default. When enabled, the controller
 moves the virtual desktop's OS cursor in occasional short humanlike bursts,
@@ -246,7 +246,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [016](specs/016-chromium-determinism.md) | Chromium determinism flags and single full-screen window |
 | [017](specs/017-jiggler.md) | Jiggler: humanlike OS-level mouse motion with a Status switch |
 | [018](specs/018-gpu-observability.md) | Multi-vendor GPU detection, status widget, and usage series |
-| [019](specs/019-chart-overhaul.md) | Chart ticks, titles, lookback control, and uniform series color (draft) |
+| [019](specs/019-chart-overhaul.md) | Chart ticks, titles, lookback control, and uniform series color |
 | [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, second voice, and audio hygiene (draft) |
 | [021](specs/021-agent-cdp-tools-console.md) | CDP observation tools and the Tools console page (draft) |
 | [022](specs/022-system-prompt.md) | On-disk embedded system prompts, SLM-optimized rewrite (draft) |

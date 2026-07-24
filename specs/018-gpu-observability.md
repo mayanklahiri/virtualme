@@ -101,3 +101,11 @@ was implemented here.
 The NVIDIA-host acceptance item remains unchecked because this execution
 environment has no passed-through GPU. `E2E_GPU=1 bash test/e2e.sh` starts with
 `--gpus all` and performs that hardware-gated assertion.
+
+### 2026-07-23 — Spec 019 chart integration completed
+
+Spec 019 subsequently refactored the CPU, memory, and GPU charts onto the
+shared chart component. The GPU chart now receives the common synchronized
+lookback controls, boundary-aligned ticks, timestamp hover selection, and
+`--p1`/`--p2` legend behavior while retaining its utilization bars, memory
+overlay, dual scale, and hardware-gated visibility.
