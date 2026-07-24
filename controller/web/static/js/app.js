@@ -20,6 +20,13 @@ const mail = initMail((value) => socket.send(value));
 const projects = initProjects((value) => socket.send(value));
 const jobs = initJobs((value) => socket.send(value));
 const agent = initAgent(chat.log, (text) => chat.setStatus(text));
+const jigglerSwitch = document.querySelector("#jiggler-switch");
+jigglerSwitch.addEventListener("click", () => {
+  socket.send({
+    type: "jiggler-set",
+    enabled: jigglerSwitch.getAttribute("aria-checked") !== "true",
+  });
+});
 
 function onStatus(status) {
   renderStatus(status);

@@ -38,7 +38,7 @@ also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 - `http://localhost:8080/projects` — recurring projects and schedules
 - `http://localhost:8080/projects/<id>` — project task, runs, and scratch details
 - `http://localhost:8080/jobs` — queue timeline, machine activity, and details
-- `http://localhost:8080/status` — service status, active time selectors, and tiered metrics
+- `http://localhost:8080/status` — service status, active time selectors, opt-in jiggler, and tiered metrics
 - `http://localhost:8080/chat` — shared local-model chat
 - `http://localhost:8080/speech` — streaming local text-to-speech
 - `http://localhost:8080/mail` — outbound-mail composer, queue, and DKIM status
@@ -62,6 +62,11 @@ Use `/jobs` to see what the machine is actually doing. Queue time flows from
 upcoming at the top through the single executing job to recently finished
 jobs; the activity list below is newest-first and records finer-grained LLM,
 tool, speech, and mail actions.
+
+The Jiggler switch on `/status` is off by default. When enabled it moves the
+virtual desktop cursor in occasional short, humanlike bursts, yields whenever
+an agent or queued job may act, and records each burst on `/jobs`. The setting
+persists across page reloads and container restarts in Valkey.
 
 ## Browser-agent tasks
 

@@ -303,9 +303,13 @@ export function initProjects(send) {
     switchLabel.textContent = "Enabled";
     const toggle = document.createElement("button");
     toggle.type = "button";
+    toggle.className = "switch";
     toggle.setAttribute("role", "switch");
     toggle.setAttribute("aria-checked", String(project.enabled));
     toggle.setAttribute("aria-label", "Enable scheduled runs");
+    const knob = document.createElement("span");
+    knob.className = "knob";
+    toggle.append(knob);
     toggle.addEventListener("click", () => sendUpdate(id, { enabled: !project.enabled }));
     switchRow.append(switchLabel, toggle);
     scheduleCard.append(scheduleTitle, daysRow, timesRow, serialized, switchRow);

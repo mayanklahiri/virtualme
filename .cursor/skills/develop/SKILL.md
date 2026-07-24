@@ -83,6 +83,8 @@ requires a new spec.
 | `controller/internal/jobs/activity.go` | Persistent activity ledger and websocket replay/broadcast |
 | `controller/internal/projects` | Persistent recurring tasks, scheduler source, executor, run summaries, and scratch directories |
 | `controller/internal/agent` | Tool-call loop, read-only CDP/DOM observations, OS-level actions, bash, and artifacts |
+| `controller/internal/actuation` | Global lock serializing OS-level mouse/keyboard input |
+| `controller/internal/jiggler` | Opt-in humanlike mouse trajectories, Valkey state, and burst lifecycle |
 | `controller/cmd/ttsd`, `controller/internal/tts` | Serialized sherpa subprocess synthesis, WAV parsing, NDJSON client, and streaming helpers |
 | `controller/internal/mail` | Stdlib MIME/CID composition, DKIM signing, dma submission, and spool status |
 | `controller/web/static` | Hand-written multi-page SPA, themes, charts, markdown, agent hooks |
@@ -114,7 +116,13 @@ under `$VM_DATA_DIR/projects/<id>/`.
 It maps `activity-req` to sender-only `activity` frames and broadcasts
 `activity-event` frames after durable writes. Activity feed points are agent
 tool completion, chat/project LLM start and finish, each TTS synthesis, and
-each mail submission.
+each mail submission or jiggler burst.
+It maps `jiggler-set` to the Valkey-backed ambient-motion setting exposed in
+each state snapshot. Jiggler bursts yield to the job manager and the shared
+`internal/actuation` lock.
+
+The reusable console switch is `.switch` with a child `.knob`; use this markup
+for boolean controls and render `aria-checked` only from server state.
 
 ## How to add things
 

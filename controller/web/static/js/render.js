@@ -120,6 +120,10 @@ export function renderState(snapshot) {
     if (index === 0) item.className = "current";
     selectorList.append(item);
   }
+  document.querySelector("#jiggler-switch").setAttribute(
+    "aria-checked",
+    String(snapshot.jiggler?.enabled === true),
+  );
 }
 
 export function renderStatus(status) {

@@ -25,6 +25,7 @@ import (
 	"github.com/mayanklahiri/virtualme/controller/internal/agent"
 	"github.com/mayanklahiri/virtualme/controller/internal/chat"
 	"github.com/mayanklahiri/virtualme/controller/internal/health"
+	"github.com/mayanklahiri/virtualme/controller/internal/jiggler"
 	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 	"github.com/mayanklahiri/virtualme/controller/internal/mail"
 	"github.com/mayanklahiri/virtualme/controller/internal/metrics"
@@ -47,6 +48,19 @@ func envOr(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envResolution() (int, int) {
+	parts := strings.Split(envOr("VM_RESOLUTION", "1600x900x24"), "x")
+	if len(parts) < 2 {
+		return 1600, 900
+	}
+	width, widthErr := strconv.Atoi(parts[0])
+	height, heightErr := strconv.Atoi(parts[1])
+	if widthErr != nil || heightErr != nil || width < 5 || height < 5 {
+		return 1600, 900
+	}
+	return width, height
 }
 
 func spaHandler(staticFS fs.FS) http.Handler {
@@ -359,7 +373,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	collector := state.NewCollector(cfg, "/proc", metricsStore, hub.Broadcast)
 	chatService := chat.NewWithAgent(
 		cfg.ValkeyAddr,
 		"http://127.0.0.1:8081/v1/chat/completions",
@@ -385,6 +398,12 @@ func main() {
 	jobManager := jobs.New(valkey.New(cfg.ValkeyAddr), hub.Broadcast)
 	chatService.SetJobManager(jobManager)
 	jobManager.Register("chat", chatService.Execute)
+	width, height := envResolution()
+	jigglerService := jiggler.New(agent.NewProcessRunner(), valkey.New(cfg.ValkeyAddr), hub.Broadcast, width, height)
+	jigglerService.SetDisplay(envOr("VM_DISPLAY", ":99"))
+	jigglerService.SetJobManager(jobManager)
+	jigglerService.SetActivity(activity)
+	collector := state.NewCollector(cfg, "/proc", metricsStore, hub.Broadcast, jigglerService.Enabled)
 	projectService := projects.New(
 		valkey.New(cfg.ValkeyAddr), jobManager, chatService, dataDir, hub.Broadcast,
 	)
@@ -438,6 +457,9 @@ func main() {
 		if activity.HandleMessage(conn, payload) {
 			return
 		}
+		if jigglerService.HandleMessage(payload) {
+			return
+		}
 		chatService.HandleClientMessage(conn, payload)
 	})
 	hub.SetOnConnect(func(conn *ws.Conn) {
@@ -454,6 +476,9 @@ func main() {
 	if err := jobManager.Start(ctx); err != nil {
 		log.Fatal("jobs: startup failed:", err)
 	}
+	if err := jigglerService.Start(ctx); err != nil {
+		log.Fatal("jiggler: startup failed:", err)
+	}
 	go collector.Run(ctx)
 	persistDone := make(chan struct{})
 	go func() {
@@ -469,6 +494,7 @@ func main() {
 	log.Println("chat: queued llama-backed shared conversation ready")
 	log.Println("jobs: sequential worker and scheduler ready")
 	log.Println("agent: OS-level browser-control loop ready")
+	log.Println("jiggler: ambient mouse service ready")
 	log.Println("state: collector started (2s, tiered metrics)")
 	log.Println("desktop: proxying", desktopURL)
 	log.Println("controller: listening on", addr)

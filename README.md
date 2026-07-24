@@ -105,7 +105,7 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/projects` | Recurring natural-language tasks, schedules, manual runs, and recent results |
 | `/projects/<id>` | Project task, schedule, status, run history, and scratch-directory details |
 | `/jobs` | Queue timeline, fine-grained machine activity, and type-specific details |
-| `/status` | Service health, system meters, active time selectors, and persistent per-core/process metrics |
+| `/status` | Service health, system meters, active time selectors, opt-in jiggler, and persistent per-core/process metrics |
 | `/chat` | Markdown chat, generation controls, LLM progress, and conversation totals |
 | `/speech` | Streaming local text-to-speech with the Lessac en-US voice |
 | `/mail` | Outbound-mail composer, queue status, and DKIM DNS record |
@@ -116,6 +116,11 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/desktop/` | Reverse proxy to noVNC and websockify |
 
 History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status history offers `15m` through `30d` lookbacks and shows the server-local scheduler clock and active selector tokens. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, uptime, CPU/load, memory, and disk capacity beside a theme-tinted Earthrise image.
+
+The Status-page Jiggler switch is off by default. When enabled, the controller
+moves the virtual desktop's OS cursor in occasional short humanlike bursts,
+yields to queued jobs and agent actuation, and records each burst in Jobs
+activity. The Valkey-backed setting survives reloads and container restarts.
 
 Closing Chromium in `/desktop-view` automatically brings back one blank tab. Chromium uses its namespace sandbox when the host permits unprivileged user namespaces; otherwise it falls back to `--no-sandbox` with the warning infobar suppressed. Use `--no-browser-sandbox` to force that fallback when diagnosing host compatibility.
 
@@ -153,7 +158,8 @@ Use `/jobs` to see what the machine is actually doing. The queue timeline reads
 top-to-bottom from upcoming jobs through the single executing job to recently
 finished jobs. The newest-first activity ledger records each LLM generation,
 agent tool call, speech synthesis, and mail submission; selecting a row opens
-its payload, result, timing, and type-specific details. The bounded ledger
+its payload, result, timing, and type-specific details. Jiggler bursts also
+appear as `jiggle` tool events. The bounded ledger
 persists in Valkey across container restarts.
 
 ### Local speech
@@ -231,7 +237,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [014](specs/014-projects.md) | Projects: periodic natural-language tasks with schedules and scratch dirs |
 | [015](specs/015-jobs-page.md) | Jobs page: activity ledger and queue peek with details pane |
 | [016](specs/016-chromium-determinism.md) | Chromium determinism flags and single full-screen window |
-| [017](specs/017-jiggler.md) | Jiggler: humanlike OS-level mouse motion with a Status switch (draft) |
+| [017](specs/017-jiggler.md) | Jiggler: humanlike OS-level mouse motion with a Status switch |
 | [018](specs/018-gpu-observability.md) | Multi-vendor GPU detection, status widget, and usage series (draft) |
 | [019](specs/019-chart-overhaul.md) | Chart ticks, titles, lookback control, and uniform series color (draft) |
 | [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, second voice, and audio hygiene (draft) |
@@ -280,4 +286,4 @@ Use a Raspberry Pi 5 or Raspberry Pi 4 with 8 GB RAM at minimum. The RAM floor i
 
 ## Architecture
 
-The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Valkey, vision-enabled llama.cpp with Gemma 4 E2B, local sherpa-onnx/Piper TTS, a dma outbound-mail queue, and a Go controller on `:8080`, running unprivileged (host uid/gid) with one rw data mount. The controller concurrently probes service health, samples and persists metrics, records machine activity, composes and DKIM-signs mail, schedules and sequentially executes reliable Valkey jobs and recurring projects, streams shared chat and speech, and runs a bounded browser-agent loop combining screenshots, compact DOM/read-only CDP observations, OS-level `xdotool` actions, bash, and audible responses. It proxies noVNC and embeds the same-origin minified multi-page SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.
+The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Valkey, vision-enabled llama.cpp with Gemma 4 E2B, local sherpa-onnx/Piper TTS, a dma outbound-mail queue, and a Go controller on `:8080`, running unprivileged (host uid/gid) with one rw data mount. The controller concurrently probes service health, samples and persists metrics, records machine activity, composes and DKIM-signs mail, schedules and sequentially executes reliable Valkey jobs and recurring projects, streams shared chat and speech, produces opt-in ambient OS-level mouse motion, and runs a bounded browser-agent loop combining screenshots, compact DOM/read-only CDP observations, OS-level `xdotool` actions, bash, and audible responses. It proxies noVNC and embeds the same-origin minified multi-page SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.

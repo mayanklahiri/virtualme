@@ -185,3 +185,9 @@ reserves the persistence lane without adding agent runtime behavior.
 | State | Path | Owner / mechanism | Introduced |
 |---|---|---|---|
 | `virtualme:activity` bounded machine-activity ledger | `$VM_DATA_DIR/valkey/` (AOF) | `internal/jobs.Activity` via `svc-valkey` | 015 |
+
+### 2026-07-23 — Persistent jiggler setting
+
+| State | Path | Owner / mechanism | Introduced |
+|---|---|---|---|
+| `virtualme:jiggler:enabled` jiggler switch | `$VM_DATA_DIR/valkey/` (AOF) | `internal/jiggler` via `svc-valkey` | 017 |

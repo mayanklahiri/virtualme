@@ -91,6 +91,8 @@ docker exec -e DISPLAY=:99 "$NAME" xdotool search --onlyvisible --class chromium
 
 echo "e2e: [9/19] state frames include hostname and disk capacity"
 node test/state-probe.mjs "ws://127.0.0.1:${PORT}/ws" || fail "state probe"
+node test/jiggler-probe.mjs true "ws://127.0.0.1:${PORT}/ws" || fail "jiggler enable"
+node test/jiggler-probe.mjs false "ws://127.0.0.1:${PORT}/ws" || fail "jiggler disable"
 
 echo "e2e: [10/19] metrics protocol returns raw and 15-minute tiers"
 node test/metrics-probe.mjs "ws://127.0.0.1:${PORT}/ws" || fail "metrics probe"
@@ -142,6 +144,22 @@ else
   echo "e2e: agent task skipped (set E2E_AGENT=1 to enable)"
 fi
 
+if [ "${E2E_JIGGLER:-0}" = "1" ]; then
+  echo "e2e: optional jiggler motion and stop probe"
+  node test/jiggler-probe.mjs true "ws://127.0.0.1:${PORT}/ws" || fail "jiggler enable"
+  before=$(docker exec -e DISPLAY=:99 "$NAME" xdotool getmouselocation --shell) || fail "read cursor before jiggle"
+  sleep 60
+  after=$(docker exec -e DISPLAY=:99 "$NAME" xdotool getmouselocation --shell) || fail "read cursor after jiggle"
+  [ "$before" != "$after" ] || fail "cursor did not move while jiggler enabled"
+  node test/jiggler-probe.mjs false "ws://127.0.0.1:${PORT}/ws" || fail "jiggler disable"
+  before=$(docker exec -e DISPLAY=:99 "$NAME" xdotool getmouselocation --shell) || fail "read cursor before disabled interval"
+  sleep 60
+  after=$(docker exec -e DISPLAY=:99 "$NAME" xdotool getmouselocation --shell) || fail "read cursor after disabled interval"
+  [ "$before" = "$after" ] || fail "cursor moved while jiggler disabled"
+else
+  echo "e2e: jiggler motion skipped (set E2E_JIGGLER=1 to enable)"
+fi
+
 echo "e2e: [18/19] direct mode accepts and queues deferred mail"
 ./cli.sh stop >/dev/null || fail "cli stop before direct mode"
 unset VM_MAIL_SMARTHOST VM_MAIL_SMARTHOST_PORT
@@ -162,6 +180,8 @@ node test/chat-probe.mjs --history-only "ws://127.0.0.1:${PORT}/ws" \
   || fail "chat history lost across restart"
 node test/projects-probe.mjs --verify-delete "$project_id" "ws://127.0.0.1:${PORT}/ws" \
   || fail "project persistence/delete probe"
+node test/jiggler-probe.mjs --expect false "ws://127.0.0.1:${PORT}/ws" \
+  || fail "jiggler setting lost across restart"
 [ -s "$DATA_DIR/mail/dkim.key" ] || fail "DKIM key missing after restart"
 [ "$(stat -c %a "$DATA_DIR/mail/dkim.key")" = 600 ] || fail "DKIM key mode is not 600"
 compgen -G "$DATA_DIR/mail/spool/*" >/dev/null || fail "mail spool lost across restart"

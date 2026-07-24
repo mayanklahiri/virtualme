@@ -31,6 +31,9 @@ socket.addEventListener("message", (event) => {
       !Array.isArray(message.scheduler?.active) || message.scheduler.active.length < 5) {
     fail("state frame missing scheduler selectors");
   }
+  if (typeof message.jiggler?.enabled !== "boolean") {
+    fail("state frame missing jiggler enabled state");
+  }
   clearTimeout(timer);
   console.log("state-probe: OK");
   process.exit(0);

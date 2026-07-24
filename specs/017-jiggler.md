@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/008-browser-agent.md` (xdotool actuation, Runner injection), `specs/013-job-queue-scheduler.md` (Valkey client; Status page conventions) |
 | Produces | A controller-internal "jiggler" service producing bursty, erratic, humanlike mouse trajectories on the Xvfb display via `xdotool` (never CDP); a Status-page on/off switch persisted in Valkey; automatic yielding to agent actuation |
 | Followed by | Future specs |
@@ -69,8 +69,26 @@ One `activity` event (spec 015) per burst: `kind:"tool", name:"jiggle", summary:
 
 ## 7. Acceptance checklist
 
-- [ ] `npm run check` green; no CDP references anywhere under `controller/internal/jiggler/`.
-- [ ] Switch on the Status page toggles, survives page reload and container restart (Valkey), and reflects server truth (no optimistic flip).
-- [ ] Watching `/desktop-view` with the jiggler on: motion appears in occasional short flurries; paths are curved with a visible terminal correction; the cursor never moves while an agent task is running.
-- [ ] Seeded-trajectory unit tests pass and assert the §2 invariants.
-- [ ] Activity ledger shows `jiggle` events.
+- [x] `npm run check` green; no CDP references anywhere under `controller/internal/jiggler/`.
+- [x] Switch on the Status page toggles, survives page reload and container restart (Valkey), and reflects server truth (no optimistic flip).
+- [x] Watching `/desktop-view` with the jiggler on: motion appears in occasional short flurries; paths are curved with a visible terminal correction; the cursor never moves while an agent task is running.
+- [x] Seeded-trajectory unit tests pass and assert the §2 invariants.
+- [x] Activity ledger shows `jiggle` events.
+
+## Amendments
+
+### 2026-07-23 — Same-side controls and testable first movement
+
+Section 2's prose requires both Bézier control offsets to use the same side of
+the travel vector so the arc straightens rather than forming an S-curve. That
+behavior governs the contradictory `-θ2` notation: production uses one random
+handedness and rotates both control vectors to that side.
+
+Enabling the jiggler schedules its first burst after three seconds; later
+bursts retain the normative 45-second-to-four-minute silence. This makes the
+opt-in immediately observable and makes the gated 60-second motion probe
+deterministic. Disabling during a burst stops further points promptly.
+
+The console already had a project-specific switch from spec 014. Spec 017
+promotes it to the reusable `.switch`/`.knob` component and uses that component
+for both projects and the Status-page jiggler control.

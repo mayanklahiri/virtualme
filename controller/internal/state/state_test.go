@@ -51,6 +51,7 @@ func TestSnapshotJSON(t *testing.T) {
 		Processes: []procstat.Proc{{Name: "xvfb", CPUPct: 1.5, MemMB: 42}},
 		Cores:     []float64{25},
 		Scheduler: Scheduler{LocalTime: "2026-07-22T09:00:00-07:00", TZ: "America/Los_Angeles", Active: []string{"morning", "anytime"}},
+		Jiggler:   Jiggler{Enabled: true},
 	}
 	payload, err := json.Marshal(snapshot)
 	if err != nil {
@@ -68,6 +69,7 @@ func TestSnapshotJSON(t *testing.T) {
 		`"processes":[{"name":"xvfb","cpuPct":1.5,"memMB":42}]`,
 		`"cores":[25]`,
 		`"scheduler":{"localTime":"2026-07-22T09:00:00-07:00","tz":"America/Los_Angeles","active":["morning","anytime"]}`,
+		`"jiggler":{"enabled":true}`,
 	} {
 		if !strings.Contains(text, field) {
 			t.Errorf("JSON %q missing %q", text, field)

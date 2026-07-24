@@ -434,6 +434,13 @@ func (m *Manager) CancelRunning(reason string) bool {
 	return true
 }
 
+// IsRunning reports whether a queue job is currently executing.
+func (m *Manager) IsRunning() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.running != nil
+}
+
 // CancelRunningType cancels the current job only when its type matches.
 func (m *Manager) CancelRunningType(jobType, reason string) bool {
 	m.mu.Lock()

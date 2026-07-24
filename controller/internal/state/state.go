@@ -34,6 +34,11 @@ type Scheduler struct {
 	Active    []string `json:"active"`
 }
 
+// Jiggler describes the persisted ambient-motion setting.
+type Jiggler struct {
+	Enabled bool `json:"enabled"`
+}
+
 // Snapshot is the websocket state message consumed by the SPA.
 type Snapshot struct {
 	Type      string           `json:"type"`
@@ -46,6 +51,7 @@ type Snapshot struct {
 	Processes []procstat.Proc  `json:"processes"`
 	Cores     []float64        `json:"cores"`
 	Scheduler Scheduler        `json:"scheduler"`
+	Jiggler   Jiggler          `json:"jiggler"`
 }
 
 func schedulerState(now time.Time) Scheduler {
@@ -78,6 +84,7 @@ type Collector struct {
 	period    time.Duration
 	hostname  string
 	dataDir   string
+	jiggler   func() bool
 }
 
 // ReadSystem parses Linux procfs load and memory data.
@@ -121,13 +128,13 @@ func ReadDisk(path string) (freeMB, totalMB int) {
 }
 
 // NewCollector creates a two-second state collector sampling procRoot.
-func NewCollector(cfg health.Config, procRoot string, store *metrics.Store, broadcast func([]byte)) *Collector {
+func NewCollector(cfg health.Config, procRoot string, store *metrics.Store, broadcast func([]byte), jiggler ...func() bool) *Collector {
 	hostname, _ := os.Hostname()
 	dataDir := os.Getenv("VM_DATA_DIR")
 	if dataDir == "" {
 		dataDir = "/home/virtualme/.virtualme"
 	}
-	return &Collector{
+	collector := &Collector{
 		cfg:       cfg,
 		sampler:   procstat.NewSampler(procRoot),
 		store:     store,
@@ -138,6 +145,10 @@ func NewCollector(cfg health.Config, procRoot string, store *metrics.Store, broa
 		hostname:  hostname,
 		dataDir:   dataDir,
 	}
+	if len(jiggler) > 0 {
+		collector.jiggler = jiggler[0]
+	}
+	return collector
 }
 
 func readFile(path string) string {
@@ -169,6 +180,9 @@ func (c *Collector) collect() {
 		Processes: processes,
 		Cores:     cores,
 		Scheduler: schedulerState(now),
+	}
+	if c.jiggler != nil {
+		snapshot.Jiggler.Enabled = c.jiggler()
 	}
 	payload, err := json.Marshal(snapshot)
 	if err != nil {

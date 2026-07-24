@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mayanklahiri/virtualme/controller/internal/actuation"
 	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 	"github.com/mayanklahiri/virtualme/controller/internal/tts"
 )
@@ -32,6 +33,11 @@ type Runner interface {
 }
 
 type processRunner struct{}
+
+// NewProcessRunner returns the controller's subprocess Runner implementation.
+func NewProcessRunner() Runner {
+	return processRunner{}
+}
 
 func (processRunner) Run(ctx context.Context, name string, args, env []string, dir string) ([]byte, []byte, error) {
 	command := exec.CommandContext(ctx, name, args...)
@@ -186,6 +192,10 @@ func decodeArgs(raw json.RawMessage, target any) error {
 }
 
 func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessage) (ToolResult, error) {
+	if usesXdotool(name) {
+		actuation.Lock()
+		defer actuation.Unlock()
+	}
 	switch name {
 	case "screenshot":
 		image, err := t.screenshot(ctx)
@@ -309,6 +319,15 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 		return t.speak(ctx, raw)
 	default:
 		return ToolResult{}, fmt.Errorf("unknown tool %q", name)
+	}
+}
+
+func usesXdotool(name string) bool {
+	switch name {
+	case "click", "click_element", "type", "type_into", "key", "scroll", "navigate":
+		return true
+	default:
+		return false
 	}
 }
 
