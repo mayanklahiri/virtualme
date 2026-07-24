@@ -38,6 +38,14 @@ wait_healthy() {
   done
 }
 
+start_vm() {
+  if [ "${E2E_GPU:-0}" = "1" ]; then
+    ./cli.sh start --gpus all
+  else
+    ./cli.sh start
+  fi
+}
+
 echo "e2e: [1/19] CLI build (tags :dev and the start tag)"
 ./cli.sh build >/dev/null || fail "cli build"
 
@@ -50,7 +58,7 @@ kill -0 "$MAIL_SINK_PID" 2>/dev/null || fail "mail sink did not start"
 export VM_MAIL_SMARTHOST=vmhost
 export VM_MAIL_SMARTHOST_PORT=2525
 export VM_MAIL_DKIM_DOMAIN=example.test
-./cli.sh start >/dev/null || fail "cli start"
+start_vm >/dev/null || fail "cli start"
 
 echo "e2e: [3/19] waiting for all-green /healthz (timeout ${TIMEOUT}s)"
 wait_healthy
@@ -91,6 +99,11 @@ docker exec -e DISPLAY=:99 "$NAME" xdotool search --onlyvisible --class chromium
 
 echo "e2e: [9/19] state frames include hostname and disk capacity"
 node test/state-probe.mjs "ws://127.0.0.1:${PORT}/ws" || fail "state probe"
+if [ "${E2E_GPU:-0}" = "1" ]; then
+  node test/gpu-probe.mjs "ws://127.0.0.1:${PORT}/ws" || fail "GPU probe"
+else
+  echo "e2e: GPU probe skipped (set E2E_GPU=1 on an NVIDIA host)"
+fi
 node test/jiggler-probe.mjs true "ws://127.0.0.1:${PORT}/ws" || fail "jiggler enable"
 node test/jiggler-probe.mjs false "ws://127.0.0.1:${PORT}/ws" || fail "jiggler disable"
 
@@ -163,7 +176,7 @@ fi
 echo "e2e: [18/19] direct mode accepts and queues deferred mail"
 ./cli.sh stop >/dev/null || fail "cli stop before direct mode"
 unset VM_MAIL_SMARTHOST VM_MAIL_SMARTHOST_PORT
-./cli.sh start >/dev/null || fail "cli start (direct mode)"
+start_vm >/dev/null || fail "cli start (direct mode)"
 wait_healthy
 node test/mail-probe.mjs --direct "ws://127.0.0.1:${PORT}/ws" || fail "mail direct probe"
 
@@ -171,7 +184,7 @@ echo "e2e: [19/19] restart preserves chat, projects, metrics, mail spool, and DK
 compgen -G "$DATA_DIR/valkey/*" >/dev/null \
   || fail "valkey persistence is empty before restart"
 ./cli.sh stop >/dev/null || fail "cli stop"
-./cli.sh start >/dev/null || fail "cli start (restart)"
+start_vm >/dev/null || fail "cli start (restart)"
 wait_healthy
 [ -f "$DATA_DIR/metrics/tier0.json" ] || fail "metrics tier0.json missing after restart"
 node test/metrics-probe.mjs --non-empty "ws://127.0.0.1:${PORT}/ws" \

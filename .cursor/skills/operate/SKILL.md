@@ -17,7 +17,7 @@ prompts or model requests are sent to external providers.
 | `npx virtualme help` | Show usage and every command |
 | `npx virtualme version` | Print the package version |
 | `npx virtualme doctor` | Verify node/docker/daemon (+ git hooks in a checkout) |
-| `npx virtualme start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>]` | Run unprivileged with tmpfs `/run`+`/tmp`, port 8080, and the host data dir mounted rw; optionally force Chromium's sandbox fallback or pass Docker GPU access |
+| `npx virtualme start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>]` | Run unprivileged with tmpfs `/run`+`/tmp`, port 8080, and the host data dir mounted rw; optionally force Chromium's sandbox fallback or pass NVIDIA GPU access |
 | `npx virtualme status` | Container state + `/healthz` per-service report |
 | `npx virtualme logs [-f\|--follow]` | Show or follow container logs |
 | `npx virtualme stop` | Stop and remove the container (data dir survives) |
@@ -38,7 +38,7 @@ also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 - `http://localhost:8080/projects` — recurring projects and schedules
 - `http://localhost:8080/projects/<id>` — project task, runs, and scratch details
 - `http://localhost:8080/jobs` — queue timeline, machine activity, and details
-- `http://localhost:8080/status` — service status, active time selectors, opt-in jiggler, and tiered metrics
+- `http://localhost:8080/status` — service/GPU status, active time selectors, opt-in jiggler, and tiered metrics
 - `http://localhost:8080/chat` — shared local-model chat
 - `http://localhost:8080/speech` — streaming local text-to-speech
 - `http://localhost:8080/mail` — outbound-mail composer, queue, and DKIM status
@@ -54,7 +54,7 @@ proxied `/desktop/websockify` websocket path.
 ## Console
 
 The home page live-updates controller health, hostname, uptime, CPU cores/load,
-memory, and disk capacity. The theme button in the sidebar footer opens the
+memory, disk capacity, and any detected GPU. The theme button in the sidebar footer opens the
 eight-theme picker and its automatic/light/dark variant controls; selections
 persist in the browser.
 
@@ -67,6 +67,11 @@ The Jiggler switch on `/status` is off by default. When enabled it moves the
 virtual desktop cursor in occasional short, humanlike bursts, yields whenever
 an agent or queued job may act, and records each burst on `/jobs`. The setting
 persists across page reloads and container restarts in Valkey.
+
+The GPU card on `/status` always reports presence, vendor, model, and available
+parameters. A utilization/memory chart appears only when sampling is supported.
+Use `--gpus all` for NVIDIA. AMD/Intel `/dev/dri` passthrough is host-specific
+and must be configured directly with Docker; the CLI has no `--device` option.
 
 ## Browser-agent tasks
 
@@ -95,7 +100,8 @@ an obsolete project directory manually after inspecting it.
 
 Full screenshots and `steps.jsonl` (tool arguments, summaries, and capped
 observation text) are retained under `~/.virtualme/agent/<taskId>/` for the
-most recent 20 tasks. CPU-only vision steps can take tens of seconds. `--gpus all` passes GPU devices and marks
+most recent 20 tasks. CPU-only vision steps can take tens of seconds. `--gpus all`
+passes NVIDIA GPU devices, lights up GPU observability, and marks
 `VM_LLAMA_GPU=1`, but v1 still ships the pinned CPU llama.cpp build.
 
 ## Local speech
@@ -142,3 +148,4 @@ private key mode at 0600.
 14. Job queue: `queue-peek` on `/ws` returns upcoming, running, and finished jobs; durable queue keys are in the Valkey AOF under `~/.virtualme/valkey/`.
 15. Projects: records and run summaries are in the Valkey AOF; scratch files are under `~/.virtualme/projects/<id>/` and survive project deletion.
 16. Activity ledger: `/jobs` replays the newest 100 entries from the bounded `virtualme:activity` Valkey list; queue rows are separate envelope state.
+17. GPU absent: this is normal. NVIDIA requires `--gpus all`; AMD/Intel require host-specific `/dev/dri` device passthrough. GPU absence never changes `/healthz`.

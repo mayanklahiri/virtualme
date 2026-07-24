@@ -73,6 +73,7 @@
               <span>CPU <strong id="home-cpu">—</strong></span>
               <span>Memory <strong id="home-memory">—</strong></span>
               <span>Disk <strong id="home-disk">—</strong></span>
+              <span id="home-gpu-row" hidden>GPU <strong id="home-gpu">—</strong></span>
               <span>Model <strong>Gemma 4 E2B Q4_0</strong></span>
             </div>
           </div>
@@ -148,6 +149,11 @@
         <div class="system-grid">
           <article class="metric"><div><label for="load">One-minute load <strong id="load-value">0.00</strong></label><meter id="load" min="0" max="8" value="0">0</meter></div></article>
           <article class="metric"><div><label for="memory">Memory <strong id="memory-value">0 / 0 MB</strong></label><meter id="memory" min="0" max="1" value="0">0</meter></div></article>
+          <article class="metric gpu-card">
+            <div><label>GPU <strong id="gpu-name">none detected</strong></label>
+            <dl id="gpu-params" class="gpu-params" hidden></dl>
+            <p id="gpu-caption" class="metric-caption">Start with --gpus to pass one through.</p></div>
+          </article>
           <article class="metric selector-card"><h2>Active time selectors</h2><p id="scheduler-clock"></p><ul id="scheduler-active" class="legend"></ul></article>
           <article class="metric jiggler-card">
             <div><label id="jiggler-label">Jiggler <span class="metric-caption">ambient humanlike mouse motion</span></label>
@@ -158,6 +164,11 @@
         <div class="charts">
           <figure class="chart"><figcaption>CPU per core (stacked %)</figcaption><canvas id="chart-cpu" tabindex="0" role="img" aria-label="Stacked per-core CPU usage bars"></canvas><ul id="core-legend" class="legend"></ul></figure>
           <figure class="chart"><figcaption>Memory per process (stacked MiB)</figcaption><canvas id="chart-mem" tabindex="0" role="img" aria-label="Stacked per-process memory usage bars"></canvas><ul id="process-legend" class="legend"></ul></figure>
+          <figure id="gpu-chart" class="chart" hidden>
+            <figcaption><strong>GPU utilization</strong><span>percent busy · memory MiB</span></figcaption>
+            <canvas id="chart-gpu" tabindex="0" role="img" aria-label="GPU utilization and memory usage"></canvas>
+            <ul class="legend"><li><span class="swatch gpu-util"></span>utilization</li><li><span class="swatch gpu-memory"></span>memory used</li></ul>
+          </figure>
         </div>
         <div id="chart-tooltip" class="tooltip" role="status" hidden></div>
       </section>

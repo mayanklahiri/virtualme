@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mayanklahiri/virtualme/controller/internal/gpu"
 	"github.com/mayanklahiri/virtualme/controller/internal/health"
 	"github.com/mayanklahiri/virtualme/controller/internal/procstat"
 )
@@ -47,11 +48,12 @@ func TestSnapshotJSON(t *testing.T) {
 		Hostname:  "virtualme",
 		OK:        true,
 		Services:  []health.Service{{Name: "xvfb", OK: true}},
-		System:    System{Load1: 0.5, MemUsedMB: 1, MemTotalMB: 2, DiskFreeMB: 3, DiskTotalMB: 4},
+		System:    System{Load1: 0.5, MemUsedMB: 1, MemTotalMB: 2, DiskFreeMB: 3, DiskTotalMB: 4, GPUUtil: 25, GPUMemMB: 512, GPUMemTotalMB: 1024},
 		Processes: []procstat.Proc{{Name: "xvfb", CPUPct: 1.5, MemMB: 42}},
 		Cores:     []float64{25},
 		Scheduler: Scheduler{LocalTime: "2026-07-22T09:00:00-07:00", TZ: "America/Los_Angeles", Active: []string{"morning", "anytime"}},
 		Jiggler:   Jiggler{Enabled: true},
+		GPU:       gpu.Info{Present: true, Vendor: "nvidia", Model: "Test GPU", Params: []gpu.KV{{Key: "VRAM", Value: "1024 MiB"}}, Sampler: "nvidia-smi"},
 	}
 	payload, err := json.Marshal(snapshot)
 	if err != nil {
@@ -66,10 +68,14 @@ func TestSnapshotJSON(t *testing.T) {
 		`"ok":true`,
 		`"services":[`,
 		`"system":{`,
+		`"gpuUtil":25`,
+		`"gpuMemMB":512`,
+		`"gpuMemTotalMB":1024`,
 		`"processes":[{"name":"xvfb","cpuPct":1.5,"memMB":42}]`,
 		`"cores":[25]`,
 		`"scheduler":{"localTime":"2026-07-22T09:00:00-07:00","tz":"America/Los_Angeles","active":["morning","anytime"]}`,
 		`"jiggler":{"enabled":true}`,
+		`"gpu":{"present":true,"vendor":"nvidia","model":"Test GPU","params":[{"key":"VRAM","value":"1024 MiB"}],"sampler":"nvidia-smi"}`,
 	} {
 		if !strings.Contains(text, field) {
 			t.Errorf("JSON %q missing %q", text, field)

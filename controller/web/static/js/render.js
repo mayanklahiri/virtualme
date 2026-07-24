@@ -52,6 +52,11 @@ function formatUptime(seconds) {
   ].filter(Boolean).join(" ");
 }
 
+function gpuName(gpu) {
+  const vendor = { nvidia: "NVIDIA", amd: "AMD", intel: "Intel" }[gpu?.vendor] ?? "";
+  return [vendor, gpu?.model].filter(Boolean).join(" ");
+}
+
 export function renderState(snapshot) {
   if (snapshot?.type !== "state" || !Array.isArray(snapshot.services)) {
     return;
@@ -97,6 +102,36 @@ export function renderState(snapshot) {
   document.querySelector("#home-cpu").textContent = `${cores} cores · load ${load.toFixed(2)}`;
   document.querySelector("#home-memory").textContent = `${(used / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} GB`;
   document.querySelector("#home-disk").textContent = `${(diskFree / 1024).toFixed(1)} GB free of ${(diskTotal / 1024).toFixed(1)} GB`;
+  const gpu = snapshot.gpu ?? {};
+  const name = document.querySelector("#gpu-name");
+  const params = document.querySelector("#gpu-params");
+  const caption = document.querySelector("#gpu-caption");
+  const homeGPURow = document.querySelector("#home-gpu-row");
+  if (gpu.present) {
+    const displayName = gpuName(gpu);
+    name.textContent = displayName;
+    name.classList.remove("muted");
+    params.replaceChildren(...(gpu.params ?? []).map((param) => {
+      const row = document.createElement("div");
+      const key = document.createElement("dt");
+      const value = document.createElement("dd");
+      key.textContent = param.key;
+      value.textContent = param.value;
+      row.append(key, value);
+      return row;
+    }));
+    params.hidden = false;
+    caption.hidden = true;
+    document.querySelector("#home-gpu").textContent = displayName;
+    homeGPURow.hidden = false;
+  } else {
+    name.textContent = "none detected";
+    name.classList.add("muted");
+    params.replaceChildren();
+    params.hidden = true;
+    caption.hidden = false;
+    homeGPURow.hidden = true;
+  }
   const loadMeter = document.querySelector("#load");
   loadMeter.value = Math.min(load, Number(loadMeter.max));
   loadMeter.setAttribute("aria-valuenow", String(load));

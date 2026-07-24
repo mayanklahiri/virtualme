@@ -26,7 +26,7 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `.cursor/skills/` | Shared AI operating and development procedures |
 | `specs/` | Numbered, authoritative implementation specs |
 | `docker/` | Container image and supervised services (spec 002) |
-| `controller/` | Go control plane, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, ambient jiggler, local TTS, outbound mail, and multi-page console (specs 002–017) |
+| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, ambient jiggler, local TTS, outbound mail, and multi-page console (specs 002–018) |
 
 ## Commands
 
@@ -69,6 +69,10 @@ fed by LLM, agent-tool, speech, and mail lifecycle events.
 The opt-in jiggler produces bursty humanlike mouse trajectories through
 `xdotool`, yields to queued work and agent actuation, persists its Status-page
 switch in Valkey, and records each completed burst in the activity ledger.
+The controller detects the first visible NVIDIA, AMD, or Intel GPU once at
+startup without affecting health. It includes static GPU identity in state and
+persists utilization/memory metrics when NVIDIA or AMD sysfs sampling is
+available; the console hides the GPU chart for presence-only devices.
 
 ## Skills
 
@@ -99,7 +103,7 @@ switch in Valkey, and records each completed burst in the activity ledger.
 | [015](specs/015-jobs-page.md) | Jobs page: activity ledger and queue peek with details pane |
 | [016](specs/016-chromium-determinism.md) | Chromium determinism flags and single full-screen window |
 | [017](specs/017-jiggler.md) | Jiggler: humanlike OS-level mouse motion with a Status switch |
-| [018](specs/018-gpu-observability.md) | Multi-vendor GPU detection, status widget, and usage series (draft) |
+| [018](specs/018-gpu-observability.md) | Multi-vendor GPU detection, status widget, and usage series |
 | [019](specs/019-chart-overhaul.md) | Chart ticks, titles, lookback control, and uniform series color (draft) |
 | [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, second voice, and audio hygiene (draft) |
 | [021](specs/021-agent-cdp-tools-console.md) | CDP observation tools and the Tools console page (draft) |

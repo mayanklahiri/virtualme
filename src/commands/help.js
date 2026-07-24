@@ -4,7 +4,7 @@ const commands = [
   ["help", "Show this help"],
   ["version", "Print the CLI version"],
   ["doctor", "Check Node, Docker, and checkout setup"],
-  ["start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>]", "Start the container (host uid, data dir mounted rw)"],
+  ["start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>]", "Start the container; GPU passthrough lights up status and usage"],
   ["stop", "Stop and remove the container"],
   ["status", "Show container and service health"],
   ["logs [-f]", "Show or follow container logs"],

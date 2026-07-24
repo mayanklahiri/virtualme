@@ -34,6 +34,9 @@ socket.addEventListener("message", (event) => {
   if (typeof message.jiggler?.enabled !== "boolean") {
     fail("state frame missing jiggler enabled state");
   }
+  if (typeof message.gpu?.present !== "boolean") {
+    fail("state frame missing GPU presence state");
+  }
   clearTimeout(timer);
   console.log("state-probe: OK");
   process.exit(0);

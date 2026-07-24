@@ -73,6 +73,7 @@ requires a new spec.
 |---|---|
 | `controller/cmd/controller` | Route and subsystem wiring |
 | `controller/internal/health` | Concurrent eight-service health probes |
+| `controller/internal/gpu` | Cached NVIDIA/AMD/Intel detection and optional utilization sampling |
 | `controller/internal/procstat` | Per-core CPU and per-service CPU/RSS sampling from `/proc` |
 | `controller/internal/ws` | Minimal server-side RFC 6455, hub, client-frame dispatch |
 | `controller/internal/state` | Two-second live snapshot collector |
@@ -123,6 +124,9 @@ each state snapshot. Jiggler bursts yield to the job manager and the shared
 
 The reusable console switch is `.switch` with a child `.knob`; use this markup
 for boolean controls and render `aria-checked` only from server state.
+GPU detection uses three-second, failure-silent vendor probes and an injectable
+sysfs root (default `/sys`) so AMD/Intel fixtures remain hermetic. The result is
+cached at startup; absence is normal and never affects health.
 
 ## How to add things
 

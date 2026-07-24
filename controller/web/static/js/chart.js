@@ -9,6 +9,8 @@ function metricSample(snapshot) {
     ts: Number(snapshot.ts),
     cores: (snapshot.cores ?? []).map(Number),
     procMemMB: PROCESSES.map((name) => Number(byName.get(name)?.memMB) || 0),
+    gpuUtil: Number(snapshot.system?.gpuUtil) || 0,
+    gpuMemMB: Number(snapshot.system?.gpuMemMB) || 0,
   };
 }
 
@@ -19,6 +21,8 @@ function css(name) {
 export function initCharts(send) {
   const cpuCanvas = document.querySelector("#chart-cpu");
   const memCanvas = document.querySelector("#chart-mem");
+  const gpuCanvas = document.querySelector("#chart-gpu");
+  const gpuFigure = document.querySelector("#gpu-chart");
   const tooltip = document.querySelector("#chart-tooltip");
   const lookbackBox = document.querySelector("#lookback");
   const cpuLegend = document.querySelector("#core-legend");
@@ -28,6 +32,8 @@ export function initCharts(send) {
   let resSec = 2;
   let live = false;
   let hover = -1;
+  let gpuEnabled;
+  let gpuMemTotalMB = 0;
 
   function request() {
     if (live) {
@@ -193,10 +199,42 @@ export function initCharts(send) {
     }
   }
 
+  function drawGPU() {
+    if (!gpuEnabled) return;
+    const { context, width, height } = setup(gpuCanvas);
+    axes(context, width, height, 100, "%");
+    const utilScale = scales(width, height, 100);
+    const memoryMax = Math.max(gpuMemTotalMB, 1, ...samples.map((sample) => sample.gpuMemMB || 0));
+    const memoryScale = scales(width, height, memoryMax);
+    context.fillStyle = css("--p1");
+    for (const part of segments()) {
+      part.forEach((sample, index) => {
+        const bar = barBounds(part, index, utilScale, width);
+        context.fillRect(bar.left, utilScale.y(sample.gpuUtil || 0), bar.width, utilScale.y(0) - utilScale.y(sample.gpuUtil || 0));
+      });
+      context.beginPath();
+      part.forEach((sample, index) => {
+        const x = memoryScale.x(sample.ts);
+        const y = memoryScale.y(sample.gpuMemMB || 0);
+        if (index === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+      });
+      context.strokeStyle = css("--p2");
+      context.lineWidth = 2;
+      context.stroke();
+    }
+    context.fillStyle = css("--muted");
+    context.font = `10px ${css("--font-body")}`;
+    context.textAlign = "right";
+    context.textBaseline = "top";
+    context.fillText(`${Math.round(memoryMax)} MiB`, width - PAD.right, PAD.top);
+  }
+
   function draw() {
     updateLegends();
     drawCPU();
     drawMemory();
+    drawGPU();
   }
 
   function show(canvas, index, clientX, clientY) {
@@ -208,13 +246,15 @@ export function initCharts(send) {
     }
     const values = canvas === cpuCanvas
       ? sample.cores.map((value, i) => `cpu${i}: ${value.toFixed(1)}%`)
-      : sample.procMemMB.map((value, i) => `${PROCESSES[i]}: ${value} MiB`);
+      : canvas === memCanvas
+        ? sample.procMemMB.map((value, i) => `${PROCESSES[i]}: ${value} MiB`)
+        : [`utilization: ${sample.gpuUtil.toFixed(1)}%`, `memory: ${sample.gpuMemMB.toFixed(1)} MiB`];
     tooltip.textContent = [new Date(sample.ts).toLocaleString(), ...values].join("\n");
     tooltip.hidden = false;
     tooltip.style.left = `${Math.min(clientX + 12, innerWidth - tooltip.offsetWidth - 8)}px`;
     tooltip.style.top = `${Math.min(clientY + 12, innerHeight - tooltip.offsetHeight - 8)}px`;
   }
-  for (const canvas of [cpuCanvas, memCanvas]) {
+  for (const canvas of [cpuCanvas, memCanvas, gpuCanvas]) {
     canvas.addEventListener("mousemove", (event) => {
       const rect = canvas.getBoundingClientRect();
       const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left - PAD.left) / Math.max(rect.width - PAD.left - PAD.right, 1)));
@@ -249,11 +289,25 @@ export function initCharts(send) {
       samples = (message.samples ?? []).map((sample) => ({
         ts: Number(sample.ts), cores: (sample.cores ?? []).map(Number),
         procMemMB: (sample.procMemMB ?? []).map(Number),
+        gpuUtil: Number(sample.gpuUtil) || 0,
+        gpuMemMB: Number(sample.gpuMemMB) || 0,
       }));
       draw();
     },
     push(snapshot) {
-      if (!["15m", "1h"].includes(lookback)) return;
+      let configured = false;
+      if (gpuEnabled === undefined) {
+        gpuEnabled = Boolean(snapshot.gpu?.sampler);
+        gpuFigure.hidden = !gpuEnabled;
+        configured = true;
+      }
+      if (gpuEnabled) {
+        gpuMemTotalMB = Number(snapshot.system?.gpuMemTotalMB) || gpuMemTotalMB;
+      }
+      if (!["15m", "1h"].includes(lookback)) {
+        if (configured) draw();
+        return;
+      }
       samples.push(metricSample(snapshot));
       const cutoff = Date.now() - SPANS[lookback];
       while (samples[0]?.ts < cutoff) samples.shift();

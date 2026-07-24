@@ -19,6 +19,8 @@ type Sample struct {
 	Load1      float64   `json:"load1"`
 	MemUsedMB  int       `json:"memUsedMB"`
 	MemTotalMB int       `json:"memTotalMB"`
+	GPUUtil    float64   `json:"gpuUtil,omitempty"`
+	GPUMemMB   float64   `json:"gpuMemMB,omitempty"`
 }
 
 type tierDef struct {
@@ -96,6 +98,8 @@ func mean(samples []Sample) Sample {
 		result.Load1 += sm.Load1
 		result.MemUsedMB += sm.MemUsedMB
 		result.MemTotalMB += sm.MemTotalMB
+		result.GPUUtil += sm.GPUUtil
+		result.GPUMemMB += sm.GPUMemMB
 	}
 	n := float64(len(samples))
 	for i := range result.Cores {
@@ -108,6 +112,8 @@ func mean(samples []Sample) Sample {
 	result.Load1 /= n
 	result.MemUsedMB /= len(samples)
 	result.MemTotalMB /= len(samples)
+	result.GPUUtil /= n
+	result.GPUMemMB /= n
 	return result
 }
 

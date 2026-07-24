@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mayanklahiri/virtualme/controller/internal/gpu"
 	"github.com/mayanklahiri/virtualme/controller/internal/health"
 	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 	"github.com/mayanklahiri/virtualme/controller/internal/metrics"
@@ -20,11 +21,14 @@ import (
 
 // System contains lightweight host resource measurements.
 type System struct {
-	Load1       float64 `json:"load1"`
-	MemUsedMB   int     `json:"memUsedMB"`
-	MemTotalMB  int     `json:"memTotalMB"`
-	DiskFreeMB  int     `json:"diskFreeMB"`
-	DiskTotalMB int     `json:"diskTotalMB"`
+	Load1         float64 `json:"load1"`
+	MemUsedMB     int     `json:"memUsedMB"`
+	MemTotalMB    int     `json:"memTotalMB"`
+	DiskFreeMB    int     `json:"diskFreeMB"`
+	DiskTotalMB   int     `json:"diskTotalMB"`
+	GPUUtil       float64 `json:"gpuUtil,omitempty"`
+	GPUMemMB      float64 `json:"gpuMemMB,omitempty"`
+	GPUMemTotalMB float64 `json:"gpuMemTotalMB,omitempty"`
 }
 
 // Scheduler describes the server-local scheduling clock.
@@ -52,6 +56,7 @@ type Snapshot struct {
 	Cores     []float64        `json:"cores"`
 	Scheduler Scheduler        `json:"scheduler"`
 	Jiggler   Jiggler          `json:"jiggler"`
+	GPU       gpu.Info         `json:"gpu"`
 }
 
 func schedulerState(now time.Time) Scheduler {
@@ -85,6 +90,7 @@ type Collector struct {
 	hostname  string
 	dataDir   string
 	jiggler   func() bool
+	gpu       gpu.Info
 }
 
 // ReadSystem parses Linux procfs load and memory data.
@@ -128,7 +134,7 @@ func ReadDisk(path string) (freeMB, totalMB int) {
 }
 
 // NewCollector creates a two-second state collector sampling procRoot.
-func NewCollector(cfg health.Config, procRoot string, store *metrics.Store, broadcast func([]byte), jiggler ...func() bool) *Collector {
+func NewCollector(cfg health.Config, procRoot string, store *metrics.Store, broadcast func([]byte), gpuInfo gpu.Info, jiggler ...func() bool) *Collector {
 	hostname, _ := os.Hostname()
 	dataDir := os.Getenv("VM_DATA_DIR")
 	if dataDir == "" {
@@ -144,6 +150,7 @@ func NewCollector(cfg health.Config, procRoot string, store *metrics.Store, broa
 		period:    2 * time.Second,
 		hostname:  hostname,
 		dataDir:   dataDir,
+		gpu:       gpuInfo,
 	}
 	if len(jiggler) > 0 {
 		collector.jiggler = jiggler[0]
@@ -166,6 +173,13 @@ func (c *Collector) collect() {
 		readFile(filepath.Join(c.procRoot, "meminfo")),
 	)
 	system.DiskFreeMB, system.DiskTotalMB = ReadDisk(c.dataDir)
+	if c.gpu.Sampler != "" {
+		if usage, ok := gpu.Sample(c.gpu); ok {
+			system.GPUUtil = usage.UtilPct
+			system.GPUMemMB = usage.MemUsedMB
+			system.GPUMemTotalMB = usage.MemTotalMB
+		}
+	}
 	processes := c.sampler.Sample()
 	cores := c.sampler.Cores()
 	now := time.Now()
@@ -180,6 +194,7 @@ func (c *Collector) collect() {
 		Processes: processes,
 		Cores:     cores,
 		Scheduler: schedulerState(now),
+		GPU:       c.gpu,
 	}
 	if c.jiggler != nil {
 		snapshot.Jiggler.Enabled = c.jiggler()
@@ -196,6 +211,7 @@ func (c *Collector) collect() {
 		c.store.Add(metrics.Sample{
 			Ts: snapshot.Ts, Cores: cores, ProcMemMB: procMem,
 			Load1: system.Load1, MemUsedMB: system.MemUsedMB, MemTotalMB: system.MemTotalMB,
+			GPUUtil: system.GPUUtil, GPUMemMB: system.GPUMemMB,
 		})
 	}
 	c.broadcast(payload)

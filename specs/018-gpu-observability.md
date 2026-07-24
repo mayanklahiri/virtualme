@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/019-chart-overhaul.md` (chart component: titles, ticks, lookback — **execute 019 first** despite the lower number here), `specs/005-console-ui.md` (status widgets), `specs/007-persistence-locality.md` (metrics tiers) |
 | Produces | Multi-vendor best-effort GPU detection (`controller/internal/gpu`); a Status-page GPU widget (presence, vendor, model, extractable params); a Home-page GPU line when present; a GPU utilization time-series chart when utilization is samplable; metrics-tier extension |
 | Followed by | Future specs (GPU llama build remains out of scope, per spec 008) |
@@ -80,8 +80,24 @@ Hermetic tests: fake `Runner` for the CLI probes; `t.TempDir()`-rooted fake sysf
 
 ## 7. Acceptance checklist
 
-- [ ] `npm run check` green; zero new deps.
-- [ ] On a host without GPUs: widget renders `none detected`, no GPU chart, snapshots carry `gpu.present:false`, nothing logs errors.
+- [x] `npm run check` green; zero new deps.
+- [x] On a host without GPUs: widget renders `none detected`, no GPU chart, snapshots carry `gpu.present:false`, nothing logs errors.
 - [ ] On an NVIDIA host with `--gpus all`: widget shows model/VRAM/driver; GPU chart draws with 019 ticks/titles/lookbacks; utilization responds to load (`docker exec … llama-bench` or any GPU burn).
-- [ ] AMD sysfs fake tests prove presence + busy-percent sampling without rocm-smi.
-- [ ] Old persisted metrics tiers load cleanly after the schema extension.
+- [x] AMD sysfs fake tests prove presence + busy-percent sampling without rocm-smi.
+- [x] Old persisted metrics tiers load cleanly after the schema extension.
+
+## Amendments
+
+### 2026-07-23 — Direct execution before spec 019
+
+At operator direction, spec 018 was executed directly after spec 017 without
+executing the later-numbered spec 019. The GPU chart uses the existing shared
+lookback state and chart primitives, with the required title, utilization
+bars, memory overlay, dual scale, theme tokens, and first-state visibility.
+Spec 019 remains draft and will later refactor all three charts and add its
+boundary-aligned x-axis ticks; none of its broader CPU/memory chart overhaul
+was implemented here.
+
+The NVIDIA-host acceptance item remains unchecked because this execution
+environment has no passed-through GPU. `E2E_GPU=1 bash test/e2e.sh` starts with
+`--gpus all` and performs that hardware-gated assertion.

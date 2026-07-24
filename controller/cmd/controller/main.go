@@ -24,6 +24,7 @@ import (
 	assets "github.com/mayanklahiri/virtualme/controller"
 	"github.com/mayanklahiri/virtualme/controller/internal/agent"
 	"github.com/mayanklahiri/virtualme/controller/internal/chat"
+	"github.com/mayanklahiri/virtualme/controller/internal/gpu"
 	"github.com/mayanklahiri/virtualme/controller/internal/health"
 	"github.com/mayanklahiri/virtualme/controller/internal/jiggler"
 	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
@@ -403,7 +404,8 @@ func main() {
 	jigglerService.SetDisplay(envOr("VM_DISPLAY", ":99"))
 	jigglerService.SetJobManager(jobManager)
 	jigglerService.SetActivity(activity)
-	collector := state.NewCollector(cfg, "/proc", metricsStore, hub.Broadcast, jigglerService.Enabled)
+	gpuInfo := gpu.Detect()
+	collector := state.NewCollector(cfg, "/proc", metricsStore, hub.Broadcast, gpuInfo, jigglerService.Enabled)
 	projectService := projects.New(
 		valkey.New(cfg.ValkeyAddr), jobManager, chatService, dataDir, hub.Broadcast,
 	)
