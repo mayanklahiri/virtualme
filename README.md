@@ -192,6 +192,19 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [010](specs/010-outbound-mail.md) | Outbound dma queue, MIME/DKIM, and Mail console |
 | [011](specs/011-ui-refresh.md) | Console brand, collapsed theme picker, eight themes, and live-capacity home page |
 | [012](specs/012-agent-observation-soak.md) | Dense DOM observations, settled navigation, desktop coverage, Playwright-layer removal, and the live soak suite |
+| [013](specs/013-job-queue-scheduler.md) | Valkey job queue, time-bucket scheduler, and initiator-bound cancellation (draft) |
+| [014](specs/014-projects.md) | Projects: periodic natural-language tasks with schedules and scratch dirs (draft) |
+| [015](specs/015-jobs-page.md) | Jobs page: activity ledger and queue peek with details pane (draft) |
+| [016](specs/016-chromium-determinism.md) | Chromium determinism flags and single full-screen window (draft) |
+| [017](specs/017-jiggler.md) | Jiggler: humanlike OS-level mouse motion with a Status switch (draft) |
+| [018](specs/018-gpu-observability.md) | Multi-vendor GPU detection, status widget, and usage series (draft) |
+| [019](specs/019-chart-overhaul.md) | Chart ticks, titles, lookback control, and uniform series color (draft) |
+| [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, second voice, and audio hygiene (draft) |
+| [021](specs/021-agent-cdp-tools-console.md) | CDP observation tools and the Tools console page (draft) |
+| [022](specs/022-system-prompt.md) | On-disk embedded system prompts, SLM-optimized rewrite (draft) |
+| [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing (draft) |
+| [024](specs/024-brand-chrome-polish.md) | Brand wordmark, wristwatch live indicator, and console polish (draft) |
+| [025](specs/025-release-presentation.md) | Marvin release notes, registry metadata, and the /do-release skill (draft) |
 
 ### CI/CD
 
