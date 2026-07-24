@@ -25,7 +25,8 @@ prompts or model requests are sent to external providers.
 | `npx virtualme build` | Build `:dev` and the configured start tag from a source checkout |
 | `npx virtualme keygen` | Print a 256-bit base64url token |
 
-Env overrides: `VIRTUALME_IMAGE`, `VIRTUALME_TAG`, `VIRTUALME_DATA`. The CLI
+Env overrides: `VIRTUALME_IMAGE`, `VIRTUALME_TAG`, `VIRTUALME_DATA`, and `TZ`
+(forwarded to the container; otherwise the detected host timezone is used). The CLI
 also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 `VM_MAIL_SMARTHOST`, `VM_MAIL_SMARTHOST_PORT`, `VM_MAIL_SMARTHOST_USER`,
 `VM_MAIL_SMARTHOST_PASS`, `VM_MAIL_DKIM_DOMAIN`, and
@@ -34,14 +35,14 @@ also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 ## Endpoints (container running)
 
 - `http://localhost:8080/` — console home
-- `http://localhost:8080/status` — service status and tiered metrics
+- `http://localhost:8080/status` — service status, active time selectors, and tiered metrics
 - `http://localhost:8080/chat` — shared local-model chat
 - `http://localhost:8080/speech` — streaming local text-to-speech
 - `http://localhost:8080/mail` — outbound-mail composer, queue, and DKIM status
 - `http://localhost:8080/desktop-view` — embedded noVNC desktop
 - `http://localhost:8080/healthz` — aggregate JSON health
 - `http://localhost:8080/v1/audio/speech` — OpenAI-compatible local speech API
-- `ws://localhost:8080/ws` — live state, metrics, chat, agent, TTS, and mail frames
+- `ws://localhost:8080/ws` — live state, metrics, queue, chat, agent, TTS, and mail frames
 - `http://localhost:8080/desktop/` — proxied noVNC and websockify
 
 The desktop UI opens `/desktop/vnc.html` with autoconnect, scaling, and the
@@ -61,6 +62,11 @@ the page title.” The agent observes screenshots, rendered DOM, and read-only
 CDP state; all browser actions use `xdotool` mouse/keyboard input on `:99`.
 The chat timeline shows each tool step. Use the Stop button to cancel an
 in-flight model request, shell command, or runaway task.
+
+Chat and agent work runs sequentially through the reliable Valkey queue;
+additional messages wait instead of returning a busy error. Closing the browser
+tab that initiated a queued or running request drops its queued jobs and
+immediately cancels its active generation.
 
 Full screenshots and `steps.jsonl` (tool arguments, summaries, and capped
 observation text) are retained under `~/.virtualme/agent/<taskId>/` for the
@@ -108,3 +114,4 @@ private key mode at 0600.
 11. Agent artifacts: inspect `~/.virtualme/agent/<taskId>/steps.jsonl` and `step-*.jpg`; Stop cancels the current task.
 12. Speech: check the `tts` entry in `/healthz`; `ttsd` listens only on container loopback port 8082.
 13. Mail not arriving: check the `mail` health entry, last result, and queue; confirm relay credentials/port or direct-path outbound port 25, publish the displayed DKIM TXT record and SPF, and verify sending-IP PTR/reputation. Residential/dynamic IPs should use a smarthost.
+14. Job queue: `queue-peek` on `/ws` returns upcoming, running, and finished jobs; durable queue keys are in the Valkey AOF under `~/.virtualme/valkey/`.

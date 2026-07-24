@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/mayanklahiri/virtualme/controller/internal/agent"
+	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
+	"github.com/mayanklahiri/virtualme/controller/internal/valkey"
 	"github.com/mayanklahiri/virtualme/controller/internal/ws"
 )
 
@@ -22,6 +24,29 @@ type respServer struct {
 	addr     string
 	commands chan []string
 	close    func()
+}
+
+func readRESPCommand(reader *bufio.Reader) ([]string, error) {
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+	var count int
+	if _, err := fmt.Sscanf(line, "*%d\r\n", &count); err != nil {
+		return nil, err
+	}
+	result := make([]string, count)
+	for index := range result {
+		if _, err := reader.ReadString('\n'); err != nil {
+			return nil, err
+		}
+		lengthLine, err := reader.ReadString('\n')
+		if err != nil {
+			return nil, err
+		}
+		result[index] = strings.TrimSuffix(lengthLine, "\r\n")
+	}
+	return result, nil
 }
 
 func newRESPServer(t *testing.T) *respServer {
@@ -40,12 +65,7 @@ func newRESPServer(t *testing.T) *respServer {
 				close(done)
 				return
 			}
-			reply, parseErr := parseReply(bufio.NewReader(conn))
-			items, _ := reply.([]any)
-			args := make([]string, 0, len(items))
-			for _, item := range items {
-				args = append(args, fmt.Sprint(item))
-			}
+			args, parseErr := readRESPCommand(bufio.NewReader(conn))
 			commands <- args
 			switch {
 			case parseErr != nil:
@@ -61,8 +81,10 @@ func newRESPServer(t *testing.T) *respServer {
 					len(fmt.Sprint(stats["promptTokens"])), stats["promptTokens"],
 					len(fmt.Sprint(stats["completionTokens"])), stats["completionTokens"],
 					len(fmt.Sprint(stats["genMs"])), stats["genMs"])
-			case args[0] == "LTRIM" || args[0] == "DEL":
+			case args[0] == "LTRIM":
 				_, _ = io.WriteString(conn, "+OK\r\n")
+			case args[0] == "DEL":
+				_, _ = io.WriteString(conn, ":2\r\n")
 			default:
 				_, _ = io.WriteString(conn, ":1\r\n")
 			}
@@ -175,9 +197,6 @@ func TestStreamingRoundTrip(t *testing.T) {
 	if len(service.history) != 2 || service.history[0].Role != "user" || service.history[1].Role != "assistant" {
 		t.Fatalf("history = %+v, want [user, assistant]", service.history)
 	}
-	if service.busy {
-		t.Fatal("busy flag not cleared")
-	}
 }
 
 type noToolExecutor struct{}
@@ -267,31 +286,63 @@ func TestInvalidInputPerConnectionError(t *testing.T) {
 	}
 }
 
-func TestBusyRejectsSecondChat(t *testing.T) {
+func TestSecondChatIsAcceptedWithoutBusyError(t *testing.T) {
 	hold := make(chan struct{})
 	llama := sseServer(t, []string{"ok"}, hold)
 	events := make(chan []byte, 64)
 	service := New("127.0.0.1:1", llama.URL, func(p []byte) { events <- p })
 
-	hub := ws.NewHub()
-	hub.SetHandler(service.HandleClientMessage)
-	server := httptest.NewServer(http.HandlerFunc(hub.HandleUpgrade))
-	defer server.Close()
-	conn, reader := dialWS(t, server.URL)
-	defer conn.Close()
-
 	service.HandleClientMessage(nil, []byte(`{"type":"chat","text":"first"}`))
 	waitEvent(t, events, "chat-message")
-
-	writeMaskedText(t, conn, `{"type":"chat","text":"second"}`)
-	payload := readTextFrame(t, reader)
-	if eventType(payload) != "chat-error" || !strings.Contains(string(payload), "busy") {
-		t.Fatalf("second chat produced %s, want busy chat-error", payload)
-	}
+	service.HandleClientMessage(nil, []byte(`{"type":"chat","text":"second"}`))
+	waitEvent(t, events, "chat-message")
 
 	close(hold)
-	waitEvent(t, events, "chat-delta")
-	waitEvent(t, events, "chat-done")
+	deltas, dones := 0, 0
+	for dones < 2 {
+		payload := <-events
+		switch eventType(payload) {
+		case "chat-delta":
+			deltas++
+		case "chat-done":
+			dones++
+		}
+	}
+	if deltas != 2 {
+		t.Fatalf("got %d deltas, want 2", deltas)
+	}
+}
+
+func TestChatEnqueuesWithInitiatorAndQueuedFeedback(t *testing.T) {
+	server := newRESPServer(t)
+	events := make(chan []byte, 8)
+	service := New(server.addr, "http://127.0.0.1:1", func(payload []byte) { events <- payload })
+	manager := jobs.New(valkey.New(server.addr), nil)
+	service.SetJobManager(manager)
+	conn := &ws.Conn{}
+	service.HandleClientMessage(conn, []byte(`{"type":"chat","text":"queued"}`))
+	waitEvent(t, events, "chat-message")
+	status := waitEvent(t, events, "llm-status")
+	if !strings.Contains(string(status), `"phase":"queued"`) || !strings.Contains(string(status), `"queued behind 2 jobs"`) {
+		t.Fatalf("status = %s", status)
+	}
+	var pushed []string
+	for range 5 {
+		command := <-server.commands
+		if command[0] == "RPUSH" && command[1] == "virtualme:jobs:ready:interactive" {
+			pushed = command
+		}
+	}
+	if len(pushed) != 3 || pushed[1] != "virtualme:jobs:ready:interactive" {
+		t.Fatalf("RPUSH = %v", pushed)
+	}
+	var env jobs.Envelope
+	if err := json.Unmarshal([]byte(pushed[2]), &env); err != nil {
+		t.Fatal(err)
+	}
+	if env.Type != "chat" || env.VisibilityTimeoutSec != 900 || !strings.Contains(string(env.Payload), `"text":"queued"`) {
+		t.Fatalf("envelope = %+v", env)
+	}
 }
 
 func TestLoadHistoryRetriesUntilValkeyResponds(t *testing.T) {
@@ -342,7 +393,7 @@ func TestLoadHistoryRetriesUntilValkeyResponds(t *testing.T) {
 	}
 }
 
-func TestLlamaHTTPErrorBroadcastsAndClearsBusy(t *testing.T) {
+func TestLlamaHTTPErrorBroadcastsAndFinishes(t *testing.T) {
 	llama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
@@ -357,13 +408,13 @@ func TestLlamaHTTPErrorBroadcastsAndClearsBusy(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		service.mu.Lock()
-		busy := service.busy
+		running := service.fallbackCancel != nil
 		service.mu.Unlock()
-		if !busy {
+		if !running {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("busy flag never cleared after llama error")
+			t.Fatal("fallback generation never finished after llama error")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -408,8 +459,8 @@ func TestStopPersistsPartialAndClearsBusy(t *testing.T) {
 	}
 	service.mu.Lock()
 	defer service.mu.Unlock()
-	if service.busy || len(service.history) != 2 || service.history[1].Text != "partial" {
-		t.Fatalf("state busy=%v history=%+v", service.busy, service.history)
+	if len(service.history) != 2 || service.history[1].Text != "partial" {
+		t.Fatalf("history=%+v", service.history)
 	}
 }
 

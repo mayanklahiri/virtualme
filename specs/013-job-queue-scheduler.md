@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft |
+| Status | Executed (2026-07-23) |
 | Depends on | `specs/003-controller.md` (WS hub, chat service), `specs/007-persistence-locality.md` (persistence map, locality gate), `specs/012-agent-observation-soak.md` (soak runner) |
 | Produces | A reliable Valkey-backed job queue (`controller/internal/jobs`) with visibility timeout, retries, and a dead-letter list; a sequential time-bucket scheduler using the server locale; ALL LLM work (interactive chat included) routed through the queue with parallelism 1; immediate cancellation when the initiating WebSocket client disconnects; a Status-page "Active time selectors" widget; WS producer/inspection messages (`job-push`, `queue-peek`, broadcast `queue-state`); host timezone passthrough in the CLI + tzdata layer |
 | Followed by | `specs/014-projects.md`, `specs/015-jobs-page.md`, `specs/021-agent-cdp-tools-console.md` |

@@ -54,6 +54,7 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
   mkdirSync(dataDir, { recursive: true });
   const uid = process.getuid?.() ?? 1000;
   const gid = process.getgid?.() ?? 1000;
+  const timezone = process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const dockerArgs = [
     "run", "-d", "--name", CONTAINER, "--restart", "unless-stopped",
     "--shm-size=1g",
@@ -62,6 +63,7 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
     "--tmpfs", "/tmp:mode=1777",
     "-p", `${PORT}:${PORT}`,
     "-v", `${dataDir}:${DATA_MOUNT}`,
+    "-e", `TZ=${timezone}`,
   ];
   if (flags["no-browser-sandbox"]) {
     dockerArgs.push("-e", "VM_CHROMIUM_NO_SANDBOX=1");

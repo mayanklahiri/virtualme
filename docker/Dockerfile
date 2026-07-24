@@ -53,6 +53,8 @@ COPY docker/layers/014-tts-model.sh /tmp/layers/014-tts-model.sh
 RUN bash /tmp/layers/014-tts-model.sh
 COPY docker/layers/015-mta.sh /tmp/layers/015-mta.sh
 RUN bash /tmp/layers/015-mta.sh
+COPY docker/layers/016-tzdata.sh /tmp/layers/016-tzdata.sh
+RUN bash /tmp/layers/016-tzdata.sh
 
 # Fast-moving top: service tree + controller binary.
 COPY docker/rootfs/ /

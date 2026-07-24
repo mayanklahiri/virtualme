@@ -78,9 +78,31 @@ test("start runs as the host user with the data dir mounted", () => {
       "--tmpfs", "/tmp:mode=1777",
       "-p", "8080:8080",
       "-v", `${dataDir}:/home/virtualme/.virtualme`,
+      "-e", `TZ=${process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"}`,
       "mayanklahiri/virtualme:latest",
     ]);
   } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+test("start forwards the host timezone", () => {
+  const parent = mkdtempSync(join(tmpdir(), "virtualme-test-"));
+  const previous = process.env.TZ;
+  process.env.TZ = "Australia/Sydney";
+  try {
+    /** @type {string[] | undefined} */
+    let invocation;
+    const probes = { haveDocker: () => true, daemonUp: () => true, containerState: () => "absent" };
+    assert.equal(start(["--data", join(parent, "data")], (args) => {
+      invocation = args;
+      return 0;
+    }, probes), 0);
+    assert.ok(invocation);
+    assert.ok(invocation.includes("TZ=Australia/Sydney"));
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
     rmSync(parent, { recursive: true, force: true });
   }
 });

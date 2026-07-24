@@ -27,6 +27,10 @@ socket.addEventListener("message", (event) => {
   if (!Number.isFinite(message.system?.diskTotalMB) || message.system.diskTotalMB <= 0) {
     fail("state frame missing diskTotalMB");
   }
+  if (!Date.parse(message.scheduler?.localTime) || typeof message.scheduler?.tz !== "string" ||
+      !Array.isArray(message.scheduler?.active) || message.scheduler.active.length < 5) {
+    fail("state frame missing scheduler selectors");
+  }
   clearTimeout(timer);
   console.log("state-probe: OK");
   process.exit(0);

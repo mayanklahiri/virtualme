@@ -24,10 +24,12 @@ import (
 	"github.com/mayanklahiri/virtualme/controller/internal/agent"
 	"github.com/mayanklahiri/virtualme/controller/internal/chat"
 	"github.com/mayanklahiri/virtualme/controller/internal/health"
+	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 	"github.com/mayanklahiri/virtualme/controller/internal/mail"
 	"github.com/mayanklahiri/virtualme/controller/internal/metrics"
 	"github.com/mayanklahiri/virtualme/controller/internal/state"
 	"github.com/mayanklahiri/virtualme/controller/internal/tts"
+	"github.com/mayanklahiri/virtualme/controller/internal/valkey"
 	"github.com/mayanklahiri/virtualme/controller/internal/ws"
 )
 
@@ -339,6 +341,23 @@ func main() {
 			TTS:           ttsClient,
 		},
 	)
+	jobManager := jobs.New(valkey.New(cfg.ValkeyAddr), hub.Broadcast)
+	chatService.SetJobManager(jobManager)
+	jobManager.Register("chat", chatService.Execute)
+	jobManager.Register("soak-probe", func(ctx context.Context, env jobs.Envelope) (string, error) {
+		var payload struct {
+			Echo string `json:"echo"`
+		}
+		if err := json.Unmarshal(env.Payload, &payload); err != nil {
+			return "", err
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(time.Second):
+			return payload.Echo, nil
+		}
+	})
 	go chatService.LoadHistory()
 	hub.SetHandler(func(conn *ws.Conn, payload []byte) {
 		var request struct {
@@ -366,15 +385,23 @@ func main() {
 		if mailService.Handle(payload, conn.WriteText) {
 			return
 		}
+		if jobManager.HandleMessage(conn, payload) {
+			return
+		}
 		chatService.HandleClientMessage(conn, payload)
 	})
 	hub.SetOnConnect(func(conn *ws.Conn) {
 		_ = conn.WriteText(chatService.HistoryMessage())
 		_ = conn.WriteText(chatService.StatsMessage())
 		_ = conn.WriteText(mailService.StatusMessage())
+		_ = conn.WriteText(jobManager.StateMessage())
 	})
+	hub.SetOnDisconnect(jobManager.DropInitiator)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if err := jobManager.Start(ctx); err != nil {
+		log.Fatal("jobs: startup failed:", err)
+	}
 	go collector.Run(ctx)
 	persistDone := make(chan struct{})
 	go func() {
@@ -386,8 +413,9 @@ func main() {
 		addr = ":8080"
 	}
 	log.Println("health: eight concurrent probes configured")
-	log.Println("websocket: state hub ready (chat + metrics + tts + mail wired)")
-	log.Println("chat: llama-backed shared conversation ready")
+	log.Println("websocket: state hub ready (chat + metrics + tts + mail + jobs wired)")
+	log.Println("chat: queued llama-backed shared conversation ready")
+	log.Println("jobs: sequential worker and scheduler ready")
 	log.Println("agent: OS-level browser-control loop ready")
 	log.Println("state: collector started (2s, tiered metrics)")
 	log.Println("desktop: proxying", desktopURL)

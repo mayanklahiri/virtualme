@@ -49,6 +49,7 @@ the runner is feature-agnostic).
 | `013-sherpa-onnx.sh` | sherpa-onnx `v1.13.4` offline TTS runtime |
 | `014-tts-model.sh` | Pinned Piper `en_US-lessac-medium` voice |
 | `015-mta.sh` | Debian dma outbound MTA |
+| `016-tzdata.sh` | Host-local timezone data for scheduler wall clocks |
 
 The s6 tree defines `svc-xvfb`, `svc-openbox`, `svc-x11vnc`, `svc-novnc`,
 `svc-valkey`, `svc-llama`, `svc-chromium`, `svc-chromium-watchdog`,
@@ -67,6 +68,8 @@ profile time to flush before watchdog or container restarts.
 | `controller/internal/state` | Two-second live snapshot collector |
 | `controller/internal/metrics` | Persistent four-tier metrics aggregation and querying |
 | `controller/internal/chat` | Shared streaming chat, controls, stats, and LLM status |
+| `controller/internal/valkey` | Shared dependency-free RESP2 client |
+| `controller/internal/jobs` | Reliable priority queue, sequential worker, scheduler, and cancellation |
 | `controller/internal/agent` | Tool-call loop, read-only CDP/DOM observations, OS-level actions, bash, and artifacts |
 | `controller/cmd/ttsd`, `controller/internal/tts` | Serialized sherpa subprocess synthesis, WAV parsing, NDJSON client, and streaming helpers |
 | `controller/internal/mail` | Stdlib MIME/CID composition, DKIM signing, dma submission, and spool status |
@@ -88,6 +91,9 @@ tool audio with `origin:"chat"`.
 It maps `mail-send`/`mail-status-req` requests to `mail-result`/`mail-status`
 frames. Persistent dma configuration, queue files, and the DKIM key live under
 `$VM_DATA_DIR/mail/`; `svc-mailq` retries deferred messages.
+It maps `job-push`/`queue-peek` to `job-pushed`/`queue-state`; all LLM work
+runs through the single `internal/jobs` worker, and disconnecting an initiating
+websocket cancels that connection's work.
 
 ## How to add things
 
@@ -101,6 +107,10 @@ frames. Persistent dma configuration, queue files, and the DKIM key live under
   `Runner`, and add hermetic tests. Browser action tools must use `xdotool`
   OS input; CDP is observation-only and must never call `Input.*`,
   `Page.navigate`, or another state-changing method.
+- **Job type**: register an `internal/jobs` executor in controller `main.go`;
+  use an interactive envelope for client work or a `RegisterSource` provider
+  for scheduled work, and cover retries/cancellation with the hermetic RESP
+  fixture.
 - **Docker layer**: new `docker/layers/NNN-<slug>.sh` with the next number;
   `set -euo pipefail`; pin URLs+sha256; add a `COPY`+`RUN` pair at the END of
   the layer sequence in `docker/Dockerfile`. Never edit old layers without a

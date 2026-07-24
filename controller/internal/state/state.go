@@ -4,6 +4,7 @@ package state
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mayanklahiri/virtualme/controller/internal/health"
+	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 	"github.com/mayanklahiri/virtualme/controller/internal/metrics"
 	"github.com/mayanklahiri/virtualme/controller/internal/procstat"
 )
@@ -25,6 +27,13 @@ type System struct {
 	DiskTotalMB int     `json:"diskTotalMB"`
 }
 
+// Scheduler describes the server-local scheduling clock.
+type Scheduler struct {
+	LocalTime string   `json:"localTime"`
+	TZ        string   `json:"tz"`
+	Active    []string `json:"active"`
+}
+
 // Snapshot is the websocket state message consumed by the SPA.
 type Snapshot struct {
 	Type      string           `json:"type"`
@@ -36,6 +45,26 @@ type Snapshot struct {
 	System    System           `json:"system"`
 	Processes []procstat.Proc  `json:"processes"`
 	Cores     []float64        `json:"cores"`
+	Scheduler Scheduler        `json:"scheduler"`
+}
+
+func schedulerState(now time.Time) Scheduler {
+	zone := os.Getenv("TZ")
+	if zone == "" {
+		zone = now.Location().String()
+	}
+	if zone == "" || zone == "Local" {
+		_, offset := now.Zone()
+		sign := "+"
+		if offset < 0 {
+			sign = "-"
+			offset = -offset
+		}
+		zone = "UTC" + sign + fmt.Sprintf("%02d:%02d", offset/3600, offset%3600/60)
+	}
+	return Scheduler{
+		LocalTime: now.Format(time.RFC3339), TZ: zone, Active: jobs.ActiveBuckets(now),
+	}
 }
 
 // Collector periodically gathers, records, and broadcasts snapshots.
@@ -128,9 +157,10 @@ func (c *Collector) collect() {
 	system.DiskFreeMB, system.DiskTotalMB = ReadDisk(c.dataDir)
 	processes := c.sampler.Sample()
 	cores := c.sampler.Cores()
+	now := time.Now()
 	snapshot := Snapshot{
 		Type:      "state",
-		Ts:        time.Now().UnixMilli(),
+		Ts:        now.UnixMilli(),
 		UptimeSec: int64(time.Since(c.started) / time.Second),
 		Hostname:  c.hostname,
 		OK:        report.OK,
@@ -138,6 +168,7 @@ func (c *Collector) collect() {
 		System:    system,
 		Processes: processes,
 		Cores:     cores,
+		Scheduler: schedulerState(now),
 	}
 	payload, err := json.Marshal(snapshot)
 	if err != nil {

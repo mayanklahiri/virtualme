@@ -7,14 +7,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/mayanklahiri/virtualme/controller/internal/agent"
+	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
+	"github.com/mayanklahiri/virtualme/controller/internal/valkey"
 	"github.com/mayanklahiri/virtualme/controller/internal/ws"
 )
 
@@ -37,18 +41,18 @@ type Message struct {
 
 // Service owns the shared conversation state.
 type Service struct {
-	valkey     *valkeyClient
+	valkey     *valkey.Client
 	llamaURL   string
 	slotsURL   string
 	broadcast  func([]byte)
 	client     *http.Client
 	retryDelay time.Duration
 	agent      *agent.Agent
+	jobs       *jobs.Manager
 
-	mu      sync.Mutex
-	history []Message
-	busy    bool
-	cancel  context.CancelFunc
+	mu             sync.Mutex
+	history        []Message
+	fallbackCancel context.CancelFunc
 }
 
 // Stats contains persisted conversation totals.
@@ -68,13 +72,18 @@ func New(valkeyAddr, llamaURL string, broadcast func([]byte)) *Service {
 		slotsURL = parsed.String()
 	}
 	return &Service{
-		valkey:     newValkeyClient(valkeyAddr),
+		valkey:     valkey.New(valkeyAddr),
 		llamaURL:   llamaURL,
 		slotsURL:   slotsURL,
 		broadcast:  broadcast,
 		client:     &http.Client{Timeout: 120 * time.Second},
 		retryDelay: 2 * time.Second,
 	}
+}
+
+// SetJobManager routes interactive generation through manager.
+func (s *Service) SetJobManager(manager *jobs.Manager) {
+	s.jobs = manager
 }
 
 // NewWithAgent creates the production chat service with browser-agent routing.
@@ -115,7 +124,7 @@ func boundedHistory(history []Message) []Message {
 // Run it in a goroutine; a permanently-down Valkey only costs a warning log.
 func (s *Service) LoadHistory() {
 	for attempt := 0; ; attempt++ {
-		entries, err := s.valkey.lrange(historyKey, 0, -1)
+		entries, err := s.valkey.LRange(historyKey, 0, -1)
 		if err == nil {
 			s.adoptHistory(entries)
 			return
@@ -159,14 +168,19 @@ func (s *Service) HistoryMessage() []byte {
 }
 
 func (s *Service) readStats() Stats {
-	values, err := s.valkey.hgetall(statsKey)
+	values, err := s.valkey.HGetAll(statsKey)
 	if err != nil {
 		return Stats{}
 	}
 	return Stats{
-		Queries: values["queries"], PromptTokens: values["promptTokens"],
-		CompletionTokens: values["completionTokens"], GenMS: values["genMs"],
+		Queries: parseStat(values["queries"]), PromptTokens: parseStat(values["promptTokens"]),
+		CompletionTokens: parseStat(values["completionTokens"]), GenMS: parseStat(values["genMs"]),
 	}
+}
+
+func parseStat(value string) int64 {
+	number, _ := strconv.ParseInt(value, 10, 64)
+	return number
 }
 
 // StatsMessage returns current totals, or zeros while Valkey is unavailable.
@@ -188,11 +202,11 @@ func (s *Service) append(message Message) {
 	s.mu.Unlock()
 
 	encoded, _ := json.Marshal(message)
-	if err := s.valkey.rpush(historyKey, string(encoded)); err != nil {
+	if _, err := s.valkey.RPush(historyKey, string(encoded)); err != nil {
 		log.Println("chat: persist failed:", err)
 		return
 	}
-	if err := s.valkey.ltrim(historyKey, -historyCap, -1); err != nil {
+	if err := s.valkey.LTrim(historyKey, -historyCap, -1); err != nil {
 		log.Println("chat: trim failed:", err)
 	}
 }
@@ -226,11 +240,20 @@ func (s *Service) HandleClientMessage(c *ws.Conn, payload []byte) {
 		return
 	}
 	if request.Type == "chat-stop" {
-		s.mu.Lock()
-		cancel := s.cancel
-		s.mu.Unlock()
-		if cancel != nil {
-			cancel()
+		if s.jobs != nil {
+			connID := ""
+			if c != nil {
+				connID = c.ID()
+			}
+			s.jobs.CancelRunningType("chat", "stopped")
+			s.jobs.DropQueued(connID, "chat")
+		} else {
+			s.mu.Lock()
+			cancel := s.fallbackCancel
+			s.mu.Unlock()
+			if cancel != nil {
+				cancel()
+			}
 		}
 		return
 	}
@@ -248,35 +271,57 @@ func (s *Service) HandleClientMessage(c *ws.Conn, payload []byte) {
 		return
 	}
 
-	s.mu.Lock()
-	if s.busy {
-		s.mu.Unlock()
-		writeError(c, "busy: a reply is already streaming")
-		return
-	}
-	s.busy = true
-	s.mu.Unlock()
-
 	userMessage := Message{Role: "user", Text: text, Ts: time.Now().UnixMilli()}
 	s.append(userMessage)
 	s.broadcast(marshalEvent(struct {
 		Type string `json:"type"`
 		Message
 	}{Type: "chat-message", Message: userMessage}))
+	payloadBody, _ := json.Marshal(map[string]string{"text": text})
 
-	go s.generate()
+	if s.jobs == nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		s.mu.Lock()
+		s.fallbackCancel = cancel
+		s.mu.Unlock()
+		go func() {
+			_, _ = s.generate(ctx, jobs.Envelope{
+				Payload:    payloadBody,
+				EnqueuedTs: userMessage.Ts,
+			})
+			s.mu.Lock()
+			s.fallbackCancel = nil
+			s.mu.Unlock()
+			cancel()
+		}()
+		return
+	}
+	connID := ""
+	if c != nil {
+		connID = c.ID()
+	}
+	ahead, err := s.jobs.Enqueue(jobs.Envelope{
+		Type: "chat", Payload: payloadBody, Priority: "interactive",
+		EnqueuedTs: userMessage.Ts, InitiatorConn: connID, VisibilityTimeoutSec: 900,
+	})
+	if err != nil {
+		writeError(c, "job enqueue failed: "+err.Error())
+		return
+	}
+	if ahead > 0 {
+		s.broadcast(marshalEvent(struct {
+			Type   string `json:"type"`
+			Phase  string `json:"phase"`
+			Detail string `json:"detail"`
+		}{Type: "llm-status", Phase: "queued", Detail: fmt.Sprintf("queued behind %d jobs", ahead)}))
+	}
 }
 
 func (s *Service) clear(c *ws.Conn) {
 	s.mu.Lock()
-	if s.busy {
-		s.mu.Unlock()
-		writeError(c, "busy: stop generation first")
-		return
-	}
 	s.history = nil
 	s.mu.Unlock()
-	if err := s.valkey.del(historyKey, statsKey); err != nil {
+	if _, err := s.valkey.Del(historyKey, statsKey); err != nil {
 		log.Println("chat: clear persist failed:", err)
 	}
 	s.broadcast(marshalEvent(struct {
@@ -289,18 +334,20 @@ func (s *Service) clear(c *ws.Conn) {
 	}{Type: "chat-stats", Stats: Stats{}}))
 }
 
-func (s *Service) clearBusy() {
-	s.mu.Lock()
-	s.busy = false
-	s.cancel = nil
-	s.mu.Unlock()
-}
-
 // contextMessages returns the OpenAI-style message list for the completion.
-func (s *Service) contextMessages() []map[string]string {
+func (s *Service) contextMessages(throughTs int64) []map[string]string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	recent := boundedHistory(s.history)
+	end := len(s.history)
+	if throughTs > 0 {
+		for index, message := range s.history {
+			if message.Role == "user" && message.Ts == throughTs {
+				end = index + 1
+				break
+			}
+		}
+	}
+	recent := boundedHistory(s.history[:end])
 	messages := make([]map[string]string, 0, len(recent)+1)
 	messages = append(messages, map[string]string{"role": "system", "content": systemPrompt})
 	for _, message := range recent {
@@ -409,7 +456,7 @@ func (s *Service) updateStats(promptTokens, completionTokens int, elapsed time.D
 		{"genMs", elapsed.Milliseconds()},
 	}
 	for _, update := range updates {
-		if err := s.valkey.hincrby(statsKey, update.field, update.value); err != nil {
+		if _, err := s.valkey.HIncrBy(statsKey, update.field, update.value); err != nil {
 			s.broadcast(marshalEvent(struct {
 				Type string `json:"type"`
 				Stats
@@ -420,47 +467,56 @@ func (s *Service) updateStats(promptTokens, completionTokens int, elapsed time.D
 	s.broadcast(s.StatsMessage())
 }
 
-func (s *Service) generate() {
+// Execute runs one queued chat envelope.
+func (s *Service) Execute(ctx context.Context, env jobs.Envelope) (string, error) {
+	var payload struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(env.Payload, &payload); err != nil || strings.TrimSpace(payload.Text) == "" {
+		return "", fmt.Errorf("invalid chat payload")
+	}
+	return s.generate(ctx, env)
+}
+
+func (s *Service) generate(ctx context.Context, env jobs.Envelope) (string, error) {
 	started := time.Now()
-	ctx, cancel := context.WithCancel(context.Background())
-	s.mu.Lock()
-	s.cancel = cancel
-	s.mu.Unlock()
 	statusCtx, stopStatus := context.WithCancel(context.Background())
 	f := &flight{phase: "sending", started: started}
 	go s.runStatus(statusCtx, f)
 	defer func() {
-		cancel()
 		stopStatus()
 		s.broadcast(marshalEvent(llmStatus{Type: "llm-status", Phase: "idle"}))
-		s.clearBusy()
 	}()
 
 	if s.agent != nil {
-		s.generateAgent(ctx, started)
-		return
+		var payload struct {
+			Text string `json:"text"`
+		}
+		_ = json.Unmarshal(env.Payload, &payload)
+		return s.generateAgent(ctx, started, payload.Text)
 	}
 
-	body := marshalEvent(map[string]any{"stream": true, "messages": s.contextMessages()})
+	body := marshalEvent(map[string]any{"stream": true, "messages": s.contextMessages(env.EnqueuedTs)})
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, s.llamaURL, bytes.NewReader(body))
 	if err != nil {
 		s.broadcast(errorEvent("llama request failed: " + err.Error()))
-		return
+		return "", err
 	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := s.client.Do(request)
 	if err != nil {
 		if ctx.Err() != nil {
 			s.finishReply("", true, 0, 0, time.Since(started))
+			return "stopped", nil
 		} else {
 			s.broadcast(errorEvent("llama request failed: " + err.Error()))
 		}
-		return
+		return "", err
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		s.broadcast(errorEvent("llama returned HTTP " + response.Status))
-		return
+		return "", fmt.Errorf("llama returned HTTP %s", response.Status)
 	}
 
 	var reply strings.Builder
@@ -523,7 +579,7 @@ func (s *Service) generate() {
 	stopped := ctx.Err() != nil
 	if err := scanner.Err(); err != nil && !done && !stopped {
 		s.broadcast(errorEvent("llama stream failed: " + err.Error()))
-		return
+		return "", err
 	}
 	f.mu.Lock()
 	fallbackTokens := len(f.tokenTimes)
@@ -532,20 +588,15 @@ func (s *Service) generate() {
 		completionTokens = fallbackTokens
 	}
 	s.finishReply(reply.String(), stopped, promptTokens, completionTokens, time.Since(started))
+	return "chat reply completed", nil
 }
 
-func (s *Service) generateAgent(ctx context.Context, started time.Time) {
-	s.mu.Lock()
-	userText := ""
-	if len(s.history) > 0 {
-		userText = s.history[len(s.history)-1].Text
-	}
-	s.mu.Unlock()
+func (s *Service) generateAgent(ctx context.Context, started time.Time, userText string) (string, error) {
 	result, err := s.agent.Handle(ctx, userText)
 	if err != nil {
 		s.broadcast(errorEvent("agent failed: " + err.Error()))
 		if result.Reply == "" {
-			return
+			return "", err
 		}
 	}
 	s.finishReply(
@@ -555,12 +606,12 @@ func (s *Service) generateAgent(ctx context.Context, started time.Time) {
 		result.CompletionTokens,
 		time.Since(started),
 	)
+	return "chat reply completed", nil
 }
 
 func (s *Service) finishReply(text string, stopped bool, promptTokens, completionTokens int, elapsed time.Duration) {
 	assistantMessage := Message{Role: "assistant", Text: text, Ts: time.Now().UnixMilli()}
 	s.append(assistantMessage)
-	s.clearBusy()
 	s.broadcast(marshalEvent(struct {
 		Type    string `json:"type"`
 		Stopped bool   `json:"stopped,omitempty"`

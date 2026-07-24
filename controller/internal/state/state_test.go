@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mayanklahiri/virtualme/controller/internal/health"
 	"github.com/mayanklahiri/virtualme/controller/internal/procstat"
@@ -49,6 +50,7 @@ func TestSnapshotJSON(t *testing.T) {
 		System:    System{Load1: 0.5, MemUsedMB: 1, MemTotalMB: 2, DiskFreeMB: 3, DiskTotalMB: 4},
 		Processes: []procstat.Proc{{Name: "xvfb", CPUPct: 1.5, MemMB: 42}},
 		Cores:     []float64{25},
+		Scheduler: Scheduler{LocalTime: "2026-07-22T09:00:00-07:00", TZ: "America/Los_Angeles", Active: []string{"morning", "anytime"}},
 	}
 	payload, err := json.Marshal(snapshot)
 	if err != nil {
@@ -65,9 +67,23 @@ func TestSnapshotJSON(t *testing.T) {
 		`"system":{`,
 		`"processes":[{"name":"xvfb","cpuPct":1.5,"memMB":42}]`,
 		`"cores":[25]`,
+		`"scheduler":{"localTime":"2026-07-22T09:00:00-07:00","tz":"America/Los_Angeles","active":["morning","anytime"]}`,
 	} {
 		if !strings.Contains(text, field) {
 			t.Errorf("JSON %q missing %q", text, field)
 		}
+	}
+}
+
+func TestSchedulerStateUsesLocalClock(t *testing.T) {
+	location, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TZ", "America/Los_Angeles")
+	got := schedulerState(time.Date(2026, 7, 22, 9, 0, 0, 0, location))
+	if got.TZ != "America/Los_Angeles" || got.LocalTime != "2026-07-22T09:00:00-07:00" ||
+		len(got.Active) == 0 || got.Active[0] != "morning" {
+		t.Fatalf("schedulerState = %+v", got)
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 const (
@@ -22,6 +23,7 @@ const (
 
 // Conn is one upgraded websocket connection.
 type Conn struct {
+	id        string
 	conn      net.Conn
 	reader    *bufio.Reader
 	writer    *bufio.Writer
@@ -32,10 +34,12 @@ type Conn struct {
 
 // Hub tracks connected browsers and broadcasts state snapshots.
 type Hub struct {
-	mu        sync.Mutex
-	conns     map[*Conn]struct{}
-	handler   func(c *Conn, payload []byte)
-	onConnect func(c *Conn)
+	mu           sync.Mutex
+	conns        map[*Conn]struct{}
+	handler      func(c *Conn, payload []byte)
+	onConnect    func(c *Conn)
+	onDisconnect func(connID string)
+	nextID       atomic.Uint64
 }
 
 // NewHub returns an empty websocket hub.
@@ -55,6 +59,18 @@ func (h *Hub) SetOnConnect(fn func(c *Conn)) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.onConnect = fn
+}
+
+// SetOnDisconnect registers a hook called after a connection is removed.
+func (h *Hub) SetOnDisconnect(fn func(connID string)) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.onDisconnect = fn
+}
+
+// ID returns the stable hub-assigned connection identifier.
+func (c *Conn) ID() string {
+	return c.id
 }
 
 func acceptKey(key string) string {
@@ -258,6 +274,7 @@ func (h *Hub) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+	conn.id = fmt.Sprintf("c%d", h.nextID.Add(1))
 	conn.onText = func(payload []byte) {
 		h.mu.Lock()
 		handler := h.handler
@@ -275,11 +292,22 @@ func (h *Hub) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 	}
 	go func() {
 		conn.ReadLoop()
-		h.mu.Lock()
-		delete(h.conns, conn)
-		h.mu.Unlock()
+		h.remove(conn)
 		_ = conn.Close()
 	}()
+}
+
+func (h *Hub) remove(conn *Conn) {
+	h.mu.Lock()
+	_, present := h.conns[conn]
+	if present {
+		delete(h.conns, conn)
+	}
+	onDisconnect := h.onDisconnect
+	h.mu.Unlock()
+	if present && onDisconnect != nil {
+		onDisconnect(conn.id)
+	}
 }
 
 // Broadcast sends a text frame to every client, dropping failed connections.
@@ -293,9 +321,7 @@ func (h *Hub) Broadcast(payload []byte) {
 
 	for _, conn := range conns {
 		if err := conn.WriteText(payload); err != nil {
-			h.mu.Lock()
-			delete(h.conns, conn)
-			h.mu.Unlock()
+			h.remove(conn)
 			_ = conn.Close()
 		}
 	}

@@ -88,6 +88,32 @@ func TestOnConnect(t *testing.T) {
 	}
 }
 
+func TestStableIDsAndDisconnectHook(t *testing.T) {
+	hub := NewHub()
+	connected := make(chan string, 2)
+	disconnected := make(chan string, 2)
+	hub.SetOnConnect(func(c *Conn) { connected <- c.ID() })
+	hub.SetOnDisconnect(func(id string) { disconnected <- id })
+	server := httptest.NewServer(http.HandlerFunc(hub.HandleUpgrade))
+	defer server.Close()
+	first, _, _ := dialWebsocket(t, server.URL)
+	second, _, _ := dialWebsocket(t, server.URL)
+	firstID, secondID := <-connected, <-connected
+	if firstID != "c1" || secondID != "c2" {
+		t.Fatalf("ids = %q, %q", firstID, secondID)
+	}
+	_ = first.Close()
+	select {
+	case got := <-disconnected:
+		if got != firstID {
+			t.Fatalf("disconnect id = %q, want %q", got, firstID)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("disconnect hook not called")
+	}
+	_ = second.Close()
+}
+
 func TestClientMessageDispatch(t *testing.T) {
 	hub := NewHub()
 	type received struct {

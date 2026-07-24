@@ -166,3 +166,9 @@ staged files included) and never generated output.
 Spec 008 has not executed yet, but `agent/` is created and enforced now because
 it is already part of this spec's canonical map and known top-level set. This
 reserves the persistence lane without adding agent runtime behavior.
+
+### 2026-07-23 — Persistent job queue state
+
+| State | Path | Owner / mechanism | Introduced |
+|---|---|---|---|
+| `virtualme:jobs:*` job queue state | `$VM_DATA_DIR/valkey/` (AOF) | `internal/jobs` via `svc-valkey` | 013 |

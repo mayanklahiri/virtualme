@@ -106,6 +106,20 @@ export function renderState(snapshot) {
   memoryMeter.value = Math.min(used, memoryMeter.max);
   memoryMeter.setAttribute("aria-valuenow", String(used));
   document.querySelector("#memory-value").textContent = `${used} / ${total} MB`;
+  const scheduler = snapshot.scheduler ?? {};
+  const clock = document.querySelector("#scheduler-clock");
+  const instant = new Date(scheduler.localTime);
+  clock.textContent = Number.isNaN(instant.getTime())
+    ? "Waiting for scheduler clock"
+    : `${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" }).format(instant)} · ${scheduler.tz || "local"}`;
+  const selectorList = document.querySelector("#scheduler-active");
+  selectorList.replaceChildren();
+  for (const [index, token] of (scheduler.active ?? []).entries()) {
+    const item = document.createElement("li");
+    item.textContent = token;
+    if (index === 0) item.className = "current";
+    selectorList.append(item);
+  }
 }
 
 export function renderStatus(status) {

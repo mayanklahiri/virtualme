@@ -64,13 +64,16 @@ The first start loads a ~3 GB model; allow a few minutes for `/healthz` to becom
 | `virtualme update` | Pull the configured image tag |
 | `virtualme soak [--no-build]` | Rebuild, restart on a fresh data dir, and run live soak flows against the running controller (source checkout only) |
 
-Set `VIRTUALME_IMAGE` or `VIRTUALME_TAG` to override the default image reference, and `VIRTUALME_DATA` to override the default data directory.
+Set `VIRTUALME_IMAGE` or `VIRTUALME_TAG` to override the default image reference,
+`VIRTUALME_DATA` to override the default data directory, and `TZ` to override
+the detected host timezone passed into the container.
 
 ### Data directory
 
 The host directory `~/.virtualme` (override with `--data <dir>` or
 `VIRTUALME_DATA`) is created on first `start` and mounted read-write at the
-container's `~/.virtualme`. It contains `valkey/` (chat history and stats),
+container's `~/.virtualme`. It contains `valkey/` (chat history, stats, and the
+reliable job queue),
 `chromium/` (browser profile), `xdg/{config,cache,data}/`, `metrics/` (tiered
 history), `agent/` (agent artifacts), and `mail/` (dma config/spool and the
 DKIM private key). Chromium settings and queued mail survive container
@@ -98,17 +101,17 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | Route | Purpose |
 |---|---|
 | `/` | Console home: host identity, live health/capacity, model, and links |
-| `/status` | Service health, system meters, and persistent per-core/process metrics |
+| `/status` | Service health, system meters, active time selectors, and persistent per-core/process metrics |
 | `/chat` | Markdown chat, generation controls, LLM progress, and conversation totals |
 | `/speech` | Streaming local text-to-speech with the Lessac en-US voice |
 | `/mail` | Outbound-mail composer, queue status, and DKIM DNS record |
 | `/desktop-view` | Embedded private noVNC desktop |
 | `/healthz` | Aggregate JSON health for all eight services |
-| `/ws` | Websocket: live state, metrics, chat, agent, TTS, and mail frames |
+| `/ws` | Websocket: live state, metrics, queued jobs, chat, agent, TTS, and mail frames |
 | `POST /v1/audio/speech` | OpenAI-compatible local speech API (`wav` or raw `pcm`) |
 | `/desktop/` | Reverse proxy to noVNC and websockify |
 
-History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status history offers `15m` through `30d` lookbacks. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, uptime, CPU/load, memory, and disk capacity beside a theme-tinted Earthrise image.
+History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status history offers `15m` through `30d` lookbacks and shows the server-local scheduler clock and active selector tokens. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, uptime, CPU/load, memory, and disk capacity beside a theme-tinted Earthrise image.
 
 Closing Chromium in `/desktop-view` automatically brings back one blank tab. Chromium uses its namespace sandbox when the host permits unprivileged user namespaces; otherwise it falls back to `--no-sandbox` with the warning infobar suppressed. Use `--no-browser-sandbox` to force that fallback when diagnosing host compatibility.
 
@@ -120,6 +123,13 @@ system information; it acts through `xdotool` OS mouse/keyboard input or a
 bounded bash tool. CDP is read-only and never performs input or navigation.
 The console shows each tool step and its screenshot; Stop cancels the active
 model call or tool process.
+
+All LLM work runs through a Valkey-backed sequential queue with interactive
+priority, retries, visibility recovery, and a dead-letter list. Chat messages
+wait instead of returning a busy error. Closing the initiating browser tab
+cancels its running generation immediately and drops its queued jobs. The CLI
+passes the host `TZ` into the container so time-bucket scheduling uses the
+host's local wall clock.
 
 ### Local speech
 
@@ -192,7 +202,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [010](specs/010-outbound-mail.md) | Outbound dma queue, MIME/DKIM, and Mail console |
 | [011](specs/011-ui-refresh.md) | Console brand, collapsed theme picker, eight themes, and live-capacity home page |
 | [012](specs/012-agent-observation-soak.md) | Dense DOM observations, settled navigation, desktop coverage, Playwright-layer removal, and the live soak suite |
-| [013](specs/013-job-queue-scheduler.md) | Valkey job queue, time-bucket scheduler, and initiator-bound cancellation (draft) |
+| [013](specs/013-job-queue-scheduler.md) | Valkey job queue, time-bucket scheduler, and initiator-bound cancellation |
 | [014](specs/014-projects.md) | Projects: periodic natural-language tasks with schedules and scratch dirs (draft) |
 | [015](specs/015-jobs-page.md) | Jobs page: activity ledger and queue peek with details pane (draft) |
 | [016](specs/016-chromium-determinism.md) | Chromium determinism flags and single full-screen window (draft) |
@@ -245,4 +255,4 @@ Use a Raspberry Pi 5 or Raspberry Pi 4 with 8 GB RAM at minimum. The RAM floor i
 
 ## Architecture
 
-The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Valkey, vision-enabled llama.cpp with Gemma 4 E2B, local sherpa-onnx/Piper TTS, a dma outbound-mail queue, and a Go controller on `:8080`, running unprivileged (host uid/gid) with one rw data mount. The controller concurrently probes service health, samples and persists metrics, composes and DKIM-signs mail, streams shared chat and speech, and runs a bounded browser-agent loop combining screenshots, compact DOM/read-only CDP observations, OS-level `xdotool` actions, bash, and audible responses. It proxies noVNC and embeds the same-origin minified multi-page SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.
+The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Valkey, vision-enabled llama.cpp with Gemma 4 E2B, local sherpa-onnx/Piper TTS, a dma outbound-mail queue, and a Go controller on `:8080`, running unprivileged (host uid/gid) with one rw data mount. The controller concurrently probes service health, samples and persists metrics, composes and DKIM-signs mail, schedules and sequentially executes reliable Valkey jobs, streams shared chat and speech, and runs a bounded browser-agent loop combining screenshots, compact DOM/read-only CDP observations, OS-level `xdotool` actions, bash, and audible responses. It proxies noVNC and embeds the same-origin minified multi-page SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.
