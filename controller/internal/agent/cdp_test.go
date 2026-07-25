@@ -276,8 +276,10 @@ func TestNavigateWaitsForSettledPage(t *testing.T) {
 	})
 	defer server.Close()
 	runner := &recordingRunner{}
+	humanize := false
 	tools := NewLocalTools(Config{
 		Runner: runner, XdotoolPath: "xdotool", CDPURL: server.URL, Client: server.Client(),
+		Humanize: &humanize,
 	})
 	started := time.Now()
 	result, err := tools.Execute(context.Background(), "navigate", json.RawMessage(`{"url":"http://fake/new"}`))

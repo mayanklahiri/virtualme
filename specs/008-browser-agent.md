@@ -258,3 +258,15 @@ gated by an execution option set by the manual-tool executor.
 Default `VM_AGENT_MAX_STEPS` / `defaultMaxSteps` rises from 25 to 500 tool
 calls per user task. Cap behavior (stop + assistant message +
 `agent-status phase:"failed"`) is unchanged.
+
+### 2026-07-25 — Humanized browser actuation timing
+
+All xdotool interaction tools now pause for a power-law-distributed 2–7
+seconds before and after execution, biased toward 2–5 seconds. Compound
+actions use proportionally shorter 150–800 ms pauses between steps. Typing
+emits one Unicode character at a time with randomized 10–200 ms intervals,
+and scrolling emits individual wheel ticks with randomized 80–350 ms
+intervals. These delays apply equally to agent and manual Tools-console
+actuation; observation tools remain immediate. The agent config exposes an
+opt-out and injectable sleep function so hermetic tests remain fast and
+deterministic.

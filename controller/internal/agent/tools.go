@@ -3,9 +3,12 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	mathrand "math/rand"
 	"net/url"
 	"os"
 	"os/exec"
@@ -123,6 +126,9 @@ type localTools struct {
 	env       map[string]string
 	taskID    string
 	stepID    string
+	rng       *mathrand.Rand
+	sleep     func(context.Context, time.Duration) bool
+	humanize  bool
 }
 
 func (t *localTools) resetTask(taskID string) {
@@ -158,10 +164,24 @@ func NewLocalTools(cfg Config) *localTools {
 	if cfg.BashPath == "" {
 		cfg.BashPath = "bash"
 	}
+	var seedBytes [8]byte
+	if _, err := rand.Read(seedBytes[:]); err != nil {
+		binary.LittleEndian.PutUint64(seedBytes[:], uint64(time.Now().UnixNano()))
+	}
+	sleep := cfg.Sleep
+	if sleep == nil {
+		sleep = sleepContext
+	}
+	humanize := true
+	if cfg.Humanize != nil {
+		humanize = *cfg.Humanize
+	}
 	return &localTools{
 		cfg: cfg, runner: runner, cdp: NewCDP(cfg.CDPURL, cfg.Client),
 		width: width, height: height, apiWidth: apiWidth, apiHeight: apiHeight,
 		boxes: make(map[int][4]float64), cwd: cfg.DataDir, env: make(map[string]string),
+		rng:   mathrand.New(mathrand.NewSource(int64(binary.LittleEndian.Uint64(seedBytes[:])))),
+		sleep: sleep, humanize: humanize,
 	}
 }
 
@@ -283,6 +303,12 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 	if usesXdotool(name) {
 		actuation.Lock()
 		defer actuation.Unlock()
+		if err := t.pauseTool(ctx); err != nil {
+			return ToolResult{}, err
+		}
+		defer func() {
+			_ = t.pauseTool(context.WithoutCancel(ctx))
+		}()
 	}
 	switch name {
 	case "screenshot":
@@ -336,7 +362,10 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 		if err := decodeArgs(raw, &args); err != nil {
 			return ToolResult{}, err
 		}
-		return t.action(ctx, "Typed text", "type", "--clearmodifiers", "--delay", "1", "--", args.Text)
+		if _, err := t.humanType(ctx, args.Text); err != nil {
+			return ToolResult{}, err
+		}
+		return ToolResult{Text: "Typed text", Summary: "Typed text"}, nil
 	case "type_into":
 		var args struct {
 			Ref  int    `json:"ref"`
@@ -348,7 +377,13 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 		if _, err := t.clickRef(ctx, args.Ref); err != nil {
 			return ToolResult{}, err
 		}
-		return t.action(ctx, "Typed into element", "type", "--clearmodifiers", "--delay", "1", "--", args.Text)
+		if err := t.pauseStep(ctx); err != nil {
+			return ToolResult{}, err
+		}
+		if _, err := t.humanType(ctx, args.Text); err != nil {
+			return ToolResult{}, err
+		}
+		return ToolResult{Text: "Typed into element", Summary: "Typed into element"}, nil
 	case "key":
 		var args struct {
 			Keys string `json:"keys"`
@@ -371,15 +406,7 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 		if args.Amount <= 0 {
 			args.Amount = 3
 		}
-		button := "5"
-		if args.Dir == "up" {
-			button = "4"
-		}
-		arguments := []string{}
-		for range args.Amount {
-			arguments = append(arguments, "click", button)
-		}
-		return t.action(ctx, "Scrolled "+args.Dir, arguments...)
+		return t.humanScroll(ctx, args.Dir, args.Amount)
 	case "navigate":
 		var args struct {
 			URL string `json:"url"`
@@ -394,7 +421,13 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 		if _, err := t.action(ctx, "", "key", "--clearmodifiers", "ctrl+l"); err != nil {
 			return ToolResult{}, err
 		}
-		if _, err := t.action(ctx, "", "type", "--clearmodifiers", "--delay", "1", "--", args.URL); err != nil {
+		if err := t.pauseStep(ctx); err != nil {
+			return ToolResult{}, err
+		}
+		if _, err := t.humanType(ctx, args.URL); err != nil {
+			return ToolResult{}, err
+		}
+		if err := t.pauseStep(ctx); err != nil {
 			return ToolResult{}, err
 		}
 		if _, err := t.action(ctx, "", "key", "Return"); err != nil {

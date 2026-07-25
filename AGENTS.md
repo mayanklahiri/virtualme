@@ -56,8 +56,10 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 
 The controller's browser agent combines vision screenshots, dense rendered
 DOM and read-only CDP observations, OS-level `xdotool` mouse/keyboard
-actuation, and bounded bash execution. DOM observations carry the page URL
-and title, omit layout-only noise, and fit the default 32768-token context;
+actuation, and bounded bash execution. Browser interactions use power-law
+pauses before and after each action plus humanized typing and scrolling
+cadence. DOM observations carry the page URL and title, omit layout-only
+noise, and fit the default 32768-token context;
 `read_page` emits a structured YAML digest of up to 64000 bytes, collapsing
 layout tables while preserving links, grouping numbered feed rows into
 explicit article fields (including ready-to-copy `title_link`, score, comments,

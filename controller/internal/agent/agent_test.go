@@ -556,8 +556,10 @@ func TestManualScreenshotSkipsGridAgentKeepsIt(t *testing.T) {
 
 func TestXdotoolInvocationUsesScreenCoordinates(t *testing.T) {
 	runner := &recordingRunner{}
+	humanize := false
 	tools := NewLocalTools(Config{
 		Runner: runner, XdotoolPath: "/bin/xdotool", Display: ":77", Resolution: "1600x900x24",
+		Humanize: &humanize,
 	})
 	if _, err := tools.Execute(context.Background(), "click", json.RawMessage(`{"x":512,"y":288}`)); err != nil {
 		t.Fatal(err)

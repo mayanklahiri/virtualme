@@ -83,6 +83,8 @@ type Config struct {
 	Client        *http.Client
 	Runner        Runner
 	Executor      Executor
+	Humanize      *bool
+	Sleep         func(context.Context, time.Duration) bool
 	TTS           *tts.Client
 	Activity      jobs.ActivityRecorder
 	Counters      *metrics.Counters
