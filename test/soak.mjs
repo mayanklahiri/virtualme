@@ -236,7 +236,7 @@ const flows = [
             check(frame) {
               const text = String(frame.text ?? "");
               if (frame.ok !== true) problems.push(`read_page failed: ${frame.error || "unknown"}`);
-              if (text.length > 16000) problems.push(`read_page length ${text.length} > 16000`);
+              if (text.length > 32000) problems.push(`read_page length ${text.length} > 32000`);
               let digest;
               try {
                 digest = parseYamlLite(text);

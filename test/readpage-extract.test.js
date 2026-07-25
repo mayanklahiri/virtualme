@@ -121,9 +121,9 @@ test("nested content-free wrappers hoist their content to the top", () => {
   assert.equal(digest.body[0].text, "promoted");
 });
 
-test("tables shape rows and append the truncation row past 40", () => {
+test("tables shape rows and append the truncation row past the row cap", () => {
   const trs = [];
-  for (let index = 0; index < 45; index++) {
+  for (let index = 0; index < 125; index++) {
     trs.push({ tag: "tr", children: [{ tag: "td", text: `r${index}  c1` }, { tag: "td", text: "c2" }] });
   }
   const fixture = {
@@ -134,15 +134,15 @@ test("tables shape rows and append the truncation row past 40", () => {
   const table = digest.body[0];
   assert.equal(table.tag, "table");
   assert.equal(table.children, undefined);
-  assert.equal(table.rows.length, 41);
+  assert.equal(table.rows.length, 121);
   assert.deepEqual(table.rows[0], ["r0 c1", "c2"]);
-  assert.deepEqual(table.rows[40], ["…truncated"]);
+  assert.deepEqual(table.rows[120], ["…truncated"]);
 });
 
 test("single-link list items flatten; long lists append a truncation note", () => {
   /** @type {any[]} */
   const lis = [{ tag: "li", children: [{ tag: "a", text: "Story one", attrs: { href: "/one" } }] }];
-  for (let index = 0; index < 44; index++) {
+  for (let index = 0; index < 124; index++) {
     lis.push({ tag: "li", text: `item ${index}` });
   }
   const fixture = {
@@ -152,10 +152,10 @@ test("single-link list items flatten; long lists append a truncation note", () =
   const digest = runReadPage(fixture);
   const list = digest.body[0];
   assert.equal(list.tag, "ul");
-  assert.equal(list.items.length, 41);
+  assert.equal(list.items.length, 121);
   assert.equal(list.items[0].text, "Story one");
   assert.equal(list.items[0].href, "https://example.com/one");
-  assert.deepEqual(list.items[40], { note: "…truncated" });
+  assert.deepEqual(list.items[120], { note: "…truncated" });
 });
 
 test("form controls carry properties and password values are omitted", () => {
@@ -187,7 +187,7 @@ test("form controls carry properties and password values are omitted", () => {
 test("node budget appends exactly one body-level marker", () => {
   /** @type {any[]} */
   const body = [];
-  for (let index = 0; index < 900; index++) {
+  for (let index = 0; index < 4100; index++) {
     body.push({ tag: "p", text: `p${index}` });
   }
   const fixture = { title: "Budget", url: "https://example.com/", body };
@@ -195,5 +195,5 @@ test("node budget appends exactly one body-level marker", () => {
   const markers = digest.body.filter((/** @type {any} */ node) => node.note === "truncated: node budget reached");
   assert.equal(markers.length, 1);
   assert.equal(digest.body[digest.body.length - 1].note, "truncated: node budget reached");
-  assert.ok(digest.body.length < 900);
+  assert.ok(digest.body.length < 4100);
 });

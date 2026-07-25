@@ -28,6 +28,9 @@ export function createDOMStub(fixture) {
       getClientRects() {
         return node.visible === false ? [] : [{ x: 0, y: 0, width: 10, height: 10 }];
       },
+      // Real browsers report display:none for hidden elements; readpage.js
+      // checks computed style before rects, so the stub must model both.
+      __vmHidden: node.visible === false,
     };
     if (node.id) el.id = node.id;
     else el.id = "";
@@ -174,7 +177,8 @@ export function createDOMStub(fixture) {
     document,
     location,
     window: {
-      getComputedStyle() {
+      getComputedStyle(el) {
+        if (el && el.__vmHidden) return { visibility: "visible", display: "none" };
         return { visibility: "visible", display: "block" };
       },
     },

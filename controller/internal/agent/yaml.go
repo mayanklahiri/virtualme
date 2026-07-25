@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -8,7 +9,7 @@ import (
 	"strings"
 )
 
-const readPageCap = 16000
+const readPageCap = 32000
 
 var yamlKeyOrder = map[string][]string{
 	"":     {"title", "url", "head", "body"},
@@ -33,11 +34,7 @@ func encodeValue(value any, indent int, context string) string {
 	case []any:
 		return encodeSequence(typed, indent, context)
 	case string:
-		quoted, err := json.Marshal(typed)
-		if err != nil {
-			quoted = []byte(`"` + strings.ReplaceAll(typed, `"`, `\"`) + `"`)
-		}
-		return string(quoted)
+		return quoteString(typed)
 	case float64:
 		if typed == float64(int64(typed)) {
 			return fmt.Sprintf("%d", int64(typed))
@@ -51,9 +48,21 @@ func encodeValue(value any, indent int, context string) string {
 	case nil:
 		return "null"
 	default:
-		quoted, _ := json.Marshal(fmt.Sprint(typed))
-		return string(quoted)
+		return quoteString(fmt.Sprint(typed))
 	}
+}
+
+// quoteString emits a JSON string without HTML escaping: selector paths are
+// full of ">" and escaping each one as \u003e wastes five bytes of the digest
+// budget per separator.
+func quoteString(value string) string {
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return `"` + strings.ReplaceAll(value, `"`, `\"`) + `"`
+	}
+	return strings.TrimRight(buffer.String(), "\n")
 }
 
 func orderedKeys(mapping map[string]any, context string) []string {

@@ -438,3 +438,39 @@ discipline (failing test first; live coverage on lahiri.me only).
       shapes, plus the safe-actuation steps.
 - [ ] `grep` finds no automated-test URL outside `lahiri.me` and
       `example.com`.
+
+## Amendments
+
+### A1 (2026-07-24): larger extraction budgets and unescaped emitter strings
+
+Observed on a live `reddit.com/r/wallstreetbets` session: the 800-node budget
+was exhausted by the header/sidebar before the walker reached the story feed,
+so the digest carried only 2 story links, and the collapse pass silently
+deleted the mid-tree budget marker (fixed separately by moving the single
+marker append after collapse). Tunables are raised as follows:
+
+- `NODE_BUDGET`: 800 → 4000 kept nodes.
+- Table `rows` / list `items` caps: 40 → 120 each.
+- `readPageCap`: 16000 → 32000 bytes.
+- `observationTextCap` (spec 012): 16 KiB → 32 KiB, so the digest still
+  reaches the model without mid-document truncation. With the 16384-token
+  model context, only the latest observation is retained in the prompt and
+  the context-exceeded recovery path bounds the worst case.
+- The §4 emitter quotes strings with JSON escaping but **without** HTML
+  escaping (`json.Encoder.SetEscapeHTML(false)`): selector paths are full of
+  `>` separators and `\u003e` wasted five bytes of the digest budget per
+  separator. The committed golden fixture is regenerated accordingly.
+
+Normative references to the old values in §3c, §3e, §4, §9, and §10 are to be
+read with these constants.
+
+The §3c visibility rule is corrected: the claim that "`display:none` yields
+zero client rects; no separate check needed" pruned every boxless container —
+`display: contents` custom elements (Reddit's `shreddit-*`/`faceplate-*`
+wrappers) and inline wrappers around block children also have zero client
+rects yet render their subtrees, which hid the entire story feed. The rule is
+now: an element is pruned iff computed `display === "none"` or
+`visibility === "hidden"`; an element with zero client rects is still visible
+when `display === "contents"` or it has element children. The
+`test/helpers/dom-stub.mjs` stub models hidden fixtures as computed
+`display: none` to match real browsers.

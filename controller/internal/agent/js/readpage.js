@@ -3,10 +3,17 @@
   const HREF_CAP = 300;
   const ATTR_CAP = 120;
   const CELL_CAP = 80;
-  const MAX_ROWS = 40;
-  const MAX_ITEMS = 40;
-  const NODE_BUDGET = 800;
+  const MAX_ROWS = 120;
+  const MAX_ITEMS = 120;
+  const NODE_BUDGET = 4000;
   const PRUNE = new Set(["script", "style", "noscript", "template"]);
+  // Tags whose nodes always keep their sel: interaction and follow-up
+  // dom_query targets. Text-only leaves outside this set drop sel — the
+  // nearest kept ancestor's sel locates them.
+  const SEL_KEEP = new Set([
+    "a", "img", "video", "audio", "iframe", "table", "form", "input",
+    "select", "textarea", "button", "h1", "h2", "h3", "h4", "h5", "h6",
+  ]);
   const SEMANTIC = new Set([
     "h1", "h2", "h3", "h4", "h5", "h6", "a", "img", "video", "audio", "iframe",
     "table", "form", "input", "select", "textarea", "button", "label", "ul", "ol",
@@ -26,14 +33,15 @@
     return String(id).replace(/([ !"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, "\\$1");
   }
 
-  function nthOfType(el) {
+  function typeIndex(el) {
     const tag = el.tagName.toLowerCase();
-    let count = 0;
+    let index = 1;
+    let total = 0;
     for (const child of el.parentElement.children) {
-      if (child.tagName.toLowerCase() === tag) count++;
-      if (child === el) return count;
+      if (child.tagName.toLowerCase() === tag) total++;
+      if (child === el) index = total;
     }
-    return 1;
+    return { index, total };
   }
 
   function selectorFor(el) {
@@ -45,7 +53,11 @@
         parts.unshift("#" + escapeID(id));
         break;
       }
-      parts.unshift(current.tagName.toLowerCase() + ":nth-of-type(" + nthOfType(current) + ")");
+      const tag = current.tagName.toLowerCase();
+      const { index, total } = typeIndex(current);
+      // Only-of-type segments stay unique without the suffix; :nth-of-type(1)
+      // noise dominated digest bytes on component-heavy pages.
+      parts.unshift(total > 1 ? tag + ":nth-of-type(" + index + ")" : tag);
       current = current.parentElement;
     }
     if (current === document.body || (current && current.parentElement === document.body)) {
@@ -56,10 +68,13 @@
 
   function isVisible(el) {
     if (!el || el.nodeType !== 1) return false;
-    const rects = el.getClientRects();
-    if (!rects || rects.length === 0) return false;
     const style = window.getComputedStyle(el);
-    return style.visibility !== "hidden";
+    if (style.display === "none" || style.visibility === "hidden") return false;
+    const rects = el.getClientRects();
+    if (rects && rects.length > 0) return true;
+    // Boxless containers (display:contents custom elements, inline wrappers
+    // around block children) have no client rects yet render their subtree.
+    return style.display === "contents" || (el.children && el.children.length > 0);
   }
 
   function ownText(el) {
@@ -314,18 +329,19 @@
     if (text) node.text = text;
   }
 
-  function walkElement(el) {
+  function walkElement(el, insideLink) {
     if (budgetHit) return null;
     const tag = el.tagName.toLowerCase();
     if (PRUNE.has(tag)) return null;
     if (el.getAttribute("aria-hidden") === "true") return null;
+    if (!isVisible(el)) return null;
     if (tag === "svg") {
       const label = capAttr(el.getAttribute("aria-label"));
       if (!label) return null;
       kept++;
-      return { tag: "svg", sel: selectorFor(el), text: label };
+      // No sel: an icon is actuated through its labelled parent control.
+      return { tag: "svg", text: label };
     }
-    if (!isVisible(el)) return null;
 
     if (tag === "table") {
       kept++;
@@ -354,7 +370,7 @@
       const children = [];
       for (const child of el.children) {
         if (budgetHit) break;
-        const walked = walkElement(child);
+        const walked = walkElement(child, insideLink || tag === "a");
         if (walked) children.push(walked);
       }
       if (children.length) node.children = children;
@@ -364,23 +380,66 @@
         if (budgetHit) break;
         const childTag = child.tagName.toLowerCase();
         if (childTags.has(childTag) || childTag === "label") {
-          const walked = walkElement(child);
+          const walked = walkElement(child, insideLink || tag === "a");
           if (walked) children.push(walked);
         }
       }
       if (children.length) node.children = children;
     }
+    if (!SEL_KEEP.has(tag) && !node.children && node.text) {
+      let extra = false;
+      for (const key in node) {
+        if (key !== "tag" && key !== "sel" && key !== "text") { extra = true; break; }
+      }
+      if (!extra) delete node.sel;
+    }
+    // An image anywhere inside a link is located by the link's sel.
+    if (tag === "img" && insideLink) delete node.sel;
     return node;
+  }
+
+  // Drop a later link when an earlier one already carries the same href and
+  // the same visible text (or the later one adds no text): overlay links and
+  // screen-reader duplicates double every story link on feed pages.
+  function digestText(node) {
+    let text = node.text || "";
+    for (const child of node.children ?? []) text += " " + digestText(child);
+    return text.replace(/\s+/g, " ").trim();
+  }
+
+  function dedupeLinks(nodes, seen) {
+    for (let index = 0; index < nodes.length; index++) {
+      const node = nodes[index];
+      if (!node || typeof node !== "object") continue;
+      const isLink = node.href && (node.tag === "a" || !node.tag);
+      if (isLink) {
+        const text = digestText(node);
+        const prior = seen.get(node.href);
+        if (prior !== undefined && (text === "" || prior.has(text))) {
+          nodes.splice(index, 1);
+          index--;
+          continue;
+        }
+        if (prior) prior.add(text);
+        else seen.set(node.href, new Set([text]));
+      }
+      if (node.children) {
+        dedupeLinks(node.children, seen);
+        if (!node.children.length) delete node.children;
+      }
+      if (node.items) dedupeLinks(node.items, seen);
+    }
   }
 
   const body = [];
   if (document.body) {
     for (const child of document.body.children) {
       if (budgetHit) break;
-      const walked = walkElement(child);
+      const walked = walkElement(child, false);
       if (walked) body.push(walked);
     }
   }
+  dedupeLinks(body, new Map());
   const collapsed = collapse(body);
   if (budgetHit) {
     collapsed.push({ note: "truncated: node budget reached" });

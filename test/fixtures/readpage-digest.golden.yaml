@@ -7,10 +7,10 @@ head:
     title: "OG"
 body:
   - tag: "h1"
-    sel: "body \u003e h1:nth-of-type(1)"
+    sel: "body > h1:nth-of-type(1)"
     text: "Héading ünïcode"
   - tag: "table"
-    sel: "body \u003e table:nth-of-type(1)"
+    sel: "body > table:nth-of-type(1)"
     rows:
       -
         - "A"
@@ -19,15 +19,15 @@ body:
         - "1"
         - ""
   - tag: "ul"
-    sel: "body \u003e ul:nth-of-type(1)"
+    sel: "body > ul:nth-of-type(1)"
     items:
       - text: "Item"
         href: "https://example.com/item"
   - tag: "p"
-    sel: "body \u003e p:nth-of-type(1)"
+    sel: "body > p:nth-of-type(1)"
     text: "para"
     children:
       - tag: "a"
-        sel: "body \u003e p:nth-of-type(1) \u003e a:nth-of-type(1)"
+        sel: "body > p:nth-of-type(1) > a:nth-of-type(1)"
         text: "link"
         href: "https://example.com/a"

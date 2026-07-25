@@ -480,7 +480,7 @@ func main() {
 		result, toolErr := localTools.ExecuteManual(ctx, request.Tool, request.Args)
 		duration := time.Since(started).Milliseconds()
 		llmCounters.AddAction(agent.ActionCategory(request.Tool, result.Observe))
-		text := capText(result.Text, 16*1024)
+		text := capText(result.Text, 32*1024)
 		errorText := ""
 		if toolErr != nil {
 			errorText = toolErr.Error()
