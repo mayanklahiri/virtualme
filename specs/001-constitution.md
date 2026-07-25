@@ -686,3 +686,22 @@ Where 002/003 features are referenced before those specs run, mark them `*(avail
 | 17 | Both workflow files parse: `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml')); yaml.safe_load(open('.github/workflows/release.yml'))"` (if PyYAML is unavailable, use any YAML validator or rely on GitHub's workflow parser after push) | exit 0 |
 
 Finally: run the `/master-update` skill procedure once. Expected outcome on a fresh scaffold: the only "drift" it finds is forward references to spec 002/003 artifacts (`test/smoke.sh`, `test/e2e.sh`, `docker/`, `controller/`) in the skills and README — leave those, they document the target state and carry `*(available after spec 00N)*` markers in the README. Then commit everything as `spec 001: constitution, CLI, gates, CI/CD, skills`.
+
+## Amendments
+
+### 2026-07-25 — Node 24 Actions majors
+
+GitHub runners now force Node 24 for JavaScript actions and emit deprecation
+warnings for actions that still declare a Node 20 runtime. Bump the workflow
+pins in §7 / §8 (and the live `.github/workflows/*.yml` files) as follows:
+
+| Action | Was | Now |
+|---|---|---|
+| `actions/checkout` | `v4` | `v7` |
+| `actions/setup-node` | `v4` | `v7` |
+| `actions/setup-go` | `v5` | `v7` |
+| `docker/login-action` | `v3` | `v4` |
+
+Also set `cache: false` on `actions/setup-go` in CI: the controller module lives
+under `controller/` with no third-party deps and no `go.sum` at the repo root,
+so the default cache restore warned on every check job.

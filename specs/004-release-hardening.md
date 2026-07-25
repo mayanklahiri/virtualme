@@ -203,3 +203,17 @@ Acceptance item 4 is conditional on `mayanklahiri/virtualme:latest` already exis
 Spec 025 supersedes §2's `github-release` invocation. Releases now use the
 committed `release-notes/vX.Y.Z.md`, then append GitHub's generated commit list
 below it; the immutable tag and registry pre-checks remain unchanged.
+
+### 2026-07-25 — Node 24 Actions majors
+
+Bump the action pins documented in §2 to Node-24-compatible majors so release
+runs stop emitting Node 20 deprecation warnings:
+
+| Action | Was | Now |
+|---|---|---|
+| `actions/checkout` | `v4` | `v7` |
+| `actions/setup-node` | `v4` | `v7` |
+| `docker/login-action` | `v3` | `v4` |
+
+Live file: `.github/workflows/release.yml`. Companion amendment in
+`specs/001-constitution.md`.
