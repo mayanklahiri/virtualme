@@ -151,7 +151,7 @@ func TestCDPReassemblesFragmentedFrames(t *testing.T) {
 	})
 	defer server.Close()
 	cdp := NewCDP(server.URL, server.Client())
-	text, err := cdp.ReadPage(context.Background())
+	text, err := cdp.ReadPage(context.Background(), observationPromptCap(defaultContextTokens))
 	if err != nil {
 		t.Fatal(err)
 	}

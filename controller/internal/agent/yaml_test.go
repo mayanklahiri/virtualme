@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestEncodeYAMLOrderAndQuoting(t *testing.T) {
@@ -54,9 +55,10 @@ func TestDigestToYAMLBudgetMarker(t *testing.T) {
 		"head":  map[string]any{},
 		"body":  body,
 	}
-	got := digestToYAML(digest)
-	if len(got) > readPageCap {
-		t.Fatalf("digest length %d exceeds cap %d", len(got), readPageCap)
+	limit := 4096
+	got := digestToYAML(digest, limit)
+	if len(got) > limit {
+		t.Fatalf("digest length %d exceeds cap %d", len(got), limit)
 	}
 	if !strings.Contains(got, "truncated: page digest exceeded budget") {
 		t.Fatalf("expected budget marker in truncated digest")
@@ -71,9 +73,21 @@ func TestDigestToYAMLNoMarkerWhenUntruncated(t *testing.T) {
 		"head": map[string]any{"lang": "en"},
 		"body": []any{map[string]any{"tag": "h1", "text": "Hi"}},
 	}
-	got := digestToYAML(digest)
+	got := digestToYAML(digest, observationPromptCap(defaultContextTokens))
 	if strings.Contains(got, "exceeded budget") {
 		t.Fatalf("spurious truncation marker on small digest:\n%s", got)
+	}
+}
+
+func TestDigestToYAMLTinyBudgetRemainsValidUTF8(t *testing.T) {
+	digest := map[string]any{
+		"title": strings.Repeat("界", 1000),
+		"url":   "https://example.com/" + strings.Repeat("x", 1000),
+		"body":  []any{map[string]any{"text": strings.Repeat("y", 1000)}},
+	}
+	got := digestToYAML(digest, 64)
+	if len(got) > 64 || !utf8.ValidString(got) || !strings.Contains(got, "truncated") {
+		t.Fatalf("tiny-budget fallback is invalid: len=%d valid=%v text=%q", len(got), utf8.ValidString(got), got)
 	}
 }
 
@@ -85,7 +99,7 @@ func TestDigestToYAMLPrunesEmptyContainers(t *testing.T) {
 			"tag": "ul", "items": []any{}, "text": "",
 		}},
 	}
-	got := digestToYAML(digest)
+	got := digestToYAML(digest, observationPromptCap(defaultContextTokens))
 	if strings.Contains(got, "{}") || strings.Contains(got, "[]") {
 		t.Fatalf("flow-style empty container emitted:\n%s", got)
 	}

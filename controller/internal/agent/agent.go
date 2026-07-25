@@ -30,7 +30,7 @@ const (
 	defaultContextTokens = 32768
 	maxToolRounds        = 4
 	toolTextCap          = 8 * 1024
-	observationTextCap   = 64 * 1024
+	storedObservationCap = 64 * 1024
 )
 
 var errContextExceeded = errors.New("model context exceeds the configured limit")
@@ -137,6 +137,8 @@ type Agent struct {
 	taskDir string
 	step    int
 
+	bytesPerToken float64
+
 	replayMu sync.Mutex
 	replay   [][]byte
 }
@@ -194,7 +196,7 @@ func New(cfg Config) *Agent {
 	if cfg.Manifest == "" {
 		cfg.Manifest = "/opt/agent/system-manifest.json"
 	}
-	a := &Agent{cfg: cfg}
+	a := &Agent{cfg: cfg, bytesPerToken: defaultBytesPerToken}
 	if cfg.Executor != nil {
 		a.tools = cfg.Executor
 	} else {
@@ -258,21 +260,41 @@ func (a *Agent) handle(ctx context.Context, userText string, includeHistory bool
 	var prose strings.Builder
 	promptTokens, completionTokens := 0, 0
 	retriedEmptyCompletion := false
+	var lastObservationHash [32]byte
+	haveLastObservationHash := false
 	for a.step < a.cfg.MaxSteps {
 		a.status("planning")
-		messages = compactTaskMessages(messages, historyEnd)
-		historyEnd = min(historyEnd, len(messages))
 		onDelta := func(delta string) {
 			prose.WriteString(delta)
 			if includeHistory {
 				a.broadcast(map[string]any{"type": "chat-delta", "text": delta})
 			}
 		}
-		reply, calls, usage, err := a.complete(ctx, messages, onDelta)
+		prepared, reply, calls, usage, err := a.attemptCompletion(
+			ctx, messages, historyEnd, onDelta, "",
+		)
+		messages = prepared.Messages
+		historyEnd = prepared.HistoryEnd
 		if errors.Is(err, errContextExceeded) {
 			messages = compactAfterContextError(messages, historyEnd)
 			historyEnd = min(2, len(messages))
-			reply, calls, usage, err = a.complete(ctx, messages, onDelta)
+			prepared, reply, calls, usage, err = a.attemptCompletion(
+				ctx, messages, historyEnd, onDelta, "server overflow: hard compact",
+			)
+			messages = prepared.Messages
+			historyEnd = prepared.HistoryEnd
+		}
+		if errors.Is(err, errContextExceeded) {
+			var reduced bool
+			messages, reduced = shrinkLatestObservation(messages, true)
+			if reduced {
+				prepared, reply, calls, usage, err = a.attemptCompletion(
+					ctx, messages, historyEnd, onDelta,
+					"server overflow: reduced observation and removed image",
+				)
+				messages = prepared.Messages
+				historyEnd = prepared.HistoryEnd
+			}
 		}
 		promptTokens += usage.PromptTokens
 		completionTokens += usage.CompletionTokens
@@ -356,21 +378,11 @@ func (a *Agent) handle(ctx context.Context, userText string, includeHistory bool
 			messages = append(messages, PromptMessage{
 				Role: "tool", ToolCallID: call.ID, Content: toolContent,
 			})
-			if len(result.ImageJPEG) > 0 {
-				observationMessages = append(observationMessages, PromptMessage{
-					Role: "user",
-					Content: []map[string]any{
-						{"type": "text", "text": truncatePromptText(result.Text, observationTextCap)},
-						{"type": "image_url", "image_url": map[string]string{
-							"url": "data:image/jpeg;base64," + encodeBase64(result.ImageJPEG),
-						}},
-					},
-				})
-			} else if result.Observe {
-				observationMessages = append(observationMessages, PromptMessage{
-					Role: "user", Content: "Observation from " + call.Function.Name + ":\n" +
-						truncatePromptText(result.Text, observationTextCap),
-				})
+			if result.Observe {
+				observationMessages = append(observationMessages, makeObservationMessage(
+					call, result, observationPromptCap(a.cfg.ContextTokens),
+					&lastObservationHash, &haveLastObservationHash,
+				))
 			}
 			if result.Observe {
 				a.status("observing")
@@ -395,56 +407,84 @@ func truncatePromptText(text string, limit int) string {
 	if len(text) <= limit {
 		return text
 	}
-	const suffix = "\n…[truncated to fit model context]"
-	return text[:limit-len(suffix)] + suffix
+	if limit <= len(promptTruncationSuffix) {
+		return text[:limit]
+	}
+	return text[:limit-len(promptTruncationSuffix)] + promptTruncationSuffix
 }
 
 func isObservationMessage(message PromptMessage) bool {
-	if message.Role != "user" {
-		return false
-	}
-	if text, ok := message.Content.(string); ok {
-		return strings.HasPrefix(text, "Observation from ")
-	}
-	parts, ok := message.Content.([]map[string]any)
-	if !ok {
-		return false
-	}
-	for _, part := range parts {
-		if part["type"] == "image_url" {
-			return true
-		}
-	}
-	return false
+	_, ok := observationText(message)
+	return ok
 }
 
 func compactTaskMessages(messages []PromptMessage, historyEnd int) []PromptMessage {
 	if historyEnd >= len(messages) {
 		return messages
 	}
-	roundStarts := make([]int, 0)
-	for index := historyEnd; index < len(messages); index++ {
-		if messages[index].Role == "assistant" && len(messages[index].ToolCalls) > 0 {
-			roundStarts = append(roundStarts, index)
-		}
-	}
+	roundStarts := toolRoundStarts(messages, historyEnd)
 	keepFrom := historyEnd
 	if len(roundStarts) > maxToolRounds {
 		keepFrom = roundStarts[len(roundStarts)-maxToolRounds]
 	}
 	compacted := append([]PromptMessage(nil), messages[:historyEnd]...)
 	latestObservation := -1
-	for index := len(messages) - 1; index >= keepFrom; index-- {
+	latestUnchanged := -1
+	for index := len(messages) - 1; index >= historyEnd; index-- {
+		if isUnchangedObservation(messages[index]) {
+			if latestUnchanged < 0 {
+				latestUnchanged = index
+			}
+			continue
+		}
 		if isObservationMessage(messages[index]) {
 			latestObservation = index
 			break
 		}
 	}
+	if latestObservation >= historyEnd && latestObservation < keepFrom {
+		// Repeated unchanged observations can push the last full page state
+		// outside the retained tool rounds. Keep that state without retaining
+		// every intervening round.
+		compacted = append(compacted, messages[latestObservation])
+	}
+	selectedObservations := map[int]bool{
+		latestObservation: true,
+		latestUnchanged:   true,
+	}
+	activeToolStubs := make(map[int]bool)
+	retainedRoundStarts := toolRoundStarts(messages, keepFrom)
+	for round, start := range retainedRoundStarts {
+		end := len(messages)
+		if round+1 < len(retainedRoundStarts) {
+			end = retainedRoundStarts[round+1]
+		}
+		stubs := make([]int, 0)
+		observations := make([]int, 0)
+		for index := start; index < end; index++ {
+			if messages[index].Role == "tool" && messages[index].Content == observationToolStub {
+				stubs = append(stubs, index)
+			}
+			if isObservationMessage(messages[index]) {
+				observations = append(observations, index)
+			}
+		}
+		for index := 0; index < min(len(stubs), len(observations)); index++ {
+			if selectedObservations[observations[index]] {
+				activeToolStubs[stubs[index]] = true
+			}
+		}
+	}
 	for index := keepFrom; index < len(messages); index++ {
-		if isObservationMessage(messages[index]) && index != latestObservation {
+		message := messages[index]
+		if isObservationMessage(message) && index != latestObservation && index != latestUnchanged {
+			compacted = append(compacted, PromptMessage{Role: "user", Content: supersededObservation})
 			continue
 		}
-		compacted = append(compacted, messages[index])
+		if message.Role == "tool" && message.Content == observationToolStub && !activeToolStubs[index] {
+			message.Content = supersededToolStub
+		}
+		compacted = append(compacted, message)
 	}
 	return compacted
 }
@@ -468,6 +508,21 @@ func compactAfterContextError(messages []PromptMessage, historyEnd int) []Prompt
 		}
 	}
 	if latestRound >= 0 {
+		latestRoundHasUnchanged := false
+		for index := latestRound; index < len(messages); index++ {
+			if isUnchangedObservation(messages[index]) {
+				latestRoundHasUnchanged = true
+				break
+			}
+		}
+		if latestRoundHasUnchanged {
+			for index := latestRound - 1; index >= historyEnd; index-- {
+				if isObservationMessage(messages[index]) && !isUnchangedObservation(messages[index]) {
+					compacted = append(compacted, messages[index])
+					break
+				}
+			}
+		}
 		compacted = append(compacted, messages[latestRound:]...)
 	}
 	return compactTaskMessages(compacted, min(2, len(compacted)))
@@ -503,19 +558,11 @@ type tokenUsage struct {
 	CompletionTokens int
 }
 
-func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta func(string)) (string, []ToolCall, tokenUsage, error) {
-	definitions := make([]map[string]any, 0)
-	for _, tool := range a.tools.Definitions() {
-		definitions = append(definitions, map[string]any{
-			"type": "function",
-			"function": map[string]any{
-				"name": tool.Name, "description": tool.Description, "parameters": tool.Schema,
-			},
-		})
-	}
+func (a *Agent) complete(ctx context.Context, messages []PromptMessage, maxTokens int, onDelta func(string)) (string, []ToolCall, tokenUsage, error) {
+	definitions := a.toolDefinitions()
 	body, err := json.Marshal(map[string]any{
 		"stream": true, "messages": messages, "tools": definitions, "tool_choice": "auto",
-		"max_tokens": max(1, a.cfg.ContextTokens/4),
+		"max_tokens": maxTokens,
 	})
 	if err != nil {
 		return "", nil, tokenUsage{}, fmt.Errorf("encode llama request: %w", err)
@@ -533,7 +580,8 @@ func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta 
 	if response.StatusCode != http.StatusOK {
 		message, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
 		if response.StatusCode == http.StatusBadRequest &&
-			strings.Contains(string(message), "exceed_context_size_error") {
+			(strings.Contains(string(message), "exceed_context_size_error") ||
+				strings.Contains(string(message), "context_length_exceeded")) {
 			return "", nil, tokenUsage{}, errContextExceeded
 		}
 		return "", nil, tokenUsage{}, fmt.Errorf("llama returned %s: %s", response.Status, strings.TrimSpace(string(message)))

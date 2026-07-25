@@ -159,10 +159,20 @@ func TestToolLoopThenFinalReply(t *testing.T) {
 	if len(executor.calls) != 1 || executor.calls[0] != `echo:{"value":"ok"}` {
 		t.Fatalf("calls = %v", executor.calls)
 	}
-	if len(activity.events) != 1 || activity.events[0].Kind != "tool" ||
-		activity.events[0].Name != "echo" || activity.events[0].Detail.ResultText != "tool result" ||
-		!activity.events[0].Detail.OK {
+	var toolEvent *jobs.ActivityEvent
+	for index := range activity.events {
+		if activity.events[index].Kind == "tool" {
+			toolEvent = &activity.events[index]
+		}
+	}
+	if toolEvent == nil || toolEvent.Name != "echo" || toolEvent.Detail.ResultText != "tool result" ||
+		!toolEvent.Detail.OK {
 		t.Fatalf("activity = %+v", activity.events)
+	}
+	if !slices.ContainsFunc(activity.events, func(event jobs.ActivityEvent) bool {
+		return event.Kind == "llm" && event.Name == "context-budget" && event.Detail.PromptTokens > 0
+	}) {
+		t.Fatalf("context-budget activity missing: %+v", activity.events)
 	}
 	joined := string(bytesJoin(events))
 	if !strings.Contains(joined, `"type":"agent-step"`) || !strings.Contains(joined, `"phase":"done"`) {
@@ -333,7 +343,7 @@ func TestPromptCompactionBoundsToolRoundsAndObservations(t *testing.T) {
 					Function: FunctionCall{Name: "dom", Arguments: `{}`},
 				}},
 			},
-			PromptMessage{Role: "tool", ToolCallID: fmt.Sprintf("call-%d", round), Content: "captured"},
+			PromptMessage{Role: "tool", ToolCallID: fmt.Sprintf("call-%d", round), Content: observationToolStub},
 			PromptMessage{Role: "user", Content: fmt.Sprintf("Observation from dom:\nround %d", round)},
 		)
 	}
@@ -353,16 +363,189 @@ func TestPromptCompactionBoundsToolRoundsAndObservations(t *testing.T) {
 	if rounds != maxToolRounds || observations != 1 {
 		t.Fatalf("compacted to %d rounds and %d observations: %+v", rounds, observations, compacted)
 	}
+	joined := fmt.Sprint(compacted)
+	if !strings.Contains(joined, supersededObservation) || !strings.Contains(joined, supersededToolStub) ||
+		strings.Contains(joined, observationToolStub+" "+supersededObservation) {
+		t.Fatalf("stale observations were not safely superseded: %+v", compacted)
+	}
 	if compacted[0].Content != "system" || compacted[1].Content != "task" {
 		t.Fatalf("base conversation was not preserved: %+v", compacted[:2])
 	}
 }
 
 func TestPromptTextTruncation(t *testing.T) {
-	text := strings.Repeat("x", observationTextCap+100)
-	got := truncatePromptText(text, observationTextCap)
-	if len(got) != observationTextCap || !strings.Contains(got, "[truncated to fit model context]") {
+	limit := observationPromptCap(defaultContextTokens)
+	text := strings.Repeat("x", limit+100)
+	got := truncatePromptText(text, limit)
+	if len(got) != limit || !strings.Contains(got, "[truncated to fit model context]") {
 		t.Fatalf("truncated text length=%d suffix=%q", len(got), got[len(got)-40:])
+	}
+}
+
+func TestContextBudgetScalingAndAdaptiveCompletion(t *testing.T) {
+	if got := observationPromptCap(32768); got != 24576 {
+		t.Fatalf("default observation cap = %d, want 24576", got)
+	}
+	if got := observationPromptCap(4096); got != minObservationCap {
+		t.Fatalf("minimum observation cap = %d, want %d", got, minObservationCap)
+	}
+	if got := observationPromptCap(1_000_000); got != maxObservationCap {
+		t.Fatalf("maximum observation cap = %d, want %d", got, maxObservationCap)
+	}
+	if got := adaptiveMaxTokens(32768, 1000); got != 8192 {
+		t.Fatalf("large completion budget = %d, want 8192", got)
+	}
+	if got := adaptiveMaxTokens(32768, 30000); got != 2256 {
+		t.Fatalf("tight completion budget = %d, want 2256", got)
+	}
+}
+
+func TestPromptEstimateChargesFixedImageTokens(t *testing.T) {
+	messages := []PromptMessage{{
+		Role: "user",
+		Content: []map[string]any{
+			{"type": "text", "text": "screen"},
+			{"type": "image_url", "image_url": map[string]string{
+				"url": "data:image/jpeg;base64," + strings.Repeat("A", 100_000),
+			}},
+		},
+	}}
+	estimate := estimatePrompt(messages, nil)
+	if estimate.fixedTokens != imageTokenEstimate || estimate.textBytes > 100 {
+		t.Fatalf("image estimate = %+v", estimate)
+	}
+}
+
+func TestOlderToolResultsUseRecencyWeightedCap(t *testing.T) {
+	large := strings.Repeat("old", 500) + "\nsecond line"
+	messages := []PromptMessage{
+		{Role: "system", Content: "system"},
+		{Role: "user", Content: "task"},
+		{Role: "assistant", ToolCalls: []ToolCall{{ID: "old"}}},
+		{Role: "tool", ToolCallID: "old", Content: large},
+		{Role: "assistant", ToolCalls: []ToolCall{{ID: "new"}}},
+		{Role: "tool", ToolCallID: "new", Content: large},
+	}
+	compacted, changed := compactOlderToolText(messages, 2)
+	if !changed || len(compacted[3].Content.(string)) > olderToolTextCap {
+		t.Fatalf("old tool result not compacted: %+v", compacted[3])
+	}
+	if compacted[5].Content != large {
+		t.Fatalf("newest tool result was compacted: %+v", compacted[5])
+	}
+}
+
+func TestPreparePromptDegradesInBudgetOrder(t *testing.T) {
+	messages := []PromptMessage{
+		{Role: "system", Content: "system"},
+		{Role: "user", Content: "task"},
+	}
+	for round := range 3 {
+		messages = append(messages,
+			PromptMessage{Role: "assistant", ToolCalls: []ToolCall{{ID: fmt.Sprintf("%d", round)}}},
+			PromptMessage{Role: "tool", ToolCallID: fmt.Sprintf("%d", round), Content: strings.Repeat("t", 2000)},
+		)
+	}
+	messages = append(messages, PromptMessage{
+		Role: "user", Content: "Observation from read_page:\n" + strings.Repeat("o", 8000),
+	})
+	agent := &Agent{
+		cfg: Config{ContextTokens: 4096}, tools: noDefinitionsExecutor{},
+		bytesPerToken: defaultBytesPerToken,
+	}
+	prepared, err := agent.preparePrompt(messages, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(prepared.Degradations, "|")
+	wantOrder := []string{
+		"older tool results compacted",
+		"oldest tool round dropped",
+		"latest observation reduced",
+	}
+	last := -1
+	for _, want := range wantOrder {
+		index := strings.Index(got, want)
+		if index <= last {
+			t.Fatalf("degradation %q out of order in %q", want, got)
+		}
+		last = index
+	}
+	if prepared.EstimatedTokens+prepared.MaxTokens+contextTokenMargin > agent.cfg.ContextTokens {
+		t.Fatalf("prepared prompt exceeds context: %+v", prepared)
+	}
+}
+
+func TestDuplicateObservationKeepsPriorFullState(t *testing.T) {
+	call := ToolCall{Function: FunctionCall{Name: "dom"}}
+	result := ToolResult{Text: "full page state", Observe: true}
+	var hash [32]byte
+	haveHash := false
+	messages := []PromptMessage{
+		{Role: "system", Content: "system"}, {Role: "user", Content: "task"},
+	}
+	for round := range maxToolRounds + 2 {
+		id := fmt.Sprintf("%d", round)
+		messages = append(messages,
+			PromptMessage{Role: "assistant", ToolCalls: []ToolCall{{ID: id}}},
+			PromptMessage{Role: "tool", ToolCallID: id, Content: observationToolStub},
+			makeObservationMessage(call, result, 1024, &hash, &haveHash),
+		)
+	}
+	compacted := compactTaskMessages(messages, 2)
+	joined := fmt.Sprint(compacted)
+	if !strings.Contains(joined, "full page state") || !strings.Contains(joined, unchangedObservation) {
+		t.Fatalf("duplicate observation lost current state: %+v", compacted)
+	}
+}
+
+func TestObservationStubsPairByRoundOrder(t *testing.T) {
+	messages := []PromptMessage{
+		{Role: "system", Content: "system"}, {Role: "user", Content: "task"},
+		{Role: "assistant", ToolCalls: []ToolCall{{ID: "one"}, {ID: "two"}}},
+		{Role: "tool", ToolCallID: "one", Content: observationToolStub},
+		{Role: "tool", ToolCallID: "two", Content: observationToolStub},
+		{Role: "user", Content: "Observation from screenshot:\nfirst"},
+		{Role: "user", Content: "Observation from dom:\nsecond"},
+	}
+	compacted := compactTaskMessages(messages, 2)
+	if compacted[3].Content != supersededToolStub || compacted[4].Content != observationToolStub {
+		t.Fatalf("tool stubs paired incorrectly: %+v", compacted)
+	}
+}
+
+func TestOverflowCompactionPreservesStateForUnchangedObservation(t *testing.T) {
+	messages := []PromptMessage{
+		{Role: "system", Content: "system"}, {Role: "user", Content: "task"},
+		{Role: "assistant", ToolCalls: []ToolCall{{ID: "one"}}},
+		{Role: "tool", ToolCallID: "one", Content: observationToolStub},
+		{Role: "user", Content: "Observation from dom:\nfull state"},
+		{Role: "assistant", ToolCalls: []ToolCall{{ID: "two"}}},
+		{Role: "tool", ToolCallID: "two", Content: observationToolStub},
+		{Role: "user", Content: "Observation from dom:\n" + unchangedObservation},
+	}
+	compacted := compactAfterContextError(messages, 2)
+	joined := fmt.Sprint(compacted)
+	if !strings.Contains(joined, "full state") || !strings.Contains(joined, unchangedObservation) {
+		t.Fatalf("overflow compaction orphaned unchanged observation: %+v", compacted)
+	}
+}
+
+func TestShrinkObservationDropsImage(t *testing.T) {
+	messages := []PromptMessage{{
+		Role: "user",
+		Content: []map[string]any{
+			{"type": "text", "text": strings.Repeat("x", 2048)},
+			{"type": "image_url", "image_url": map[string]string{"url": "data:image/jpeg;base64,AAAA"}},
+		},
+	}}
+	shrunk, changed := shrinkLatestObservation(messages, true)
+	if !changed {
+		t.Fatal("multimodal observation was not reduced")
+	}
+	parts := shrunk[0].Content.([]map[string]any)
+	if len(parts) != 1 || len(parts[0]["text"].(string)) >= 2048 {
+		t.Fatalf("reduced observation = %+v", parts)
 	}
 }
 
@@ -372,7 +555,7 @@ func TestContextOverflowCompactsAndRetries(t *testing.T) {
 		requests++
 		if requests == 1 {
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprint(w, `{"error":{"type":"exceed_context_size_error"}}`)
+			fmt.Fprint(w, `{"error":{"type":"context_length_exceeded"}}`)
 			return
 		}
 		sse(w, map[string]any{"choices": []any{
@@ -398,11 +581,54 @@ func TestContextOverflowCompactsAndRetries(t *testing.T) {
 	}
 }
 
+func TestContextOverflowUsesGraduatedThirdAttempt(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		if requests == 1 {
+			sse(w, map[string]any{"choices": []any{map[string]any{"delta": map[string]any{
+				"tool_calls": []any{map[string]any{
+					"index": 0, "id": "observe-1", "type": "function",
+					"function": map[string]string{"name": "observe", "arguments": `{}`},
+				}},
+			}}}})
+			return
+		}
+		if requests <= 3 {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":{"type":"exceed_context_size_error"}}`)
+			return
+		}
+		sse(w, map[string]any{"choices": []any{
+			map[string]any{"delta": map[string]string{"content": "recovered"}},
+		}})
+	}))
+	defer server.Close()
+	agent := New(Config{LlamaURL: server.URL, DataDir: t.TempDir(), Executor: observationExecutor{}})
+	result, err := agent.Handle(context.Background(), "current")
+	if err != nil || result.Reply != "recovered" || requests != 4 {
+		t.Fatalf("result=%+v err=%v requests=%d", result, err, requests)
+	}
+}
+
 type noDefinitionsExecutor struct{}
 
 func (noDefinitionsExecutor) Definitions() []Tool { return nil }
 func (noDefinitionsExecutor) Execute(context.Context, string, json.RawMessage) (ToolResult, error) {
 	return ToolResult{}, nil
+}
+
+type observationExecutor struct{}
+
+func (observationExecutor) Definitions() []Tool {
+	return []Tool{{Name: "observe", Schema: schema(`{"type":"object"}`)}}
+}
+
+func (observationExecutor) Execute(context.Context, string, json.RawMessage) (ToolResult, error) {
+	return ToolResult{
+		Text: strings.Repeat("page state ", 1000), ImageJPEG: []byte("jpeg"),
+		Summary: "Observed", Observe: true,
+	}, nil
 }
 
 func TestContextCancelStops(t *testing.T) {

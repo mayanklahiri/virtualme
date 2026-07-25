@@ -60,7 +60,8 @@ actuation, and bounded bash execution. Browser interactions use power-law
 pauses before and after each action plus humanized typing and scrolling
 cadence. DOM observations carry the page URL and title, omit layout-only
 noise, and fit the default 32768-token context;
-`read_page` emits a structured YAML digest of up to 64000 bytes, collapsing
+`read_page` emits a structured YAML digest capped at 24576 bytes at the default
+context (scaling from 4 to 64 KiB with configured context), collapsing
 layout tables while preserving links, grouping numbered feed rows into
 explicit article fields (including ready-to-copy `title_link`, score, comments,
 and comment URL), and retaining structured links in data tables,
@@ -78,8 +79,12 @@ schemas, and serializes manual calls through the job queue;
 manual results and timings enter the persistent activity ledger. Tool results
 render by shape: page-shaped JSON becomes a linked title plus plain text,
 KEY=value runs become sorted tables, and `read_page` YAML digests become
-collapsible trees. Manual result text is capped at 64 KiB. Completions may use
-one quarter of the configured context; a token-limit stop gains an explicit
+collapsible trees. Manual result text is capped at 64 KiB. Before every model
+call, a calibrated conservative estimator budgets messages and tool schemas,
+supersedes stale observations, compacts older tool results, and adaptively
+allocates up to one quarter of configured context for completion. Server-side
+context rejection triggers hard compaction and then observation/image
+reduction before failure. A token-limit stop gains an explicit
 `…[response truncated at token limit]` marker.
 The read-only `/data` console tab provides icon/list single-directory browsing,
 sortable columns and recursive size bars, `?path=` deep links, a remembered
@@ -200,3 +205,6 @@ checked generated files under `docs/src/generated/` or `docs/src/styles/`.
 | [029](specs/029-readpage-goldens.md) | `read_page` DOM goldens, layout-table fidelity, 32K context, and proportionate caps |
 | [030](specs/030-docs-site.md) | Static Astro docs/marketing site, shared themes, source-checkout CLI, and Pages publication |
 | [031](specs/031-master-config.md) | Accepted master configuration schema/exporter follow-up; not yet implemented |
+| [032](specs/032-assistant-notifications.md) | Accepted durable assistant-notifications follow-up; not yet implemented |
+| [033](specs/033-telegram.md) | Accepted authorized Telegram integration follow-up; not yet implemented |
+| [034](specs/034-agent-context-budget.md) | Preflight agent context budgeting, scaled observations, adaptive completions, and graduated recovery |

@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-const readPageCap = 64000
-
 var yamlKeyOrder = map[string][]string{
 	"":     {"title", "url", "head", "body"},
 	"head": {"lang", "description", "canonical", "og"},
@@ -171,23 +169,53 @@ func encodeSequence(items []any, indent int, context string) string {
 	return strings.Join(lines, "\n")
 }
 
-func digestToYAML(digest map[string]any) string {
+func digestToYAML(digest map[string]any, limit int) string {
+	if limit <= 0 {
+		limit = observationPromptCap(defaultContextTokens)
+	}
 	pruneEmpty(digest)
 	text := encodeYAML(digest)
-	if len(text) <= readPageCap {
+	if len(text) <= limit {
 		return text
 	}
 	// Reserve room for the marker line so the marker itself never overflows.
 	markerRoom := len("\t- note: \"truncated: page digest exceeded budget\"") + 1
-	for len(text)+markerRoom > readPageCap && dropLastBodyNode(digest) {
+	for len(text)+markerRoom > limit && dropLastBodyNode(digest) {
 		text = encodeYAML(digest)
 	}
 	appendBudgetMarker(digest)
 	text = encodeYAML(digest)
-	if len(text) > readPageCap {
-		return text[:readPageCap]
+	if len(text) > limit {
+		return minimalTruncatedYAML(digest, limit)
 	}
 	return text
+}
+
+func minimalTruncatedYAML(digest map[string]any, limit int) string {
+	fallback := map[string]any{
+		"body": []any{map[string]any{"note": "truncated: page digest exceeded budget"}},
+	}
+	for _, key := range []string{"title", "url"} {
+		value, ok := digest[key].(string)
+		if !ok || value == "" {
+			continue
+		}
+		fallback[key] = value
+		if encoded := encodeYAML(fallback); len(encoded) > limit {
+			delete(fallback, key)
+		}
+	}
+	if encoded := encodeYAML(fallback); len(encoded) <= limit {
+		return encoded
+	}
+	const marker = "note: \"truncated\"\n"
+	if len(marker) <= limit {
+		return marker
+	}
+	if limit > 0 {
+		return "\n"
+	}
+	return ""
 }
 
 // pruneEmpty drops empty strings, sequences, and mappings recursively so the

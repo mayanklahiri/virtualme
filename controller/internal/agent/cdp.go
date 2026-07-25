@@ -299,7 +299,7 @@ func readServerFrame(reader *bufio.Reader) ([]byte, byte, bool, error) {
 }
 
 // ReadPage returns a structured YAML digest of the current page.
-func (c *CDP) ReadPage(ctx context.Context) (string, error) {
+func (c *CDP) ReadPage(ctx context.Context, limit int) (string, error) {
 	var result struct {
 		Result struct {
 			Value map[string]any `json:"value"`
@@ -313,7 +313,7 @@ func (c *CDP) ReadPage(ctx context.Context) (string, error) {
 	if result.Result.Value == nil {
 		return "", nil
 	}
-	return digestToYAML(result.Result.Value), nil
+	return digestToYAML(result.Result.Value, limit), nil
 }
 
 // DumpDOM returns the current page in the offline read_page fixture format.

@@ -120,9 +120,12 @@ the page title.” The agent observes screenshots, rendered DOM, and read-only
 CDP state; all browser actions use `xdotool` mouse/keyboard input on `:99`.
 The chat timeline shows each tool step. Use the Stop button to cancel an
 in-flight model request, shell command, or runaway task.
-Prefer `read_page` for page content: it preserves links while collapsing
-layout tables. The default llama context is 32768 tokens; a reply that reaches
-its completion limit ends with `…[response truncated at token limit]`.
+Use `dom_query` for a specific element or value and `read_page` for broad page
+content; it preserves links while collapsing layout tables. At the default
+32768-token context, model-facing page observations are capped at 24576 bytes.
+The agent preflights context, compacts stale state, and adapts completion space;
+a reply that reaches its limit ends with
+`…[response truncated at token limit]`.
 
 Chat and agent work runs sequentially through the reliable Valkey queue;
 additional messages wait instead of returning a busy error. Closing the browser

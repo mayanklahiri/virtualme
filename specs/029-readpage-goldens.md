@@ -127,3 +127,15 @@ authoritative.
 4. Asking for five linked stories produces five complete Markdown rows and
    uses real comment-page links.
 5. `/master-update` reconciles repository documentation and skills.
+
+## Amendments
+
+### 2026-07-25 — Context-budget supersession
+
+Spec 034 supersedes §5's independent prompt limits. At the default 32768-token
+context, model-facing `read_page` YAML and observation text are capped at
+24576 bytes and scale with configured context; the 64 KiB stored-step and
+manual transport ceilings remain unchanged. Completion `max_tokens` is now
+adaptive within 1024 through one quarter of context after a conservative
+preflight prompt estimate and 512-token margin. Spec 034 defines the complete
+compaction and overflow-recovery policy.

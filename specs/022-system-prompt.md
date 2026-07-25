@@ -115,3 +115,11 @@ content and no tool call after a valid DOM observation. The agent now retries
 one such empty terminal completion per task. A second empty completion returns
 an explicit failed response instead of silently persisting a blank assistant
 message. Hermetic coverage locks the retry and recovery path.
+
+### 2026-07-25 — Context-aware observation policy
+
+Spec 034 adds one compact tool-selection rule for the Gemma-class edge model:
+use `dom_query` for a specific element or value, reserve `read_page` for broad
+page content, and use screenshots only when visual layout is needed to ground
+an action. This reduces avoidable full-page observations while leaving tool
+signatures exclusively in their injected schemas.

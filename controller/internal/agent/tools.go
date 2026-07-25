@@ -330,7 +330,7 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 		}
 		return ToolResult{Text: text, Summary: "Observed rendered DOM", Observe: true}, err
 	case "read_page":
-		text, err := t.cdp.ReadPage(ctx)
+		text, err := t.cdp.ReadPage(ctx, observationPromptCap(t.cfg.ContextTokens))
 		return ToolResult{Text: text, Summary: "Read page digest", Observe: true}, err
 	case "dom_query":
 		return t.domQuery(ctx, raw)

@@ -211,8 +211,10 @@ mouse/keyboard input or a bounded bash tool. CDP is method-allowlisted and
 never performs input or navigation.
 The console shows each tool step and its screenshot; Stop cancels the active
 model call or tool process.
-Long replies may use one quarter of the default 32768-token context. If
-generation reaches that limit, the reply ends with
+The agent estimates prompt size before every model call, supersedes stale
+observations, compacts older tool results, and adapts the reply allowance to
+the remaining default 32768-token context (up to one quarter). If generation
+reaches that limit, the reply ends with
 `…[response truncated at token limit]`.
 
 Use `/tools` to inspect all model-callable tools plus manual-only development
@@ -221,8 +223,9 @@ the server schemas, calls join the same sequential queue as chat/project work,
 and results up to 64 KiB enter the Jobs activity ledger. Results render by
 shape: page-shaped JSON becomes a linked title plus plain text, `KEY=value`
 runs become sorted tables, manual screenshots omit the agent's coordinate
-grid, and `read_page` YAML renders as a collapsible tree. `read_page` emits up
-to 64000 bytes, treats layout tables as containers so links survive, and
+grid, and `read_page` YAML renders as a collapsible tree. At the default model
+context, model-facing `read_page` YAML is capped at 24576 bytes (the cap scales
+with context), treats layout tables as containers so links survive, and
 groups numbered feeds into explicit article fields including a ready-to-copy
 linked title, score, comments, and comment URL. Real data tables retain
 structured links. This can invoke `bash` and browser actuation;
@@ -376,6 +379,9 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [029](specs/029-readpage-goldens.md) | `read_page` DOM goldens, layout-table fidelity, 32K context, and proportionate caps |
 | [030](specs/030-docs-site.md) | Static Astro documentation/marketing site, shared themes, local docs CLI, and orphan-branch Pages publication |
 | [031](specs/031-master-config.md) | Accepted configuration schema/exporter follow-up; not yet implemented |
+| [032](specs/032-assistant-notifications.md) | Accepted durable assistant-notifications follow-up; not yet implemented |
+| [033](specs/033-telegram.md) | Accepted authorized Telegram integration follow-up; not yet implemented |
+| [034](specs/034-agent-context-budget.md) | Preflight agent context budgeting, scaled observations, adaptive completions, and graduated recovery |
 
 ### CI/CD
 
