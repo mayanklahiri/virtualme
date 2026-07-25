@@ -15,10 +15,10 @@
 
 ## 1. Diagnosis (evidence, 2026-07-23)
 
-Reproduced against a live container on `https://news.ycombinator.com/`:
+Reproduced against a live container on a dense news-feed page:
 
 1. **The CDP transport is healthy.** `DOMSnapshot.captureSnapshot` returns one unfragmented 158 KB websocket frame of valid JSON. Playwright is not involved anywhere in the runtime path (the Go controller speaks raw CDP; layer 007's `playwright-core` is dead weight).
-2. **The model never sees the DOM it asked for.** The compacted snapshot serializes to ~69 KB; the `dom` tool paginates it to a ~48 KiB page (`domCap`), but the observation message is then hard-truncated to 8 KiB (`observationTextCap`) — cut mid-JSON. For Hacker News that is the page header plus part of one story row; every story title lies beyond the cut. The budget is further wasted on layout-only wrappers (`tr`/`td`/`span` with no text and no attributes) and full-precision float boxes (`"box":[83.828125,129,603.765625,10]`).
+2. **The model never sees the DOM it asked for.** The compacted snapshot serializes to ~69 KB; the `dom` tool paginates it to a ~48 KiB page (`domCap`), but the observation message is then hard-truncated to 8 KiB (`observationTextCap`) — cut mid-JSON. For a dense news feed that is the page header plus part of one story row; every story title lies beyond the cut. The budget is further wasted on layout-only wrappers (`tr`/`td`/`span` with no text and no attributes) and full-precision float boxes (`"box":[83.828125,129,603.765625,10]`).
 3. **`selectorHint` misleads the model.** It is a case-insensitive substring filter, but nothing says so; the model passes CSS selectors (observed: `tr[id*="49022152"] td a`), which match nothing and return `{"elements":[]}`.
 4. **`navigate` returns before the page settles**, so an immediately following `dom` may observe the previous page.
 5. **Step artifacts don't record observation text** (`steps.jsonl` has `args`/`summary`/screenshot only), so failures like the above are invisible after the fact.
@@ -66,7 +66,7 @@ Node >= 22, zero deps, global `WebSocket`. Structure: a small flow runner + per-
 Initial flows:
 
 1. **`lahiri-dom`** — chat: navigate to `https://www.lahiri.me`, wait for load, read the DOM, report who the page belongs to and their current employer, and take a screenshot. Hard: a `navigate` step observes a `lahiri.me` URL with `ready:true`; a `dom` step's text contains `Lahiri` and `Oracle`; a `screenshot` step's text matches `screenshot 1024x\d+ API space` (the token-bounded resize); the step's inline thumbnail data URL decodes to <= 32 KiB. Soft: final reply mentions `Lahiri` and `Oracle`.
-2. **`hn-top10`** — chat: navigate to `https://news.ycombinator.com`, read the DOM, list the top 10 article titles. Hard: a `dom` step's text contains `Hacker News` and at least 10 `item?id=` occurrences (one per story row). Soft: final reply contains a numbered list of >= 5 items.
+2. **`lahiri-readpage`** — chat: navigate to `https://www.lahiri.me`, use `read_page`, and list every article/link on the page with its title and destination. Hard: a `navigate` step observes a `lahiri.me` URL with `ready:true`; a `read_page` step's text parses under the spec 027 YAML subset to a digest whose `body` contains at least 5 nodes carrying absolute `href` values and at least one heading node. Soft: final reply contains a list of >= 3 items. (Replaced the original second flow per the amendment of 2026-07-24 below.)
 3. **`readpage-example`** — chat: navigate to `https://example.com` and report the page's heading using `read_page`. Hard: a `read_page` or `dom` step's text contains `Example Domain`. Soft: final reply mentions it.
 
 Exit code: number of hard-failed flows (0 = success).
@@ -140,3 +140,26 @@ includes `test/e2e.sh` as a hard prerequisite:
 `scripts/check.sh` is unaffected (constitution rule 5: e2e and soak both need
 Docker and are outside the deterministic gate). The `soak` CLI subcommand's
 help text notes that soak includes the full e2e suite.
+
+### 2026-07-24 — Live-test site allowlist; news-feed flow moves to lahiri.me
+
+Automated suites may target exactly two external sites: `https://www.lahiri.me`
+and `https://www.example.com`. No other external URL may appear in any
+automated test, spec, or prompt used by tests. Consequences:
+
+1. The original second soak flow (which browsed a third-party news
+   aggregator) is retired and already deleted from `test/soak.mjs` by this
+   amendment. Its purpose — multi-item extraction from a dense feed of
+   links — is carried by the replacement flow `lahiri-readpage` (defined in
+   §5a as rewritten), which additionally pressure-tests the spec 027
+   structured `read_page` digest: the flow's hard oracle parses the digest
+   and counts link nodes instead of grepping raw DOM text. Executor: add
+   `lahiri-readpage` to `test/soak.mjs` with or after spec 027 execution
+   (the oracle needs the YAML digest and can reuse the spec 027 subset
+   parser module); the soak runner itself is unchanged.
+2. By operator decision this amendment also rewrote the historic §1 and §5a
+   text of this spec, and the flow lists in spec 022, to remove the retired
+   site's name and URL from the repository entirely — a recorded, deliberate
+   exception to constitution rule 4's no-rewrite posture, limited to
+   scrubbing references to that site.
+3. Spec 027 §8 binds future work to the same two-site allowlist.

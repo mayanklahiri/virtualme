@@ -48,16 +48,6 @@ const excerpt = (text, n = 160) =>
  *             soft: (r: FlowResult) => string[] }} Flow
  */
 
-/**
- * Count non-overlapping occurrences of needle in haystack.
- * @param {string} haystack @param {string} needle
- */
-function count(haystack, needle) {
-  let total = 0;
-  for (let at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + needle.length)) total++;
-  return total;
-}
-
 /** @param {FlowResult} r @param {string} tool */
 const stepsFor = (r, tool) => r.steps.filter((s) => s.tool === tool);
 /** @param {FlowResult} r @param {string} tool */
@@ -110,28 +100,6 @@ const flows = [
       if (!/lahiri/i.test(r.reply)) problems.push('final reply does not mention "Lahiri"');
       if (!/oracle/i.test(r.reply)) problems.push('final reply does not mention "Oracle"');
       return problems;
-    },
-  },
-  {
-    name: "hn-top10",
-    prompt:
-      "Navigate to https://news.ycombinator.com and wait for it to load. " +
-      "Then read the DOM and list the titles of the top 10 articles.",
-    hard(r) {
-      const problems = [];
-      if (stepsFor(r, "navigate").length === 0) problems.push("no navigate step ran");
-      const dom = textOf(r, "dom");
-      if (stepsFor(r, "dom").length === 0) problems.push("no dom step ran");
-      else {
-        if (!dom.includes("Hacker News")) problems.push(`dom observation lacks "Hacker News": ${excerpt(dom)}`);
-        const stories = count(dom, "item?id=");
-        if (stories < 10) problems.push(`dom observation shows ${stories} story rows (item?id=), want >= 10`);
-      }
-      return problems;
-    },
-    soft(r) {
-      const listed = (r.reply.match(/^\s*(?:\d+[.)]|[-*])\s+\S/gm) ?? []).length;
-      return listed >= 5 ? [] : [`final reply lists ${listed} items, want >= 5`];
     },
   },
   {

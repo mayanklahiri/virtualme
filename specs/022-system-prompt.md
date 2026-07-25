@@ -79,7 +79,7 @@ You are Virtual Me, a private assistant running locally in the user's own contai
 ## 6. Tests and docs
 
 - Hermetic Go: `TestPromptsEmbedded` — both exported strings non-empty, contain every placeholder exactly once (agent) / no placeholders (chat), no `{{` remains after interpolation with dummy values; a golden test locking the interpolated output for fixed inputs (so accidental edits fail loudly).
-- Soak: `./cli.sh soak` — all flows pass with the new prompt (this is the real gate; the prompt rewrite must not regress `lahiri-dom`, `hn-top10`, `readpage-example`).
+- Soak: `./cli.sh soak` — all flows pass with the new prompt (this is the real gate; the prompt rewrite must not regress `lahiri-dom`, `readpage-example`, or the other live flows).
 - e2e chat probe unchanged.
 - Docs: `/master-update` — README link (§3.4), develop skill (prompts package row + "wording changes need a spec amendment"), operate skill unchanged.
 
@@ -102,8 +102,9 @@ You are Virtual Me, a private assistant running locally in the user's own contai
   directly.
 - Hermetic tests lock placeholder cardinality, chat's placeholder-free source,
   fallback-chat wiring, complete interpolation, and fixed-output golden text.
-- The rebuilt-image soak passed `lahiri-dom`, `hn-top10`,
-  `readpage-example`, `tools-roundtrip`, and `jobs-queue-probe`.
+- The rebuilt-image soak passed `lahiri-dom`, `readpage-example`,
+  `tools-roundtrip`, `jobs-queue-probe`, and the since-retired second
+  browse flow (see the spec 012 site-allowlist amendment of 2026-07-24).
 - llama.cpp `/tokenize` measured 327 tokens for the interpolated agent prompt
   with the environment-manifest content excluded, below the 350-token limit.
 
