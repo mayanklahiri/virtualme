@@ -33,7 +33,7 @@ Current `index.html` hero packs the health pill and all stats into one wrapping 
 1. **Hero** replacement (removes the em-dash and the "watching the desk so you don't have to" cliche):
    - eyebrow: `Private background agent`
    - h1: `Good to see you.` (kept: short, human, not a cliche)
-   - body: `<strong>Virtual Me</strong> runs a private browser, a local model, and an agent loop on this machine. Nothing leaves the box.`
+   - body: `<strong>Virtual Me</strong> runs a private browser, a local model, and an agent loop on this machine. Data stored on your hard drive. Nothing leaves the box.`
 2. **Status page stale count** (confirmed live): `render.js` builds the healthy-state detail string; replace `All six supervised services are healthy.` with a computed `All ${services.length} supervised services are healthy.` so it can never go stale again.
 3. **Banned phrases** anywhere in SPA copy (grep and replace with plain statements): `so you don't have to`, `supercharge`, `seamless`, `effortless`, `unleash`, `empower`, `delve`, `elevate`, `game-changing`, `AI-powered`. Quick-link card sub-lines are already plain; keep them.
 4. Em-dash sweep: `grep -n "—" controller/web/static/index.html controller/web/static/js/*.js` — replace each visible instance with a period, comma, or colon per sentence sense. The `—` placeholder glyphs for unset values (`<strong id="home-host">—</strong>`) are **data placeholders, not copy**: replace them with `…` to satisfy the no-em-dash rule without inventing values.
