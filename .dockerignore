@@ -1,7 +1,15 @@
 *
 !controller
+!controller/**
 !docker
+!docker/**
 !package.json
 !package-lock.json
 !scripts/build-web.sh
 !scripts/build-icons.mjs
+
+# Generated / host-local — must not bust COPY checksums or overwrite fetched pins.
+controller/web/dist
+controller/web/static/fonts
+controller/web/static/icons
+**/*.tmp

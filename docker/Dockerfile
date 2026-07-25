@@ -1,16 +1,32 @@
 # syntax=docker/dockerfile:1
 FROM golang:1.26-trixie AS controller-build
-ARG VERSION=dev
 WORKDIR /src
+
+# Tooling for fetch-assets + npm web build (rarely changes).
+RUN apt-get update && apt-get install -y --no-install-recommends unzip nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pinned fonts/icons — cache until the pin script changes.
+COPY controller/tools/fetch-assets.sh controller/tools/fetch-assets.sh
+RUN bash controller/tools/fetch-assets.sh
+
+# Exact-pinned npm toolchain — cache until package-lock changes.
 COPY package.json package-lock.json ./
+RUN npm ci
+
+# Minify SPA — invalidated by web sources / build scripts only.
 COPY scripts/build-web.sh scripts/build-web.sh
 COPY scripts/build-icons.mjs scripts/build-icons.mjs
-COPY controller/ controller/
-RUN if [ -f controller/tools/fetch-assets.sh ]; then \
-      apt-get update && apt-get install -y --no-install-recommends unzip nodejs npm \
-      && bash controller/tools/fetch-assets.sh; \
-    fi
-RUN if [ -f scripts/build-web.sh ]; then npm ci && bash scripts/build-web.sh; fi
+COPY controller/web/static/ controller/web/static/
+RUN bash scripts/build-web.sh
+
+# Go binaries — invalidated by Go/prompt source edits (VERSION only affects this step).
+COPY controller/go.mod controller/go.mod
+COPY controller/embed.go controller/embed.go
+COPY controller/cmd/ controller/cmd/
+COPY controller/internal/ controller/internal/
+COPY controller/prompts/ controller/prompts/
+ARG VERSION=dev
 RUN cd controller && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/controller ./cmd/controller
 RUN cd controller && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ttsd ./cmd/ttsd
 

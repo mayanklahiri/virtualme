@@ -798,3 +798,17 @@ Dockerfile. The layer numbering gap is permanent (layers are append-only;
 dependency of the Debian `novnc` package (layer 004). `system-manifest.sh` no
 longer uses `node` for JSON escaping (pure-bash escaper) and drops the `node`
 tools entry; the image label no longer mentions Playwright.
+
+### 2026-07-25 — Cache-friendly controller-build stage
+
+§4's `controller-build` stage copied all of `controller/` before
+`fetch-assets.sh`, so any Go/SPA edit invalidated the apt install, pinned
+font/icon download, `npm ci`, web minify, and both `go build`s. Split the
+stage into independent cache layers (slowest first): apt tooling → copy +
+run `fetch-assets.sh` alone → `npm ci` from the lockfile → copy web static
+sources + minify → copy Go/prompt sources + build controller/ttsd. Move
+`ARG VERSION` to immediately above the controller `go build` so release
+`--build-arg VERSION=...` does not bust earlier layers. `.dockerignore`
+excludes host-local `controller/web/dist`, `web/static/fonts`,
+`web/static/icons`, and `*.tmp` so generated assets cannot overwrite fetched
+pins or churn COPY checksums.
