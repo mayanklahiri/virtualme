@@ -33,15 +33,17 @@ jigglerSwitch.addEventListener("click", () => {
 });
 const schedulerSwitch = document.querySelector("#scheduler-switch");
 schedulerSwitch.addEventListener("click", () => {
-  // The switch reflects "paused"; scheduler-set carries "enabled" (running).
+  // Cockpit polarity: the lamp is lit while the scheduler runs, so pressing
+  // a lit button pauses it. scheduler-set carries "enabled" (running).
   socket.send({
     type: "scheduler-set",
-    enabled: schedulerSwitch.getAttribute("aria-checked") === "true",
+    enabled: schedulerSwitch.getAttribute("aria-checked") !== "true",
   });
 });
-for (const hint of document.querySelectorAll(".qo-hint")) {
-  hint.addEventListener("click", () => {
-    hint.closest(".qo-row")?.classList.toggle("qo-open");
+// Tap/click a label to pin its tooltip open on touch devices.
+for (const label of document.querySelectorAll(".qo-label")) {
+  label.addEventListener("click", () => {
+    label.closest(".qo-cell")?.classList.toggle("qo-open");
   });
 }
 

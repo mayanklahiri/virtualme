@@ -180,6 +180,7 @@
         <h1 id="status-page-title">Status</h1>
         <div id="status-summary" class="overall pending">
           <div><h2 id="status-title">Waiting for controller</h2><p id="status-detail">Service state will appear when the live connection opens.</p></div>
+          <div class="overall-selectors"><h3>Active time selectors</h3><p id="scheduler-clock"></p><ul id="scheduler-active" class="legend"></ul></div>
           <p>Uptime <strong id="uptime">…</strong></p>
         </div>
         <h2>Services</h2>
@@ -190,20 +191,19 @@
             <dl id="gpu-params" class="gpu-params" hidden></dl>
             <p id="gpu-caption" class="metric-caption">Start with --gpus to pass one through.</p></div>
           </article>
-          <article class="metric selector-card"><h2>Active time selectors</h2><p id="scheduler-clock"></p><ul id="scheduler-active" class="legend"></ul></article>
           <article class="metric quick-options">
             <h2>Quick Options</h2>
-            <div class="qo-row">
-              <div><label id="jiggler-label">Jiggler</label>
-              <button class="qo-hint" type="button" aria-label="What does Jiggler do?">?</button>
-              <p class="qo-help">Ambient humanlike mouse motion every 8–27&nbsp;s while the agent is idle, so the desktop never looks abandoned.</p></div>
-              <button id="jiggler-switch" class="switch" role="switch" aria-checked="false" aria-labelledby="jiggler-label" type="button"><span class="knob"></span></button>
-            </div>
-            <div class="qo-row">
-              <div><label id="scheduler-label">Pause scheduled runs</label>
-              <button class="qo-hint" type="button" aria-label="What does pausing scheduled runs do?">?</button>
-              <p class="qo-help">Stops recurring projects from being promoted into the job queue. Chat and manual tool calls keep running.</p></div>
-              <button id="scheduler-switch" class="switch" role="switch" aria-checked="false" aria-labelledby="scheduler-label" type="button"><span class="knob"></span></button>
+            <div class="qo-grid">
+              <div class="qo-cell">
+                <button id="jiggler-switch" class="qo-btn" role="switch" aria-checked="false" aria-labelledby="jiggler-label" aria-describedby="jiggler-help" type="button"><span class="qo-lamp"></span></button>
+                <button id="jiggler-label" class="qo-label" type="button">Jiggler</button>
+                <p id="jiggler-help" class="qo-tip" role="tooltip">Ambient humanlike mouse motion every 8 to 27 seconds while the agent is idle, so the desktop never looks abandoned.</p>
+              </div>
+              <div class="qo-cell">
+                <button id="scheduler-switch" class="qo-btn" role="switch" aria-checked="false" aria-labelledby="scheduler-label" aria-describedby="scheduler-help" type="button"><span class="qo-lamp"></span></button>
+                <button id="scheduler-label" class="qo-label" type="button">Sched</button>
+                <p id="scheduler-help" class="qo-tip" role="tooltip">Lit while scheduled project runs are promoted into the job queue. Press to pause them; chat and manual tool calls keep running.</p>
+              </div>
             </div>
           </article>
         </div>

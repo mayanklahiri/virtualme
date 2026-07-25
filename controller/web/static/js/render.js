@@ -159,9 +159,10 @@ export function renderState(snapshot) {
     "aria-checked",
     String(snapshot.jiggler?.enabled === true),
   );
+  // Lamp polarity: lit while the scheduler is running (not paused).
   document.querySelector("#scheduler-switch").setAttribute(
     "aria-checked",
-    String(scheduler.paused === true),
+    String(scheduler.paused !== true),
   );
   updateConnectionSnapshot(snapshot);
 }

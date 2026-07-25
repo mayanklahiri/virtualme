@@ -448,12 +448,10 @@ export function initCharts(send) {
     title: "GPU memory",
     series: (sample) => [sample.gpuMemMB],
     seriesNames: () => ["memory used"],
-    unit: "MiB",
+    unit: "GB",
     maxFn: (chartSamples) => Math.max(gpuMemTotalMB, 1, ...chartSamples.map((sample) => sample.gpuMemMB || 0)),
-    formatTick: (value) => value >= 1024
-      ? `${(value / 1024).toFixed(value % 1024 === 0 ? 0 : 1)}GiB`
-      : `${Math.round(value)}MiB`,
-    formatValue: (value) => `${value.toFixed(0)} MiB`,
+    formatTick: (value) => `${(value / 1024).toFixed(value >= 10240 || value % 1024 === 0 ? 0 : 1)}GB`,
+    formatValue: (value) => `${(value / 1024).toFixed(2)} GB`,
   });
   const hasCached = () => view.samples.some((sample) => sample.tokCached > 0);
   const tokensChart = makeChart({

@@ -77,4 +77,10 @@ test("status markup carries split GPU charts and the new LLM/action charts", asy
   assert.ok(!html.includes('id="chart-gpu"'), "combined GPU chart removed");
   assert.ok(html.includes("Quick Options"), "Quick Options panel present");
   assert.ok(html.includes('id="scheduler-switch"'), "scheduler pause switch present");
+  // Cockpit layout: fixed square lamp buttons with labels beneath and
+  // tooltips instead of the old knob switches and "?" hints.
+  assert.equal((html.match(/class="qo-btn"/g) ?? []).length, 2, "two cockpit buttons");
+  assert.equal((html.match(/class="qo-tip" role="tooltip"/g) ?? []).length, 2, "two tooltips");
+  assert.ok(!html.includes("qo-hint"), "old hint buttons removed");
+  assert.ok(!html.includes("qo-row"), "old switch rows removed");
 });

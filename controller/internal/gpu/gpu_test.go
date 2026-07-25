@@ -52,7 +52,8 @@ func TestDetectNVIDIAAndSample(t *testing.T) {
 		info.Sampler != "nvidia-smi" {
 		t.Fatalf("Detect NVIDIA = %+v", info)
 	}
-	wantParams := []KV{{Key: "VRAM", Value: "24564 MiB"}, {Key: "Driver", Value: "560.35"}, {Key: "CUDA", Value: "12.6"}}
+	// 24564 MiB rounds to 24 GB (binary GB, one decimal only when fractional).
+	wantParams := []KV{{Key: "VRAM", Value: "24 GB"}, {Key: "Driver", Value: "560.35"}, {Key: "CUDA", Value: "12.6"}}
 	if !reflect.DeepEqual(info.Params, wantParams) {
 		t.Fatalf("params = %+v, want %+v", info.Params, wantParams)
 	}
@@ -88,7 +89,7 @@ func TestDetectAMDSysfsAndSample(t *testing.T) {
 		info.Sampler != "amd-sysfs" {
 		t.Fatalf("Detect AMD = %+v", info)
 	}
-	if !reflect.DeepEqual(info.Params, []KV{{Key: "VRAM", Value: "24576 MiB"}}) {
+	if !reflect.DeepEqual(info.Params, []KV{{Key: "VRAM", Value: "24 GB"}}) {
 		t.Fatalf("params = %+v", info.Params)
 	}
 	usage, ok := sample(runner, info)
@@ -118,7 +119,7 @@ func TestDetectROCm(t *testing.T) {
 	}
 	info := detect(runner, t.TempDir())
 	if !info.Present || info.Vendor != "amd" || info.Model != "AMD Radeon PRO W7900" ||
-		info.Sampler != "" || !reflect.DeepEqual(info.Params, []KV{{Key: "VRAM", Value: "48000 MiB"}}) {
+		info.Sampler != "" || !reflect.DeepEqual(info.Params, []KV{{Key: "VRAM", Value: "46.9 GB"}}) {
 		t.Fatalf("Detect ROCm = %+v", info)
 	}
 }

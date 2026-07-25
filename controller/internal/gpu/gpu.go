@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -98,6 +99,12 @@ func displayNumber(value float64) string {
 	return strconv.FormatFloat(value, 'f', -1, 64)
 }
 
+// displayGB renders a MiB quantity as GB (binary), one decimal when fractional.
+func displayGB(mib float64) string {
+	gb := math.Round(mib/1024*10) / 10
+	return strconv.FormatFloat(gb, 'f', -1, 64) + " GB"
+}
+
 func detectNVIDIA(r runner) (Info, bool) {
 	output, err := run(r, "nvidia-smi",
 		"--query-gpu=name,memory.total,driver_version,utilization.gpu,memory.used",
@@ -119,7 +126,7 @@ func detectNVIDIA(r runner) (Info, bool) {
 	}
 	info := Info{
 		Present: true, Vendor: "nvidia", Model: model, Sampler: "nvidia-smi",
-		Params: []KV{{Key: "VRAM", Value: displayNumber(total) + " MiB"}, {Key: "Driver", Value: rows[0][2]}},
+		Params: []KV{{Key: "VRAM", Value: displayGB(total)}, {Key: "Driver", Value: rows[0][2]}},
 	}
 	if cuda, cudaErr := run(r, "nvidia-smi", "--query-gpu=cuda_version", "--format=csv,noheader,nounits"); cudaErr == nil {
 		if cudaRows, parseErr := csvRows(cuda); parseErr == nil && len(cudaRows) > 0 &&
@@ -167,7 +174,7 @@ func amdSysfsInfo(sysRoot string) (Info, bool) {
 		}
 		info := Info{Present: true, Vendor: "amd", Model: model, devicePath: device}
 		if total, err := number(readTrimmed(filepath.Join(device, "mem_info_vram_total"))); err == nil {
-			info.Params = append(info.Params, KV{Key: "VRAM", Value: displayNumber(total/(1024*1024)) + " MiB"})
+			info.Params = append(info.Params, KV{Key: "VRAM", Value: displayGB(total / (1024 * 1024))})
 		}
 		if readTrimmed(filepath.Join(device, "gpu_busy_percent")) != "" {
 			info.Sampler = "amd-sysfs"
@@ -229,7 +236,7 @@ func detectROCm(r runner) (Info, bool) {
 	info := Info{Present: true, Vendor: "amd", Model: model}
 	if raw := firstValue(values, "vram total"); raw != "" {
 		if bytes, parseErr := number(raw); parseErr == nil {
-			info.Params = append(info.Params, KV{Key: "VRAM", Value: displayNumber(bytes/(1024*1024)) + " MiB"})
+			info.Params = append(info.Params, KV{Key: "VRAM", Value: displayGB(bytes / (1024 * 1024))})
 		}
 	}
 	return info, true
