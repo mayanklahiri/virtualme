@@ -705,3 +705,40 @@ pins in §7 / §8 (and the live `.github/workflows/*.yml` files) as follows:
 Also set `cache: false` on `actions/setup-go` in CI: the controller module lives
 under `controller/` with no third-party deps and no `go.sum` at the repo root,
 so the default cache restore warned on every check job.
+
+### 2026-07-25 — Self-contained documentation-site tooling
+
+Spec 030 adds an Astro documentation and marketing site. The site is a
+build-time publication surface, not npm CLI runtime code and not part of the
+`virtualme` npm package. It receives this narrow exception to rules 1, 2, 3,
+and 5:
+
+1. `docs/` owns a separate `package.json` and committed lockfile. Its
+   `dependencies` and `devDependencies` are build-time site tooling only, are
+   exact-pinned where declared directly, and may have lockfile-pinned
+   transitive dependencies. They must never be hoisted into the root
+   `package.json`, imported by `bin/` or `src/`, copied into the Docker image,
+   or included by `npm pack`.
+2. Astro may compile and bundle authored sources under `docs/` into a static
+   site. This does not relax the no-build-step rule for CLI runtime code or
+   the plain-ESM requirement for hand-written controller SPA sources.
+3. The generated site is published at the root of an orphan `docs` branch.
+   That branch is a deployment artifact and is the sole exception to the
+   rule that generated artifacts are not committed. The source branch never
+   commits `docs/dist/`.
+4. Installing documentation dependencies is an explicit setup or CI step
+   that may use the network. Once installed, documentation builds, tests,
+   and stale-generated-file checks must be deterministic and network-free.
+   The root canonical `scripts/check.sh` remains deterministic and offline;
+   it may run documentation checks only when their installed toolchain is
+   already present and must not install packages. The documentation workflow
+   performs its own clean install and full site build.
+5. All authored documentation content and site-owned assets remain under
+   `docs/`. Shared design-token source may live under `common/`; deterministic
+   generators copy derived theme CSS into both `docs/` and the controller SPA.
+   Config-reference data generated from the embedded schema is copied into
+   `docs/src/generated/` before the site build.
+
+No other project surface gains permission to add runtime dependencies,
+transpilers, bundlers, committed build output, or network-dependent canonical
+gates from this amendment.
