@@ -160,6 +160,15 @@ func (s *Service) adoptHistory(entries []string) {
 	}
 }
 
+// AgentReplayFrames returns buffered agent-step frames for the latest task,
+// or nil when no agent is configured.
+func (s *Service) AgentReplayFrames() [][]byte {
+	if s.agent == nil {
+		return nil
+	}
+	return s.agent.ReplayFrames()
+}
+
 // HistoryMessage marshals the conversation for per-connection replay.
 func (s *Service) HistoryMessage() []byte {
 	s.mu.Lock()

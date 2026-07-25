@@ -172,6 +172,42 @@ func TestToolLoopThenFinalReply(t *testing.T) {
 	}
 }
 
+func TestAgentStepReplayBuffersLatestTask(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		if requests == 1 {
+			sse(w, map[string]any{"choices": []any{map[string]any{"delta": map[string]any{
+				"tool_calls": []any{map[string]any{
+					"index": 0, "id": "call-1", "type": "function",
+					"function": map[string]string{"name": "echo", "arguments": `{"value":"ok"}`},
+				}},
+			}}}})
+			return
+		}
+		sse(w, map[string]any{"choices": []any{map[string]any{"delta": map[string]string{"content": "finished"}}}})
+	}))
+	defer server.Close()
+	agent := New(Config{LlamaURL: server.URL, DataDir: t.TempDir(), Executor: &fakeExecutor{}})
+	if _, err := agent.Handle(context.Background(), "do it"); err != nil {
+		t.Fatal(err)
+	}
+	frames := agent.ReplayFrames()
+	if len(frames) != 1 {
+		t.Fatalf("replay frames after tool task = %d, want 1", len(frames))
+	}
+	if !strings.Contains(string(frames[0]), `"type":"agent-step"`) {
+		t.Fatalf("replay frame is not an agent-step: %s", frames[0])
+	}
+	// A second task without tool calls resets the buffer to that task's steps.
+	if _, err := agent.Handle(context.Background(), "again"); err != nil {
+		t.Fatal(err)
+	}
+	if frames := agent.ReplayFrames(); len(frames) != 0 {
+		t.Fatalf("replay frames after tool-free task = %d, want 0", len(frames))
+	}
+}
+
 func TestEmptyCompletionRetriesOnce(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

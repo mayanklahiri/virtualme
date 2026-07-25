@@ -33,7 +33,7 @@ test("brand chrome markup and responsive contracts stay intact", async () => {
 test("SPA-visible copy has no banned phrases or em dashes", async () => {
   const files = [
     new URL("index.html", root),
-    ...["agent", "app", "audio-player", "chart", "chat", "conn", "jobs", "mail", "markdown", "nav", "projects", "render", "router", "theme", "tools", "tts", "ws"]
+    ...["agent", "app", "audio-player", "chart", "chat", "conn", "jobs", "mail", "markdown", "markdown-table", "nav", "projects", "render", "router", "theme", "tools", "tts", "ws"]
       .map((name) => new URL(`js/${name}.js`, root)),
   ];
   const copy = (await Promise.all(files.map((file) => readFile(file, "utf8")))).join("\n");

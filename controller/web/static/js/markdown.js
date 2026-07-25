@@ -1,3 +1,5 @@
+import { hasUnescapedPipe, parseTable } from "./markdown-table.js";
+
 // Safe contract fixtures: "<img src=x onerror=…>" remains text and
 // "[x](javascript:alert(1))" remains text. No HTML parsing is used.
 function appendInline(parent, text) {
@@ -32,6 +34,33 @@ function appendInline(parent, text) {
     offset = (match.index ?? 0) + value.length;
   }
   parent.append(document.createTextNode(text.slice(offset)));
+}
+
+function renderTable(table) {
+  const wrap = document.createElement("div");
+  wrap.className = "md-table";
+  const element = document.createElement("table");
+  const buildRow = (cells, tag) => {
+    const row = document.createElement("tr");
+    cells.forEach((cell, index) => {
+      const node = document.createElement(tag);
+      if (table.align[index]) {
+        node.style.textAlign = table.align[index];
+      }
+      appendInline(node, cell);
+      row.append(node);
+    });
+    return row;
+  };
+  const head = document.createElement("thead");
+  head.append(buildRow(table.header, "th"));
+  const body = document.createElement("tbody");
+  for (const cells of table.rows) {
+    body.append(buildRow(cells, "td"));
+  }
+  element.append(head, body);
+  wrap.append(element);
+  return wrap;
 }
 
 function copyButton(text) {
@@ -79,6 +108,14 @@ export function renderMarkdown(text) {
       i++;
       continue;
     }
+    if (hasUnescapedPipe(line)) {
+      const table = parseTable(lines.slice(i));
+      if (table) {
+        fragment.append(renderTable(table));
+        i += table.consumed;
+        continue;
+      }
+    }
     const list = line.match(/^(- |\* |1\. )(.+)$/);
     if (list) {
       const ordered = list[1] === "1. ";
@@ -103,7 +140,8 @@ export function renderMarkdown(text) {
     }
     const paragraph = [];
     while (i < lines.length && lines[i].trim() !== "" && !lines[i].startsWith("```") &&
-      !/^(#{1,3}) /.test(lines[i]) && !/^(- |\* |\d+\. )/.test(lines[i])) {
+      !/^(#{1,3}) /.test(lines[i]) && !/^(- |\* |\d+\. )/.test(lines[i]) &&
+      !(hasUnescapedPipe(lines[i]) && parseTable(lines.slice(i, i + 2)))) {
       paragraph.push(lines[i++]);
     }
     if (paragraph.length === 0) {

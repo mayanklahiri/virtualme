@@ -597,6 +597,9 @@ func main() {
 	})
 	hub.SetOnConnect(func(conn *ws.Conn) {
 		_ = conn.WriteText(chatService.HistoryMessage())
+		for _, frame := range chatService.AgentReplayFrames() {
+			_ = conn.WriteText(frame)
+		}
 		_ = conn.WriteText(chatService.StatsMessage())
 		_ = conn.WriteText(mailService.StatusMessage())
 		_ = conn.WriteText(jobManager.StateMessage())

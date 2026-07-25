@@ -27,7 +27,7 @@
         <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-menu"/></svg>
       </button>
       <strong id="page-title">Home</strong>
-      <div class="conn-watch connecting" data-connection role="status" aria-live="polite">
+      <div class="conn-watch connecting" data-connection>
         <svg class="conn-dial" viewBox="0 0 44 44" aria-hidden="true">
           <circle class="dial-face" cx="22" cy="22" r="20"/>
           <g class="dial-ticks"></g>
@@ -68,7 +68,7 @@
           <div id="theme-options" class="theme-options"></div>
           <div id="variant-options" class="variant-options" aria-label="Color variant"></div>
         </div>
-        <div class="conn-watch connecting" data-connection role="status" aria-live="polite">
+        <div class="conn-watch connecting" data-connection>
           <svg class="conn-dial" viewBox="0 0 44 44" aria-hidden="true">
             <circle class="dial-face" cx="22" cy="22" r="20"/>
             <g class="dial-ticks"></g>
@@ -124,7 +124,7 @@
         </div>
         <ul id="project-list" class="project-list"></ul>
         <p id="projects-empty" class="empty-note" hidden>No projects yet. A project is a task Virtual Me runs on a schedule.</p>
-        <p id="project-error" class="project-error" role="alert"></p>
+        <p id="project-error" class="project-error"></p>
         <dialog id="project-dialog">
           <form id="project-create-form" method="dialog">
             <h2>New project</h2>
@@ -139,7 +139,7 @@
       </section>
 
       <section data-page="project-detail" hidden aria-labelledby="project-detail-title">
-        <p class="project-error" role="alert"></p>
+        <p class="project-error"></p>
         <div id="project-detail"></div>
         <p id="project-detail-missing" class="empty-note" hidden>Project not found. <a href="/projects" data-nav>Return to Projects</a>.</p>
       </section>
@@ -164,7 +164,7 @@
               <p id="queue-empty" class="empty-note" hidden>Queue idle. Nothing upcoming.</p>
             </article>
             <article class="jobs-card"><h2>Activity</h2>
-              <ol id="activity-list" class="activity-list" aria-live="polite"></ol>
+              <ol id="activity-list" class="activity-list"></ol>
               <p id="activity-empty" class="empty-note" hidden>No recorded activity yet.</p>
             </article>
           </div>
@@ -180,7 +180,7 @@
         <div class="tools-grid">
           <nav id="tools-list" class="tools-list" aria-label="Tools"></nav>
           <form id="tool-form" class="tools-form" hidden></form>
-          <aside id="tool-output" class="tool-output" hidden aria-live="polite"></aside>
+          <aside id="tool-output" class="tool-output" hidden></aside>
         </div>
       </section>
 
@@ -191,7 +191,7 @@
           <p>Uptime <strong id="uptime">…</strong></p>
         </div>
         <h2>Services</h2>
-        <ul id="service-list" class="services" aria-live="polite"></ul>
+        <ul id="service-list" class="services"></ul>
         <div class="system-grid">
           <article class="metric gpu-card">
             <div><label>GPU <strong id="gpu-name">none detected</strong></label>
@@ -230,7 +230,7 @@
             <ul id="gpu-legend" class="legend"></ul>
           </figure>
         </div>
-        <div id="chart-tooltip" class="tooltip" role="status" hidden></div>
+        <div id="chart-tooltip" class="tooltip" hidden></div>
       </section>
 
       <section data-page="chat" hidden class="chat-page" aria-labelledby="chat-title">
@@ -241,7 +241,7 @@
             <button id="chat-clear" class="secondary" type="button"><svg class="icon"><use href="/icons.svg#i-trash-2"/></svg><span>Clear</span></button>
           </div>
         </div>
-        <ul id="chat-log" class="chat-log" aria-live="polite"></ul>
+        <ul id="chat-log" class="chat-log"></ul>
         <div id="chat-stats" class="stats-strip">0 queries · 0 prompt + 0 completion tokens · 0 s thinking</div>
         <form id="chat-form" class="chat-form">
           <div id="chat-composer" class="composer">
@@ -252,7 +252,7 @@
             </div>
           </div>
           <div id="chat-busy" class="chat-busy" hidden>
-            <p id="llm-status" class="llm-status" aria-live="polite"></p>
+            <p id="llm-status" class="llm-status"></p>
             <button id="chat-stop" type="button"><svg class="icon"><use href="/icons.svg#i-square"/></svg>Stop</button>
           </div>
         </form>
@@ -273,7 +273,7 @@
             <button id="speech-stop" class="secondary" type="button" hidden><svg class="icon"><use href="/icons.svg#i-square"/></svg>Stop</button>
             <button id="speech-speak" type="button" disabled><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg>Speak</button>
           </div>
-          <p id="speech-status" class="llm-status" aria-live="polite"></p>
+          <p id="speech-status" class="llm-status"></p>
         </div>
         <div class="speech-history-card">
           <h2>History</h2>
@@ -299,7 +299,7 @@
               <button id="mail-send" type="submit"><svg class="icon"><use href="/icons.svg#i-send"/></svg>Send</button>
             </div>
             <small class="mail-help">Prefills a deliverability test addressed to a Gmail inbox. Gmail's headers show SPF/DKIM verdicts.</small>
-            <p id="mail-result" class="mail-result" aria-live="polite"></p>
+            <p id="mail-result" class="mail-result"></p>
           </form>
           <div class="mail-card">
             <h2>Status</h2>

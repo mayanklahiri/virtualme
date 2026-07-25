@@ -117,6 +117,37 @@ type Agent struct {
 	taskID  string
 	taskDir string
 	step    int
+
+	replayMu sync.Mutex
+	replay   [][]byte
+}
+
+const replayCap = 200
+
+// ReplayFrames returns the buffered agent-step frames for the most recent
+// task, so reconnecting clients can restore the step cards that a
+// chat-history re-render wiped.
+func (a *Agent) ReplayFrames() [][]byte {
+	a.replayMu.Lock()
+	defer a.replayMu.Unlock()
+	frames := make([][]byte, len(a.replay))
+	copy(frames, a.replay)
+	return frames
+}
+
+func (a *Agent) resetReplay() {
+	a.replayMu.Lock()
+	a.replay = nil
+	a.replayMu.Unlock()
+}
+
+func (a *Agent) bufferReplay(frame []byte) {
+	a.replayMu.Lock()
+	a.replay = append(a.replay, frame)
+	if len(a.replay) > replayCap {
+		a.replay = a.replay[len(a.replay)-replayCap:]
+	}
+	a.replayMu.Unlock()
 }
 
 // New constructs an agent and its default local tool executor.

@@ -21,6 +21,7 @@ func (a *Agent) beginTask() error {
 	a.taskID = fmt.Sprintf("%d", time.Now().UnixNano())
 	a.taskDir = filepath.Join(a.cfg.DataDir, a.taskID)
 	a.step = 0
+	a.resetReplay()
 	if local, ok := a.tools.(*localTools); ok {
 		local.resetTask(a.taskID)
 	}
@@ -85,6 +86,7 @@ func (a *Agent) recordStep(ctx context.Context, call ToolCall, result ToolResult
 		_, _ = logFile.Write(append(encoded, '\n'))
 		_ = logFile.Close()
 	}
+	a.bufferReplay(encoded)
 	a.cfg.Broadcast(encoded)
 	thumbnail, _ := event["screenshot"].(string)
 	return thumbnail
