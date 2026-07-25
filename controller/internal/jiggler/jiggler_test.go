@@ -29,6 +29,9 @@ func (runner *fakeRunner) Run(_ context.Context, _ string, args, _ []string, _ s
 	if len(args) > 0 && args[0] == "getmouselocation" {
 		return []byte("X=400\nY=300\nSCREEN=0\nWINDOW=1\n"), nil, nil
 	}
+	if len(args) > 0 && args[0] == "getdisplaygeometry" {
+		return []byte("1280 720\n"), nil, nil
+	}
 	return nil, nil, nil
 }
 
@@ -223,6 +226,9 @@ func TestStartDefaultsToEnabled(t *testing.T) {
 	if err := service.Start(ctx); err != nil || !service.Enabled() {
 		t.Fatalf("fresh start = %v, enabled %v (want enabled)", err, service.Enabled())
 	}
+	if service.width != 1280 || service.height != 720 {
+		t.Fatalf("geometry = %dx%d, want 1280x720 from getdisplaygeometry", service.width, service.height)
+	}
 
 	// Only an explicit persisted "0" disables.
 	if err := client.Set(enabledKey, "0"); err != nil {
@@ -232,5 +238,68 @@ func TestStartDefaultsToEnabled(t *testing.T) {
 	disabled.sleep = func(context.Context, time.Duration) bool { return false }
 	if err := disabled.Start(ctx); err != nil || disabled.Enabled() {
 		t.Fatalf("disabled start = %v, enabled %v (want disabled)", err, disabled.Enabled())
+	}
+}
+
+type geometryRunner struct {
+	fakeRunner
+	reply string
+	fail  bool
+}
+
+func (runner *geometryRunner) Run(ctx context.Context, bin string, args, env []string, stdin string) ([]byte, []byte, error) {
+	if len(args) > 0 && args[0] == "getdisplaygeometry" {
+		runner.mu.Lock()
+		runner.calls = append(runner.calls, append([]string(nil), args...))
+		runner.mu.Unlock()
+		if runner.fail {
+			return nil, []byte("err"), fmt.Errorf("no display")
+		}
+		return []byte(runner.reply), nil, nil
+	}
+	return runner.fakeRunner.Run(ctx, bin, args, env, stdin)
+}
+
+func TestSyncDisplayGeometryOverridesAndFallsBack(t *testing.T) {
+	service := testService(&geometryRunner{reply: "1920 1080\n"})
+	service.syncDisplayGeometry(context.Background())
+	if service.width != 1920 || service.height != 1080 {
+		t.Fatalf("got %dx%d", service.width, service.height)
+	}
+
+	fallback := testService(&geometryRunner{reply: "garbage\n"})
+	fallback.width, fallback.height = 800, 600
+	fallback.syncDisplayGeometry(context.Background())
+	if fallback.width != 800 || fallback.height != 600 {
+		t.Fatalf("garbage reply changed geometry to %dx%d", fallback.width, fallback.height)
+	}
+
+	failed := testService(&geometryRunner{fail: true})
+	failed.width, failed.height = 800, 600
+	failed.syncDisplayGeometry(context.Background())
+	if failed.width != 800 || failed.height != 600 {
+		t.Fatalf("failed query changed geometry to %dx%d", failed.width, failed.height)
+	}
+}
+
+func TestMoveReclampsOutsidePoints(t *testing.T) {
+	runner := new(fakeRunner)
+	service := testService(runner)
+	service.setCached(true)
+	service.width, service.height = 200, 100
+	// Force a trajectory that would otherwise use env-sized coords by using
+	// extreme endpoints; clamp must keep every mousemove inside the display.
+	if err := service.move(context.Background(), Point{X: 10, Y: 10}, Point{X: 190, Y: 90}); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range runner.calls {
+		if len(call) < 3 || call[0] != "mousemove" {
+			continue
+		}
+		x, _ := strconv.Atoi(call[1])
+		y, _ := strconv.Atoi(call[2])
+		if x < 2 || x > 197 || y < 2 || y > 97 {
+			t.Fatalf("mousemove outside display: %v", call)
+		}
 	}
 }

@@ -6,9 +6,13 @@ import (
 )
 
 const (
-	targetWidth = 40.0
-	fittsA      = 120.0
-	fittsB      = 160.0
+	targetWidth   = 40.0
+	fittsA        = 300.0
+	fittsB        = 350.0
+	peakVelocity  = 650.0 // px/s; min-jerk peak ≈ 1.875·D/MT
+	minDurationMS = 900
+	maxDurationMS = 4000
+	hardCapMS     = 6000
 )
 
 // Point is an integer display coordinate.
@@ -48,7 +52,13 @@ func clampPoint(point Point, width, height int) Point {
 func movementTime(from, to Point, rng *rand.Rand) int {
 	dist := distance(from, to)
 	value := (fittsA + fittsB*math.Log2(dist/targetWidth+1)) * math.Exp(rng.NormFloat64()*0.08)
-	return int(math.Round(max(250, min(2200, value))))
+	mt := max(minDurationMS, min(maxDurationMS, value))
+	if dist > 0 {
+		// Peak min-jerk velocity is ≈ 1.875·D/MT; stretch MT so it stays ≤ peakVelocity.
+		needed := 1.875 * dist / peakVelocity * 1000
+		mt = max(mt, needed)
+	}
+	return int(math.Round(min(hardCapMS, mt)))
 }
 
 func sampleDelay(rng *rand.Rand) int {
@@ -166,7 +176,7 @@ func Trajectory(from, to Point, width, height int, rng *rand.Rand) []TimedPoint 
 				Y: int(math.Round(float64(to.Y) + math.Sin(angle)*radius)),
 			}, width, height)
 		}
-		duration2 := 90 + rng.Intn(91)
+		duration2 := 180 + rng.Intn(181)
 		points = appendSegment(points, ballisticTarget, correctionTarget, duration2, width, height, .35, rng)
 		if secondCorrection {
 			points = appendSegment(points, correctionTarget, to, 55+rng.Intn(36), width, height, .15, rng)

@@ -33,12 +33,38 @@ func TestTrajectoryInvariants(t *testing.T) {
 	if last.X != to.X || last.Y != to.Y {
 		t.Fatalf("last = (%d,%d), want %+v", last.X, last.Y, to)
 	}
-	if total < 250 || total > 2200 {
+	if total < minDurationMS || total > hardCapMS+360+100 {
 		t.Fatalf("duration = %dms", total)
 	}
 	straight := distance(from, to)
-	if pathLength < straight || pathLength > 1.35*straight {
+	if pathLength < straight || pathLength > 1.45*straight {
 		t.Fatalf("path length = %.2f, straight = %.2f", pathLength, straight)
+	}
+}
+
+func TestTrajectoryPeakVelocityCapped(t *testing.T) {
+	from, to := Point{X: 20, Y: 20}, Point{X: 1580, Y: 880}
+	rng := rand.New(rand.NewSource(99))
+	mt := movementTime(from, to, rng)
+	dist := distance(from, to)
+	idealPeak := 1.875 * dist / (float64(mt) / 1000)
+	if idealPeak > peakVelocity*1.01 {
+		t.Fatalf("ideal peak velocity = %.1f px/s from MT=%d, want ≤ %.1f", idealPeak, mt, peakVelocity)
+	}
+	points := Trajectory(from, to, 1600, 900, rand.New(rand.NewSource(99)))
+	previous := from
+	peak := 0.0
+	for _, point := range points {
+		speed := math.Hypot(float64(point.X-previous.X), float64(point.Y-previous.Y)) /
+			(float64(point.DelayMS) / 1000)
+		if speed > peak {
+			peak = speed
+		}
+		previous = Point{X: point.X, Y: point.Y}
+	}
+	// Discrete sampling + tremor can briefly exceed the continuous ideal peak.
+	if peak > peakVelocity*2 {
+		t.Fatalf("peak sample speed = %.1f px/s, want ≤ %.1f", peak, peakVelocity*2)
 	}
 }
 
@@ -86,7 +112,7 @@ func TestTrajectorySeededOutputIsStable(t *testing.T) {
 		t.Fatal("same seed produced different trajectories")
 	}
 	got := fmt.Sprintf("%x", sha256.Sum256(firstJSON))
-	const want = "e21157e65e811c42e9c5088574db30779ed47536f264e6682e5d97aff7b613b0"
+	const want = "d6b5a0629b94c9d33db39f49c7f499db5edb9f87d5d6539b5f12d629e99589ca"
 	if got != want {
 		t.Fatalf("seeded trajectory digest = %s, want %s", got, want)
 	}

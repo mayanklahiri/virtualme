@@ -214,8 +214,9 @@ func (s *Service) move(ctx context.Context, from, to Point) error {
 		if !s.Enabled() {
 			return errDisabled
 		}
+		clamped := clampPoint(Point{X: point.X, Y: point.Y}, s.width, s.height)
 		stdout, stderr, err := s.runner.Run(ctx, s.xdotool,
-			[]string{"mousemove", strconv.Itoa(point.X), strconv.Itoa(point.Y)},
+			[]string{"mousemove", strconv.Itoa(clamped.X), strconv.Itoa(clamped.Y)},
 			[]string{"DISPLAY=" + s.display}, "")
 		if err != nil {
 			return fmt.Errorf("xdotool: %w: %s%s", err, stdout, stderr)
@@ -225,6 +226,33 @@ func (s *Service) move(ctx context.Context, from, to Point) error {
 		}
 	}
 	return nil
+}
+
+func (s *Service) syncDisplayGeometry(ctx context.Context) {
+	envW, envH := s.width, s.height
+	for attempt := 0; attempt < 3; attempt++ {
+		stdout, _, err := s.runner.Run(ctx, s.xdotool, []string{"getdisplaygeometry"},
+			[]string{"DISPLAY=" + s.display}, "")
+		if err == nil {
+			fields := strings.Fields(string(stdout))
+			if len(fields) >= 2 {
+				width, widthErr := strconv.Atoi(fields[0])
+				height, heightErr := strconv.Atoi(fields[1])
+				if widthErr == nil && heightErr == nil && width >= 5 && height >= 5 {
+					s.width, s.height = width, height
+					if width != envW || height != envH {
+						log.Printf("jiggler: display geometry %dx%d overrides VM_RESOLUTION %dx%d",
+							width, height, envW, envH)
+					}
+					return
+				}
+			}
+		}
+		if attempt < 2 && !s.sleep(ctx, time.Second) {
+			return
+		}
+	}
+	log.Printf("jiggler: getdisplaygeometry failed; using VM_RESOLUTION %dx%d", envW, envH)
 }
 
 // burst runs unconditionally while enabled; the only yield is the agent's
@@ -264,6 +292,7 @@ func (s *Service) burst(ctx context.Context) int {
 // Start loads persisted state and runs until ctx is cancelled.
 // The jiggler defaults to enabled: only an explicit persisted "0" disables it.
 func (s *Service) Start(ctx context.Context) error {
+	s.syncDisplayGeometry(ctx)
 	value, err := s.valkey.Get(enabledKey)
 	if err != nil {
 		return fmt.Errorf("load enabled state: %w", err)

@@ -2,4 +2,4 @@
 export DISPLAY="$VM_DISPLAY"
 until xdpyinfo >/dev/null 2>&1; do sleep 0.2; done
 exec x11vnc -display "$VM_DISPLAY" -forever -shared -nopw -localhost \
-  -rfbport 5900 -noxdamage -noxfixes -quiet
+  -rfbport 5900 -noxdamage -cursor most -quiet
