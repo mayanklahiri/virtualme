@@ -43,7 +43,8 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `bash test/e2e.sh` | Run full end-to-end tests (spec 003) |
 | `E2E_AGENT=1 bash test/e2e.sh` | Include the slow real vision/browser-agent probe |
 | `./cli.sh soak [--no-build]` | Rebuild once, run the full e2e suite, then run live soak flows on a fresh data dir (spec 012) |
-| `bash controller/tools/fetch-assets.sh` | Fetch pinned fonts, icons, and hero image (specs 003, 005, 011) |
+| `bash controller/tools/fetch-assets.sh` | Fetch pinned fonts and icons (specs 003, 005, 011) |
+| `bash scripts/update-logo.sh` | Regenerate brand icons + home hero from repo-root `LOGO.png` |
 
 The controller's browser agent combines vision screenshots, dense rendered
 DOM and read-only CDP observations, OS-level `xdotool` mouse/keyboard
@@ -95,7 +96,8 @@ three-pane layout with explicit status icons, per-event durations, and
 persisted tool-call/jiggler visibility filters.
 The console home separates health from an aligned host/address/capacity grid,
 shows browser-reachable and container-network addresses plus the controller
-build version, and uses committed outlined-path wordmark/monogram assets. Its
+build version, and uses committed wordmark plus raster logo assets regenerated
+from repo-root `LOGO.png` via `scripts/update-logo.sh`. Its
 connection watch combines server uptime, current websocket duration, and
 motion/reduced-motion-aware live state.
 The default-on jiggler produces bursty humanlike mouse trajectories through

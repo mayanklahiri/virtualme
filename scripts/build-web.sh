@@ -16,11 +16,11 @@ for font in "${FONTS[@]}"; do
 done
 [[ -d "$SRC/icons" ]] && compgen -G "$SRC/icons/*.svg" >/dev/null \
   || { echo "build-web: assets missing; run: bash controller/tools/fetch-assets.sh" >&2; exit 1; }
-[[ -s "$SRC/img/hero-earthrise.jpg" ]] \
-  || { echo "build-web: assets missing; run: bash controller/tools/fetch-assets.sh" >&2; exit 1; }
+[[ -s "$SRC/brand/hero.jpg" ]] \
+  || { echo "build-web: brand/hero.jpg missing; run: bash scripts/update-logo.sh" >&2; exit 1; }
 
 rm -rf "$DIST"
-mkdir -p "$DIST/js" "$DIST/css" "$DIST/fonts" "$DIST/img"
+mkdir -p "$DIST/js" "$DIST/css" "$DIST/fonts" "$DIST/img" "$DIST/brand"
 "$ESBUILD" "$SRC/js/app.js" --bundle --minify --format=esm \
   --sourcemap --sources-content=true --outfile="$DIST/js/app.js"
 "$ESBUILD" "$SRC/css/app.css" --minify \
@@ -29,7 +29,14 @@ cp "$SRC/index.html" "$DIST/index.html"
 for font in "${FONTS[@]}"; do
   cp "$SRC/fonts/$font" "$DIST/fonts/"
 done
-cp "$SRC/img/"* "$DIST/img/"
+# Optional legacy img/ assets (fonts/icons still come from fetch-assets).
+if compgen -G "$SRC/img/*" >/dev/null; then
+  cp "$SRC/img/"* "$DIST/img/"
+fi
 cp "$SRC/brand/favicon.svg" "$DIST/favicon.svg"
+cp "$SRC/brand/favicon.ico" "$DIST/favicon.ico"
+cp "$SRC/brand/apple-touch-icon.png" "$DIST/apple-touch-icon.png"
+cp "$SRC/brand/"*.png "$DIST/brand/"
+cp "$SRC/brand/hero.jpg" "$DIST/brand/hero.jpg"
 node scripts/build-icons.mjs
 echo "build-web: OK"

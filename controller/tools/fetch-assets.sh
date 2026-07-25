@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
 # Fetch pinned web fonts and selected Lucide SVGs (build-time; not committed).
+# Home hero is committed under brand/hero.jpg (from scripts/update-logo.sh).
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 FONT_DEST="web/static/fonts"
 ICON_DEST="web/static/icons"
-IMAGE_DEST="web/static/img"
 INTER_URL="https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip"
 INTER_SHA256="9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e"
 LUCIDE_URL="https://github.com/lucide-icons/lucide/releases/download/1.26.0/lucide-icons-1.26.0.zip"
 LUCIDE_SHA256="7b3c98ebbd473db33057f75fd67076957ba59d7a9ccd2098d3754800fe533e84"
-HERO_URL="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/NASA-Apollo8-Dec24-Earthrise.jpg/1280px-NASA-Apollo8-Dec24-Earthrise.jpg"
-HERO_SHA256="da22ac0b5fdbc1ebf1c080c8481d80e2b8b1ea22e2e7fee7215ab0c819e333e0"
 ICONS=(house folder-kanban list-checks activity message-circle mail monitor menu x sun moon palette send square trash-2 copy check external-link triangle-alert bot terminal wrench brain clock-3 chevron-down chevron-right volume-2 play pause plus circle-x loader-circle)
 FONT_ROWS=(
   "SpaceGrotesk.woff2|https://fonts.gstatic.com/s/spacegrotesk/v22/V8mDoQDjQSkFtoMM3T6r8E7mPbF4Cw.woff2|0640890476fc1198ab4de571fb658de443c4d85b66466ec09534a8737ab1ce9d"
@@ -33,7 +31,6 @@ done
 for icon in "${ICONS[@]}"; do
   [[ -s "$ICON_DEST/$icon.svg" ]] || complete=0
 done
-[[ -s "$IMAGE_DEST/hero-earthrise.jpg" ]] || complete=0
 if [[ "$complete" = 1 ]]; then
   echo "fetch-assets: assets present"
   exit 0
@@ -41,7 +38,7 @@ fi
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$FONT_DEST" "$ICON_DEST" "$IMAGE_DEST"
+mkdir -p "$FONT_DEST" "$ICON_DEST"
 
 if [[ ! -f "$FONT_DEST/InterVariable.woff2" || ! -f "$FONT_DEST/InterVariable-Italic.woff2" ]]; then
   curl -fsSL --retry 3 -o "$tmp/inter.zip" "$INTER_URL"
@@ -57,12 +54,6 @@ for row in "${FONT_ROWS[@]}"; do
     mv "$tmp/$file" "$FONT_DEST/$file"
   fi
 done
-
-if [[ ! -f "$IMAGE_DEST/hero-earthrise.jpg" ]]; then
-  curl -fsSL --retry 3 -o "$tmp/hero-earthrise.jpg" "$HERO_URL"
-  echo "$HERO_SHA256  $tmp/hero-earthrise.jpg" | sha256sum -c -
-  mv "$tmp/hero-earthrise.jpg" "$IMAGE_DEST/hero-earthrise.jpg"
-fi
 
 icons_complete=1
 for icon in "${ICONS[@]}"; do

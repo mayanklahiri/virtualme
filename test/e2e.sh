@@ -74,9 +74,12 @@ code=$(curl -s -o /tmp/e2e-index.html -w '%{http_code}' "$BASE/")
 [ "$code" = 200 ] || fail "GET / returned $code"
 grep -q "Virtual Me" /tmp/e2e-index.html || fail "SPA markup missing from /"
 grep -q '"arctic", "solar", "studio"' /tmp/e2e-index.html || fail "SPA boot script does not list all eight themes"
-content_type=$(curl -fsS -o /dev/null -w '%{content_type}' "$BASE/img/hero-earthrise.jpg")
+content_type=$(curl -fsS -o /dev/null -w '%{content_type}' "$BASE/brand/hero.jpg")
 [ "$content_type" = "image/jpeg" ] || fail "hero image content type is $content_type"
 curl -fsS -o /dev/null "$BASE/favicon.svg" || fail "favicon.svg not served"
+curl -fsS -o /dev/null "$BASE/favicon.ico" || fail "favicon.ico not served"
+curl -fsS -o /dev/null "$BASE/apple-touch-icon.png" || fail "apple-touch-icon.png not served"
+curl -fsS -o /dev/null "$BASE/brand/virtualme-mark.png" || fail "brand mark PNG not served"
 curl -fsS "$BASE/icons.svg" | grep -q 'id="i-virtualme-mark"' || fail "brand mark missing from icon sprite"
 curl -fsS "$BASE/js/app.js" | grep -q "sourceMappingURL" || fail "app.js missing sourcemap pointer"
 curl -fsS -o /dev/null "$BASE/js/app.js.map" || fail "app.js.map not served"
