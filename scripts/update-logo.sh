@@ -200,20 +200,17 @@ python3 - "$README" "$README_ICON" <<'PY'
 import base64, pathlib, re, sys
 readme, icon = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
 b64 = base64.standard_b64encode(icon.read_bytes()).decode("ascii")
-data_img = (
-    f'<img src="data:image/png;base64,{b64}" alt="Virtual Me icon" '
-    f'width="44" height="44">'
-)
-wordmark = (
-    '<img src="controller/web/static/brand/wordmark.svg" '
-    'alt="Virtual Me wordmark" height="40">'
-)
-block = f"<!-- update-logo:icon -->\n{data_img} {wordmark}\n<!-- /update-logo:icon -->"
+# Markdown image syntax (not HTML <img>): GitHub renders data-URL embeds
+# reliably this way, and the README two-column table stays pure Markdown.
+# Single-line Markdown image so README table cells stay valid when re-run.
+data_img = f"![Virtual Me](data:image/png;base64,{b64})"
+block = f"<!-- update-logo:icon -->{data_img}<!-- /update-logo:icon -->"
 text = readme.read_text(encoding="utf-8")
 pat = re.compile(
     r"<!-- update-logo:icon -->.*?<!-- /update-logo:icon -->"
-    r"|<img src=\"(?:data:image/png;base64,[^\"]+|controller/web/static/brand/virtualme-mark\.svg)\"[^>]*>\s*"
-    r"<img src=\"controller/web/static/brand/wordmark\.svg\"[^>]*>",
+    r"|!\[[^\]]*\]\(data:image/png;base64,[^)]+\)"
+    r"|<img src=\"(?:data:image/png;base64,[^\"]+|controller/web/static/brand/virtualme-mark\.svg)\"[^>]*>"
+    r"(?:\s*<img src=\"controller/web/static/brand/wordmark\.svg\"[^>]*>)?",
     re.S,
 )
 if not pat.search(text):
