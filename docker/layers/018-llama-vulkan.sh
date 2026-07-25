@@ -4,6 +4,10 @@
 # /opt/llama-vulkan at runtime when VM_LLAMA_GPU=1 and a GPU device node is
 # injected (spec 018 amendment 2026-07-24). The NVIDIA Vulkan ICD arrives via
 # the NVIDIA Container Toolkit with NVIDIA_DRIVER_CAPABILITIES=all.
+# libegl1 (GLVND EGL dispatcher) is required by the NVIDIA ICD: without
+# libEGL.so.1 the driver's vk_icdGetInstanceProcAddr fails to initialize,
+# llama.cpp enumerates zero Vulkan devices, and inference silently falls
+# back to the CPU (diagnosed live 2026-07-24, RTX 3060).
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
@@ -18,7 +22,7 @@ ASSET="llama-${LLAMA_TAG}-bin-ubuntu-vulkan-x64.tar.gz"
 SHA256="8636767e0fdf440247913e4ba46a33fe02b8f13181bb11756ab890d73fdecdb4"
 
 apt-get update
-apt-get install -y --no-install-recommends libvulkan1
+apt-get install -y --no-install-recommends libvulkan1 libegl1
 rm -rf /var/lib/apt/lists/*
 
 cd /tmp

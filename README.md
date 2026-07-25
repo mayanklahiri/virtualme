@@ -121,7 +121,7 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `POST /v1/audio/speech` | OpenAI-compatible local speech API (`wav` or raw `pcm`) |
 | `/desktop/` | Redirect to the noVNC client; child paths reverse-proxy noVNC and websockify |
 
-History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status charts offer synchronized `15m` through `30d` lookbacks, boundary-aligned locale-aware time ticks, responsive titles and controls, and theme-consistent series colors; every chart downsamples client-side to at most 120 bars, GPU utilization and memory draw side by side, and dedicated charts track LLM tokens in/out, effective token throughput, and browser actions by category. The page also shows the server-local scheduler clock and active selector tokens. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, the browser-reachable address, up to two container-interface addresses, uptime, CPU/load, memory, disk capacity, build version, and a detected GPU beside a theme-tinted Earthrise image.
+History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status charts offer synchronized `15m` through `30d` lookbacks, boundary-aligned locale-aware time ticks, responsive titles and controls, and theme-consistent series colors; every chart downsamples client-side to at most 120 bars, GPU utilization and memory (in GB) draw side by side, and dedicated charts track LLM tokens in/out, effective token throughput, and browser actions by category. The Status top banner carries overall health, the server-local scheduler clock with active selector tokens, and uptime. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, the browser-reachable address, up to two container-interface addresses, uptime, CPU/load, memory, disk capacity, build version, and a detected GPU beside a theme-tinted Earthrise image.
 
 The sidebar connection watch shows the controller hostname and port beside a
 status pip that is green when live, red while reconnecting, and muted while
@@ -129,15 +129,17 @@ connecting. The text below reports server uptime and the current browser
 connection duration. Reduced-motion mode disables pulsing without removing the
 color-coded state.
 
-The Status-page Quick Options panel groups quick toggles with hover help. The
-default-on Jiggler switch moves the virtual desktop's OS cursor in short
-humanlike bursts every 8 to 27 seconds, yields only while the agent holds the
-input-actuation lock, and records each burst in Jobs activity. The scheduler
-pause switch stops scheduled-job promotion without touching interactive work.
-Both switches persist in Valkey across reloads and container restarts.
+The Status-page Quick Options panel is a row of fixed-size cockpit-style
+illuminated buttons with uppercase labels beneath and tooltips on
+hover/focus (tap a label on touch). The default-on JIGGLER button moves the
+virtual desktop's OS cursor in short humanlike bursts every 8 to 27 seconds,
+yields only while the agent holds the input-actuation lock, and records each
+burst in Jobs activity. The SCHED button is lit while scheduled-job promotion
+runs; pressing it pauses promotion without touching interactive work. Both
+states persist in Valkey across reloads and container restarts.
 
 GPU detection is best-effort and multi-vendor. The Status card reports the
-first visible NVIDIA, AMD, or Intel GPU and available model/VRAM/driver
+first visible NVIDIA, AMD, or Intel GPU and available model/VRAM (in GB)/driver
 parameters. NVIDIA and supported AMD sysfs devices also expose utilization and
 memory history; presence-only devices do not show an empty chart. GPU absence
 is normal and never affects health. NVIDIA passthrough is automatic when
@@ -202,19 +204,20 @@ toggles. The bounded ledger persists in Valkey across container restarts.
 ### Local speech
 
 The `/speech` tab streams sentence-level audio from the fully local
-[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) engine with baked Piper
-Lessac (en-US) and Alba (en-GB) voices. Seed texts fill the editor, and the global
-newest-first history persists in Valkey with cached replay. The browser starts
-playing after the first sentence while later sentences synthesize. Agent chat
-can use the `speak` tool when asked for an audible response; its audio bubble
-supports replay.
+[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) engine with the baked
+Piper Lessac (en-US) voice. Seed texts (including a Sci-fi AI medley of famous
+fictional computer lines) fill the editor, and the global newest-first history
+persists in Valkey with cached replay. The browser starts playing after the
+first sentence while later sentences synthesize. Agent chat can use the
+`speak` tool when asked for an audible response; its audio bubble supports
+replay.
 
 OpenAI-compatible clients can call `POST /v1/audio/speech`; `wav` is the
-default response format and `pcm` returns raw 16-bit mono PCM. Set `voice` to
-`en_US-lessac-medium` or `en_GB-alba-medium`; unknown values fall back to
-Lessac. Exact sentence/voice/speed renders are cached under
-`~/.virtualme/tts-cache/`; `VM_TTS_CACHE_MAX_MB` sets the LRU cap (default
-256 MiB), and deleting the cache is safe.
+default response format and `pcm` returns raw 16-bit mono PCM. Any `voice`
+value other than `en_US-lessac-medium` falls back to Lessac. Exact
+sentence/voice/speed renders are cached under `~/.virtualme/tts-cache/`;
+`VM_TTS_CACHE_MAX_MB` sets the LRU cap (default 256 MiB), and deleting the
+cache is safe.
 
 ### Outbound mail
 
@@ -252,7 +255,9 @@ Task screenshots and JSONL step logs are retained under
 take tens of seconds per step. With NVIDIA passthrough (automatic detection,
 explicit `--gpus <spec>`, or `VM_LLAMA_GPU=1`), the container's pinned Vulkan
 llama.cpp build runs the model fully offloaded to the GPU; without it, the
-CPU build is used.
+CPU build is used. On startup the llama service logs its enumerated devices
+(`svc-llama: ... Vulkan0: ...`); an empty list means the Vulkan driver failed
+to initialize and inference is running on the CPU.
 
 ### AI skills
 
@@ -290,7 +295,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [017](specs/017-jiggler.md) | Jiggler: humanlike OS-level mouse motion with a Status switch |
 | [018](specs/018-gpu-observability.md) | Multi-vendor GPU detection, status widget, and usage series |
 | [019](specs/019-chart-overhaul.md) | Chart ticks, titles, lookback control, and uniform series color |
-| [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, second voice, and audio hygiene |
+| [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, and audio hygiene |
 | [021](specs/021-agent-cdp-tools-console.md) | CDP observation tools and the Tools console page |
 | [022](specs/022-system-prompt.md) | On-disk embedded system prompts and SLM-optimized rewrite |
 | [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing |

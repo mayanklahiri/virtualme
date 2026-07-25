@@ -26,7 +26,7 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `.cursor/skills/` | Shared AI operating and development procedures |
 | `specs/` | Numbered, authoritative implementation specs |
 | `docker/` | Container image and supervised services (spec 002) |
-| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached multi-voice local TTS, outbound mail, and multi-page console (specs 002–025) |
+| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached local TTS, outbound mail, and multi-page console (specs 002–026) |
 | `controller/prompts/` | Embedded plain-text agent and fallback-chat system prompts |
 
 ## Commands
@@ -64,10 +64,11 @@ render by shape: page-shaped JSON becomes a linked title plus plain text and
 KEY=value runs become sorted tables.
 Chat renders GFM pipe tables, buffers the latest task's agent steps
 server-side for websocket-reconnect replay, and declares no live regions.
-The loopback-only `ttsd` service wraps pinned sherpa-onnx and Piper Lessac/Alba
-artifacts; the controller streams its audio to the Speech tab, OpenAI-compatible
-speech clients, and the agent's `speak` tool. Bounded speech history persists
-in Valkey and exact sentence renders use a disposable on-disk LRU cache.
+The loopback-only `ttsd` service wraps pinned sherpa-onnx and Piper Lessac
+artifacts (the sole voice; unknown voice names fall back to it); the
+controller streams its audio to the Speech tab, OpenAI-compatible speech
+clients, and the agent's `speak` tool. Bounded speech history persists in
+Valkey and exact sentence renders use a disposable on-disk LRU cache.
 The controller composes stdlib MIME/CID mail, signs it with a persistent DKIM
 key, and submits it to the supervised dma queue for direct-MX or smarthost
 delivery. The Mail console defensively reads dma envelope/message pairs to show
@@ -92,10 +93,11 @@ connection watch combines server uptime, current websocket duration, and
 motion/reduced-motion-aware live state.
 The default-on jiggler produces bursty humanlike mouse trajectories through
 `xdotool` every 8 to 27 seconds, yields only to the agent's actuation lock,
-persists its switch in Valkey, and records each completed burst in the
-activity ledger. The Status page groups it with a scheduler-pause toggle in a
-Quick Options panel; the Valkey-backed pause flag stops scheduled-job
-promotion without touching interactive work.
+persists its state in Valkey, and records each completed burst in the
+activity ledger. The Status page groups it with the scheduler in a Quick
+Options panel of fixed-size cockpit-style lit buttons with tooltips; the
+SCHED lamp is lit while promotion runs, and the Valkey-backed pause flag
+stops scheduled-job promotion without touching interactive work.
 The controller detects the first visible NVIDIA, AMD, or Intel GPU once at
 startup without affecting health. It includes static GPU identity in state and
 persists utilization/memory metrics when NVIDIA or AMD sysfs sampling is
@@ -103,14 +105,17 @@ available; the console hides the GPU chart for presence-only devices. The CLI
 auto-passes a detected host NVIDIA stack (`--gpus all` plus `VM_LLAMA_GPU=1`
 and `NVIDIA_DRIVER_CAPABILITIES=all`; `--no-gpu` opts out), and `svc-llama`
 selects the baked Vulkan llama.cpp runtime with full offload when a GPU device
-is injected, else the CPU build.
+is injected (logging the enumerated devices so a silent CPU fallback is
+visible), else the CPU build. The Vulkan layer ships `libegl1`, which the
+NVIDIA Vulkan ICD requires to initialize. GPU VRAM renders in binary GB.
 Status charts share a persistent lookback, bounded boundary-aligned locale
 ticks, responsive title/control headers, timestamp-true hover selection, and
 the theme-defined `--p1` through `--p8` series ramp. Every chart downsamples
 client-side to at most 120 bars (gauges average, counters sum); GPU
-utilization and memory draw side by side, and dedicated charts track LLM
-tokens, effective token throughput, and browser actions by category from
-per-sample counters drained by the state collector.
+utilization and memory (in GB) draw side by side, and dedicated charts track
+LLM tokens, effective token throughput, and browser actions by category from
+per-sample counters drained by the state collector. The Status top banner
+carries health, the scheduler clock with active selector tokens, and uptime.
 Durations render through one graded component and shared short formatting.
 
 ## Skills
@@ -145,7 +150,7 @@ Durations render through one graded component and shared short formatting.
 | [017](specs/017-jiggler.md) | Jiggler: humanlike OS-level mouse motion with a Status switch |
 | [018](specs/018-gpu-observability.md) | Multi-vendor GPU detection, status widget, and usage series |
 | [019](specs/019-chart-overhaul.md) | Chart ticks, titles, lookback control, and uniform series color |
-| [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, second voice, and audio hygiene |
+| [020](specs/020-speech-audio.md) | Speech seeds/history, TTS disk cache, and audio hygiene |
 | [021](specs/021-agent-cdp-tools-console.md) | CDP observation tools and the Tools console page |
 | [022](specs/022-system-prompt.md) | On-disk embedded system prompts and SLM-optimized rewrite |
 | [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing |

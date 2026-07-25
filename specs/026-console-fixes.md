@@ -77,8 +77,8 @@ The module must not construct `AudioContext` (spec 020 invariant holds).
    Supersedes spec 019 §2.5's "buckets must not change".
 2. **S2 (title gap).** `.chart-head` margin-bottom grows from .5rem to 1rem.
 3. **S3 (GPU split).** The combined dual-scale GPU chart becomes two default
-   renderer charts, GPU utilization (percent) and GPU memory (MiB), side by
-   side on desktop in a `.chart-row`. Amends spec 018 §3.2.
+   renderer charts, GPU utilization (percent) and GPU memory (displayed in
+   GB), side by side on desktop in a `.chart-row`. Amends spec 018 §3.2.
 4. **S4 (Quick Options).** The Jiggler pane becomes a "Quick Options" card of
    labelled switches with hover/focus help text: the existing jiggler switch
    and a new scheduler-pause switch. Scheduler pause: Valkey

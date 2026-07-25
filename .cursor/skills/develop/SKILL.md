@@ -49,9 +49,8 @@ the runner is feature-agnostic).
 | `013-sherpa-onnx.sh` | sherpa-onnx `v1.13.4` offline TTS runtime |
 | `014-tts-model.sh` | Pinned Piper `en_US-lessac-medium` voice |
 | `015-mta.sh` | Debian dma outbound MTA |
-| `016-tzdata.sh` | Host-local timezone data for scheduler wall clocks |
-| `017-tts-voice-alba.sh` | Pinned Piper `en_GB-alba-medium` second voice (replaced Ryan; spec 020 amendment) |
-| `018-llama-vulkan.sh` | llama.cpp `b10091` Vulkan runtime in `/opt/llama-vulkan` (x86_64 only; spec 018 amendment) |
+| `016-tzdata.sh` | Host-local timezone data for scheduler wall clocks (layer 017, the second TTS voice, was removed with the voice; the numbering gap is permanent) |
+| `018-llama-vulkan.sh` | llama.cpp `b10091` Vulkan runtime plus `libvulkan1`/`libegl1` in `/opt/llama-vulkan` (x86_64 only; the NVIDIA Vulkan ICD needs `libEGL.so.1` to initialize) |
 
 The s6 tree defines `svc-xvfb`, `svc-openbox`, `svc-x11vnc`, `svc-novnc`,
 `svc-valkey`, `svc-llama`, `svc-chromium`, `svc-chromium-watchdog`,
@@ -88,7 +87,7 @@ requires a new spec.
 | `controller/internal/agent` | Tool-call loop, read-only CDP/DOM observations, OS-level actions, bash, and artifacts |
 | `controller/internal/actuation` | Global lock serializing OS-level mouse/keyboard input |
 | `controller/internal/jiggler` | Default-on humanlike mouse trajectories, Valkey state, and burst lifecycle |
-| `controller/cmd/ttsd`, `controller/internal/tts` | Whitelisted Lessac/Alba synthesis, sentence WAV cache, Valkey speech log, NDJSON client, and streaming helpers |
+| `controller/cmd/ttsd`, `controller/internal/tts` | Single-voice (Lessac) synthesis with unknown-voice fallback, sentence WAV cache, Valkey speech log, NDJSON client, and streaming helpers |
 | `controller/internal/mail` | Stdlib MIME/CID composition, DKIM signing, dma submission, and defensive spool transparency |
 | `controller/prompts` | Embedded plain-text agent and fallback-chat system prompts |
 | `controller/web/static` | Hand-written multi-page SPA, themes, charts, markdown, agent hooks |
@@ -127,12 +126,12 @@ average, counter fields listed in `SUM_MODES` sum). LLM token/timing and
 agent-action counters accumulate in `internal/metrics.Counters`, drain into
 each two-second snapshot, and sum (never average) during tier roll-up.
 
-The controller maps voice-aware `tts-req`/`tts-stop` websocket requests to
+The controller maps `tts-req`/`tts-stop` websocket requests to
 per-connection `tts-*` streams, serves `POST /v1/audio/speech`, broadcasts
 agent `speak` audio with `origin:"chat"`, and maps `speech-log-req` to the
 bounded `virtualme:speech:log` history. The voice whitelist is
-`internal/tts.Voices`; sentence WAVs are cached under
-`$VM_DATA_DIR/tts-cache/`.
+`internal/tts.Voices` (Lessac only; unknown names normalize to it); sentence
+WAVs are cached under `$VM_DATA_DIR/tts-cache/`.
 It maps `mail-send`/`mail-status-req`/`mail-clear` requests to
 `mail-result`/`mail-status` frames. `internal/mail` defensively parses dma
 `Q*` envelopes and RFC 5322
@@ -159,7 +158,9 @@ only an explicit `"0"` disables) exposed in each state snapshot. Jiggler
 bursts yield only to the shared `internal/actuation` lock.
 It maps `scheduler-set` to the Valkey-backed scheduler pause flag, broadcast
 as `scheduler-state` and included in each snapshot's `scheduler.paused`;
-pausing skips scheduled-job promotion only.
+pausing skips scheduled-job promotion only. In the Quick Options cockpit UI
+the SCHED lamp shows the inverse (lit while running), so the client sends
+`enabled: !ariaChecked` on press.
 It maps `tools-list-req`/`tool-invoke` to sender-only `tools-list`/`tool-result`
 frames. Tool manifests come directly from `localTools.Definitions()`; manual
 calls use `manual-tool` queue envelopes and enter the activity ledger.
@@ -185,7 +186,9 @@ The CDP transport allowlists only `Runtime.evaluate` and
 browser input/navigation.
 
 The reusable console switch is `.switch` with a child `.knob`; use this markup
-for boolean controls and render `aria-checked` only from server state.
+for boolean controls and render `aria-checked` only from server state. Quick
+Options uses `.qo-btn` cockpit buttons (a `.qo-lamp` lit via `aria-checked`,
+a `.qo-label` that toggles the `.qo-tip` tooltip on tap) instead.
 GPU detection uses three-second, failure-silent vendor probes and an injectable
 sysfs root (default `/sys`) so AMD/Intel fixtures remain hermetic. The result is
 cached at startup; absence is normal and never affects health.

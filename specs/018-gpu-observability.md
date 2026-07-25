@@ -22,7 +22,7 @@ type Info struct {
     Present bool     `json:"present"`
     Vendor  string   `json:"vendor"`  // "nvidia" | "amd" | "intel" | ""
     Model   string   `json:"model"`
-    Params  []KV     `json:"params"`  // ordered extractable params, e.g. {"VRAM","8192 MiB"},{"Driver","560.35"},{"CUDA","12.6"}
+    Params  []KV     `json:"params"`  // ordered extractable params, e.g. {"VRAM","8 GB"},{"Driver","560.35"},{"CUDA","12.6"} (VRAM in binary GB, one decimal when fractional)
     Sampler string   `json:"sampler"` // "nvidia-smi" | "amd-sysfs" | "" (empty = presence only, no usage series)
 }
 type Usage struct { UtilPct float64; MemUsedMB, MemTotalMB float64 }
@@ -142,21 +142,29 @@ not use the GPU. Both are fixed here.
    layer `docker/layers/018-llama-vulkan.sh` installs pinned
    `llama-b10091-bin-ubuntu-vulkan-x64.tar.gz` (sha256
    `8636767e0fdf440247913e4ba46a33fe02b8f13181bb11756ab890d73fdecdb4`)
-   plus `libvulkan1` into `/opt/llama-vulkan`; it exits 0 with a notice on
-   non-x86_64 (no upstream Vulkan prebuilt), leaving those hosts CPU-only.
-   The existing CPU layer 002 is untouched.
+   plus `libvulkan1` and `libegl1` into `/opt/llama-vulkan`; it exits 0
+   with a notice on non-x86_64 (no upstream Vulkan prebuilt), leaving
+   those hosts CPU-only. The existing CPU layer 002 is untouched.
+   `libegl1` was added after a live diagnosis (2026-07-24, RTX 3060):
+   without GLVND's `libEGL.so.1` the NVIDIA Vulkan ICD's
+   `vk_icdGetInstanceProcAddr` fails to initialize (loader error "Could
+   not get 'vkCreateInstance'"), llama.cpp enumerates zero devices, and
+   inference silently falls back to the CPU at 100% on all cores while
+   the GPU idles.
 3. **Runtime selection** (`svc-llama/run`). At service start: if
    `VM_LLAMA_GPU=1`, `/dev/nvidiactl` exists (a device was actually
    injected), and `/opt/llama-vulkan/llama-server` is present, exec the
    Vulkan build with `--n-gpu-layers 999` (full offload); otherwise exec
    the CPU build exactly as before. The chosen runtime is echoed to the
-   service log (`svc-llama: runtime …`) for smoke/soak grepping. A
-   passthrough failure therefore degrades to the CPU path, never a crash
-   loop.
+   service log (`svc-llama: runtime …`) for smoke/soak grepping, and when
+   the GPU path is taken the script also logs `llama-server
+   --list-devices` output so an empty device list (ICD init failure,
+   silent CPU fallback) is visible in the logs. A passthrough failure
+   therefore degrades to the CPU path, never a crash loop.
 
 ### 2026-07-24 — GPU chart split (spec 026 S3)
 
 The combined utilization + memory dual-scale chart (§3.2) is superseded by
 two default-renderer charts, "GPU utilization" (percent, 0–100) and "GPU
-memory" (MiB, 0–memTotal), side by side on desktop. Same series data,
-same first-sampler visibility gate.
+memory" (displayed in GB, 0–memTotal), side by side on desktop. Same
+series data, same first-sampler visibility gate.

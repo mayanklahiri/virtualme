@@ -12,6 +12,11 @@ if [ "${VM_LLAMA_GPU:-0}" = "1" ] \
 fi
 echo "svc-llama: runtime ${LLAMA_DIR} ${GPU_FLAGS[*]:-cpu-only}"
 export LD_LIBRARY_PATH="$LLAMA_DIR"
+# Surface silent GPU fallbacks: an empty device list means the Vulkan ICD
+# failed to initialize and inference would run on the CPU.
+if [ "${#GPU_FLAGS[@]}" -gt 0 ]; then
+  "$LLAMA_DIR/llama-server" --list-devices 2>/dev/null | sed 's/^/svc-llama: /'
+fi
 exec "$LLAMA_DIR/llama-server" \
   --model "$VM_MODEL_PATH" \
   --mmproj "$VM_MMPROJ_PATH" \
