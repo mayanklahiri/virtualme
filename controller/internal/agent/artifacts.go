@@ -68,7 +68,7 @@ func (a *Agent) recordStep(ctx context.Context, call ToolCall, result ToolResult
 	if len(image) == 0 {
 		if local, ok := a.tools.(*localTools); ok {
 			captureCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			image, _ = local.screenshot(captureCtx)
+			image, _ = local.screenshot(captureCtx, true)
 			cancel()
 		}
 	}

@@ -175,7 +175,7 @@ type ToolManifest struct {
 
 func (t *localTools) Definitions() []Tool {
 	return []Tool{
-		{Name: "screenshot", Description: "Capture the visible browser screen with an API-coordinate grid.", Schema: schema(`{"type":"object","properties":{},"additionalProperties":false}`)},
+		{Name: "screenshot", Description: "Capture the visible browser screen. Agent observations include an API-coordinate grid; manual console calls return a pure capture.", Schema: schema(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "dom", Description: "Read rendered visible DOM elements with stable refs for click_element/type_into. selectorHint is a case-insensitive substring matched against tag/text/attributes - NOT a CSS selector. Large pages paginate; pass page to continue.", Schema: schema(`{"type":"object","properties":{"selectorHint":{"type":"string","description":"substring filter (not CSS)"},"page":{"type":"integer","minimum":0}},"additionalProperties":false}`)},
 		{Name: "read_page", Description: "Read the current page URL, title, and visible text.", Schema: schema(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "dom_query", Description: "Extract structured text and attributes from elements matching a precise CSS selector.", Schema: schema(`{"type":"object","properties":{"selector":{"type":"string","description":"CSS selector evaluated in the page"},"attributes":{"type":"array","items":{"type":"string"},"description":"attribute names to return; default: text only"},"limit":{"type":"integer","minimum":1,"maximum":50,"default":10}},"required":["selector"],"additionalProperties":false}`)},
@@ -226,6 +226,17 @@ func decodeArgs(raw json.RawMessage, target any) error {
 	return decoder.Decode(target)
 }
 
+// ExecuteManual runs one tool on behalf of the Tools console. It behaves
+// exactly like Execute except screenshots return a pure capture: the
+// API-coordinate grid exists only to ground the agent's vision (X1).
+func (t *localTools) ExecuteManual(ctx context.Context, name string, raw json.RawMessage) (ToolResult, error) {
+	if name == "screenshot" {
+		image, err := t.screenshot(ctx, false)
+		return ToolResult{Text: fmt.Sprintf("screenshot %dx%d API space; display %dx%d", t.apiWidth, t.apiHeight, t.width, t.height), ImageJPEG: image, Summary: "Captured screenshot", Observe: true}, err
+	}
+	return t.Execute(ctx, name, raw)
+}
+
 func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessage) (ToolResult, error) {
 	if usesXdotool(name) {
 		actuation.Lock()
@@ -233,7 +244,7 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 	}
 	switch name {
 	case "screenshot":
-		image, err := t.screenshot(ctx)
+		image, err := t.screenshot(ctx, true)
 		return ToolResult{Text: fmt.Sprintf("screenshot %dx%d API space; display %dx%d", t.apiWidth, t.apiHeight, t.width, t.height), ImageJPEG: image, Summary: "Captured screenshot", Observe: true}, err
 	case "dom":
 		var args struct {
@@ -658,7 +669,7 @@ func apiToScreen(x, y float64, width, height, apiWidth, apiHeight int) (int, int
 	return screenX, screenY
 }
 
-func (t *localTools) screenshot(ctx context.Context) ([]byte, error) {
+func (t *localTools) screenshot(ctx context.Context, withGrid bool) ([]byte, error) {
 	tempDir, err := os.MkdirTemp("", "virtualme-capture-")
 	if err != nil {
 		return nil, err
@@ -669,10 +680,11 @@ func (t *localTools) screenshot(ctx context.Context) ([]byte, error) {
 	if stdout, stderr, runErr := t.runner.Run(ctx, t.cfg.ScrotPath, []string{"-o", raw}, []string{"DISPLAY=" + t.cfg.Display}, ""); runErr != nil {
 		return nil, fmt.Errorf("scrot: %w: %s%s", runErr, stdout, stderr)
 	}
-	draw := gridDraw(t.width, t.height)
 	args := []string{raw, "-resize", fmt.Sprintf("%dx%d!", t.apiWidth, t.apiHeight)}
-	for _, item := range draw {
-		args = append(args, "-draw", item)
+	if withGrid {
+		for _, item := range gridDraw(t.width, t.height) {
+			args = append(args, "-draw", item)
+		}
 	}
 	args = append(args, "-quality", "82", final)
 	if stdout, stderr, runErr := t.runner.Run(ctx, t.cfg.ConvertPath, args, nil, ""); runErr != nil {

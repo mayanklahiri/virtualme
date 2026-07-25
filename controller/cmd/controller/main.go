@@ -472,7 +472,7 @@ func main() {
 			return "", err
 		}
 		started := time.Now()
-		result, toolErr := localTools.Execute(ctx, request.Tool, request.Args)
+		result, toolErr := localTools.ExecuteManual(ctx, request.Tool, request.Args)
 		duration := time.Since(started).Milliseconds()
 		llmCounters.AddAction(agent.ActionCategory(request.Tool, result.Observe))
 		text := capText(result.Text, 16*1024)

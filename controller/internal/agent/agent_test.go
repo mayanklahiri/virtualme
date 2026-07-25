@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -463,6 +464,50 @@ type recordingRunner struct {
 func (r *recordingRunner) Run(_ context.Context, name string, args, env []string, _ string) ([]byte, []byte, error) {
 	r.name, r.args, r.env = name, append([]string(nil), args...), append([]string(nil), env...)
 	return nil, nil, nil
+}
+
+type captureRunner struct {
+	calls [][]string
+}
+
+func (r *captureRunner) Run(_ context.Context, name string, args, env []string, _ string) ([]byte, []byte, error) {
+	r.calls = append(r.calls, append([]string{name}, args...))
+	if name == "/bin/convert" {
+		_ = os.WriteFile(args[len(args)-1], []byte("jpg"), 0o600)
+	}
+	return nil, nil, nil
+}
+
+func (r *captureRunner) convertArgs(t *testing.T) []string {
+	t.Helper()
+	for _, call := range r.calls {
+		if call[0] == "/bin/convert" {
+			return call[1:]
+		}
+	}
+	t.Fatal("convert was never invoked")
+	return nil
+}
+
+func TestManualScreenshotSkipsGridAgentKeepsIt(t *testing.T) {
+	runner := &captureRunner{}
+	tools := NewLocalTools(Config{
+		Runner: runner, ScrotPath: "/bin/scrot", ConvertPath: "/bin/convert",
+		Display: ":77", Resolution: "1600x900x24",
+	})
+	if _, err := tools.ExecuteManual(context.Background(), "screenshot", nil); err != nil {
+		t.Fatal(err)
+	}
+	if manual := runner.convertArgs(t); slices.Contains(manual, "-draw") {
+		t.Fatalf("manual capture must not draw a grid: %v", manual)
+	}
+	runner.calls = nil
+	if _, err := tools.Execute(context.Background(), "screenshot", nil); err != nil {
+		t.Fatal(err)
+	}
+	if vision := runner.convertArgs(t); !slices.Contains(vision, "-draw") {
+		t.Fatalf("agent-vision capture must keep the grid: %v", vision)
+	}
 }
 
 func TestXdotoolInvocationUsesScreenCoordinates(t *testing.T) {
