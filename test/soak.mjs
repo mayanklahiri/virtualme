@@ -104,6 +104,50 @@ const flows = [
     },
   },
   {
+    name: "lahiri-readpage",
+    prompt:
+      "Navigate to https://www.lahiri.me and wait for it to load. " +
+      "Then use read_page (not dom) and list every link on the page with its " +
+      "title text and destination URL.",
+    hard(r) {
+      const problems = [];
+      const nav = textOf(r, "navigate");
+      if (stepsFor(r, "navigate").length === 0) problems.push("no navigate step ran");
+      else if (!/lahiri\.me/i.test(nav)) problems.push(`navigate observation lacks lahiri.me URL: ${excerpt(nav)}`);
+      else if (!nav.includes('"ready":true')) problems.push(`navigate observation not settled: ${excerpt(nav)}`);
+      const read = textOf(r, "read_page");
+      if (stepsFor(r, "read_page").length === 0) problems.push("no read_page step ran");
+      else {
+        let digest;
+        try {
+          digest = parseYamlLite(read);
+        } catch (error) {
+          problems.push(`read_page YAML parse failed: ${error}`);
+          return problems;
+        }
+        let links = 0;
+        let headings = 0;
+        /** @param {any[]} nodes */
+        const walk = (nodes) => {
+          for (const node of nodes ?? []) {
+            if (node?.href && /^https?:\/\//.test(String(node.href))) links++;
+            if (/^h[1-6]$/.test(String(node?.tag ?? ""))) headings++;
+            walk(node?.children ?? []);
+            walk(node?.items ?? []);
+          }
+        };
+        walk(/** @type {any[]} */ (digest?.body ?? []));
+        if (links < 5) problems.push(`read_page digest has ${links} absolute href nodes, want >= 5`);
+        if (headings < 1) problems.push("read_page digest has no heading nodes");
+      }
+      return problems;
+    },
+    soft(r) {
+      const listed = (r.reply.match(/^\s*(?:\d+[.)]|[-*])\s+\S/gm) ?? []).length;
+      return listed >= 3 ? [] : [`final reply lists ${listed} items, want >= 3`];
+    },
+  },
+  {
     name: "readpage-example",
     prompt:
       "Navigate to https://example.com, wait for it to load, then use read_page " +
