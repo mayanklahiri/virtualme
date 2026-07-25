@@ -159,3 +159,21 @@ for gauges, sum for counter fields), so no chart draws more than 120 bars at
 any lookback. Server tiers and `resSec` semantics are unchanged; the drawn
 `resSec` scales by the merge factor. `.chart-head` gains a 1rem bottom
 margin separating titles from the plot.
+
+### 2026-07-24 — CPU load and memory pair side-by-side
+
+The Status page draws GPU utilization and GPU memory side-by-side inside
+`#gpu-charts.chart-row` (spec 018 as executed: two-column grid on desktop,
+stacked below the 47.999 rem breakpoint), while the CPU-load and memory
+figures remain full-width stacked siblings of `.charts`. That asymmetry is
+resolved: in `controller/web/static/index.html`, wrap the CPU-load `<figure>`
+and the memory `<figure>` — both unchanged internally (chart heads, canvases
+`#chart-cpu`/`#chart-mem`, legends) — in a new `<div class="chart-row">`
+placed where the two figures sit today, exactly mirroring the GPU pair's
+markup. No CSS changes (`.chart-row` already defines both the desktop
+two-column grid and the mobile single-column fallback), no `chart.js` or
+`app.js` changes (charts are looked up by canvas id), and no change to the
+LLM token/throughput row or the browser-actions figure. The status-markup
+assertions in `test/chart-ticks.test.js` ("status markup carries split GPU
+charts…") are extended to require that `#chart-cpu` and `#chart-mem` share
+one `.chart-row` ancestor.
