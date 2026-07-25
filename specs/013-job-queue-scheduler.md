@@ -199,3 +199,11 @@ single worker executes the shared agent tool executor, so manual calls wait
 behind active chat/project work and never interleave with an agent task.
 Disconnect handling cancels or drops these envelopes under the existing
 initiator policy.
+
+### 2026-07-24 — Scheduler pause toggle (spec 026 S4)
+
+A Valkey flag `virtualme:scheduler:paused` (`"1"`/`"0"`, absent means
+running) pauses promotion of due scheduled jobs; interactive jobs are
+unaffected and due jobs run once unpaused. Console control: WS
+`scheduler-set {enabled}`, snapshot `scheduler.paused`, broadcast
+`scheduler-state`, surfaced by the Status page Quick Options panel.

@@ -150,3 +150,12 @@ here and landed together:
 9. **Y-axis units.** Memory chart y-ticks read MiB/GiB (`formatTick`
    override); CPU/GPU keep `%`. Memory y-range is fixed 0 → system
    `memTotalMB` (grown only if stacked process memory ever exceeds it).
+
+### 2026-07-24 — Client-side bar cap at 120 (spec 026 S1, S2)
+
+§2.5's "drawn buckets must not change" is superseded: before rendering, the
+client merges `ceil(n/120)` adjacent server samples per drawn bucket (mean
+for gauges, sum for counter fields), so no chart draws more than 120 bars at
+any lookback. Server tiers and `resSec` semantics are unchanged; the drawn
+`resSec` scales by the merge factor. `.chart-head` gains a 1rem bottom
+margin separating titles from the plot.

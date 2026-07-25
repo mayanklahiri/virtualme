@@ -153,3 +153,10 @@ not use the GPU. Both are fixed here.
    service log (`svc-llama: runtime …`) for smoke/soak grepping. A
    passthrough failure therefore degrades to the CPU path, never a crash
    loop.
+
+### 2026-07-24 — GPU chart split (spec 026 S3)
+
+The combined utilization + memory dual-scale chart (§3.2) is superseded by
+two default-renderer charts, "GPU utilization" (percent, 0–100) and "GPU
+memory" (MiB, 0–memTotal), side by side on desktop. Same series data,
+same first-sampler visibility gate.

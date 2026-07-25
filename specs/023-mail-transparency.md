@@ -96,3 +96,16 @@ No new message types: everything rides the existing `mail-status` (extended shap
 - The SMTP e2e sink delays acceptance briefly so the probe deterministically
   observes enriched transient spool state before asserting the inferred
   `left queue` event.
+
+### 2026-07-24 — Outbox, queue clear, layout reorder (spec 026 M1–M4)
+
+The session timeline is retired: "Flush ran", "Submitted message to", and
+"left queue" writes are removed. In their place a durable Valkey outbox
+(`virtualme:mail:outbox`, cap 200) records each submission
+`{id, ts, to, subject, size, queueId, status, lastError}` with statuses
+`queued`, `left_queue` (dma cannot distinguish delivered from bounced),
+`error`, and `cleared`; refresh transitions entries by spool diff. A
+two-step-confirm "Clear queue" button sends WS `mail-clear`, which deletes
+spool `Q*`/`M*` pairs best-effort and marks affected entries `cleared`.
+Layout: Status facts and DNS move to the bottom of the Compose card; the
+right column shows Outbox (Last-send row pinned first) above Queue.

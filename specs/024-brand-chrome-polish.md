@@ -182,3 +182,11 @@ Console feedback pass (specs 012–025 amendments). Files:
 3. **Clickable brand.** The sidebar brand block is an `<a href="/" data-nav>`
    with a subtle hover background (documented here; implemented with the
    wordmark amendment above).
+
+### 2026-07-24 — Chakra Petch wordmark, watch dial removed (spec 026 U3, U4)
+
+The wordmark and monogram are regenerated in Chakra Petch Bold (fetched by
+pinned URL + sha256 in the generator) with "me" scaled to visual balance
+against "Virtual" (red accent kept). The §5 wristwatch dial is removed from
+both locations; the host box keeps a status pip, `host:port`, and an uptime
+line with comfortable padding.

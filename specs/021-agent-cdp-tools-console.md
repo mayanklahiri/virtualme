@@ -133,3 +133,12 @@ Console feedback pass (specs 012–025 amendments). Files:
    URI) and a **Close** button. Escape, the Close button, or clicking
    anywhere except the Download link dismisses the overlay and restores
    focus to the zoom button. No new endpoints; purely client-side.
+
+### 2026-07-24 — Shape-based structured result rendering (spec 026 T1, T2)
+
+The output pane may recognize result *shapes* (never tool names, preserving
+§4's no-hardcoded-names rule): JSON whose keys are a subset of
+`{url, title, text}` renders a linked title, muted url, and wrapped plain
+page text; runs of three or more `KEY=value` lines inside plain-text results
+render as sorted two-column tables. All other results keep the generic
+pretty-JSON / plain-text / image paths.

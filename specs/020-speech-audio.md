@@ -181,3 +181,16 @@ the seed texts were about twice as long as needed for a quick audition.
    (Kipling first stanza; road and bridge first passages), roughly halving
    their length; the Node test asserts both the retained openings and the
    absence of the removed endings.
+
+### 2026-07-24 — Serialized TTS frame handling (spec 026 P1, P2, C1)
+
+`tts-*` frames were dispatched without awaiting while `tts-start` awaited
+`AudioPlayer.begin()`, dropping chunks that arrived mid-await (cached
+synthesis lost everything after the first sentence) and leaving the Speak
+button wedged on the `active` id when `tts-done` never arrived. A DOM-free
+`tts-stream.js` module now serializes every frame through a promise queue,
+owns `active`, and clears it on done/error/reset (reset fires on reconnect);
+both the Speech tab and chat bubbles route through it. `AudioPlayer.push`
+resumes a suspended context. The no-chime invariant extends to markup:
+`aria-live` regions (which some platforms voice with a notification sound
+per agent step) are removed from the console.

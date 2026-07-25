@@ -115,3 +115,9 @@ desk, not like a occasionally-permitted background task.
 
 Unit tests cover the enabled-by-default load, the explicit-"0" opt-out, the
 8–27 s cadence bounds, and the actuation-lock yield.
+
+### 2026-07-24 — Jiggler pane becomes Quick Options (spec 026 S4)
+
+The Status-page Jiggler card is renamed "Quick Options" and hosts multiple
+labelled switches with hover/focus help text: the jiggler switch (unchanged
+semantics and persistence) and the spec 013 scheduler-pause switch.

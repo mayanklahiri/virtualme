@@ -236,3 +236,11 @@ The CDP transport now centrally allowlists `Runtime.evaluate` and
 traffic. `page_eval` combines its static mutation tripwires with Chromium's
 `throwOnSideEffect` guard. Agent and manual executions share the same tool
 definitions and executor.
+
+### 2026-07-24 — Grid overlay is for agent observations only (spec 026 X1)
+
+The labeled 100-px coordinate grid exists to ground the small vision model.
+Manual Tools-console screenshot invocations now return a pure, ungridded
+capture; only agent-loop observations composite the grid. The `screenshot`
+tool description says so. Same capture pipeline (`scrot` + ImageMagick),
+gated by an execution option set by the manual-tool executor.

@@ -187,3 +187,13 @@ Console feedback pass (specs 012–025 amendments). Files:
 5. **Pill elongation fix.** `.job-chip` gains `align-self: center`, tighter
    vertical padding (`.08rem`), and `line-height: 1.25`, so pills keep a
    capsule shape instead of stretching to the row height in grid/flex rows.
+
+### 2026-07-24 — Status icons, activity filters, three-pane desktop (spec 026 J1–J4)
+
+Finished queue rows use a check (`--ok`) or circle-x (`--err`) icon instead
+of colored dots; running rows spin a loader; upcoming keeps the clock. The
+Activity pane gains persisted "Tool calls" and "Jiggler" show toggles
+(both default hidden) and a per-row runtime from `detail.durationMs`.
+Desktop >=64rem lays out Queue (full height, left), Activity (right), and a
+persistent details third column; mid widths keep the slide-in details.
+Queue rows adopt the activity column rhythm with fixed-width pills.
