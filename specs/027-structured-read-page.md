@@ -441,36 +441,64 @@ discipline (failing test first; live coverage on lahiri.me only).
 
 ## Amendments
 
-### A1 (2026-07-24): larger extraction budgets and unescaped emitter strings
+### A1 (2026-07-24): story-feed extraction fix — budgets, visibility, density
 
-Observed on a live `reddit.com/r/wallstreetbets` session: the 800-node budget
-was exhausted by the header/sidebar before the walker reached the story feed,
-so the digest carried only 2 story links, and the collapse pass silently
-deleted the mid-tree budget marker (fixed separately by moving the single
-marker append after collapse). Tunables are raised as follows:
+Observed on a live `reddit.com/r/wallstreetbets` session: `read_page`
+returned only 2 story links from a feed of 34 posts. Three root causes and a
+set of density measures follow; acceptance for the amendment was ≥ 30 story
+links extracted live from that page (verified: 31 unique story URLs, 86 total
+hrefs, 31969 bytes ≈ 12978 tokens).
 
-- `NODE_BUDGET`: 800 → 4000 kept nodes.
-- Table `rows` / list `items` caps: 40 → 120 each.
-- `readPageCap`: 16000 → 32000 bytes.
-- `observationTextCap` (spec 012): 16 KiB → 32 KiB, so the digest still
-  reaches the model without mid-document truncation. With the 16384-token
-  model context, only the latest observation is retained in the prompt and
-  the context-exceeded recovery path bounds the worst case.
-- The §4 emitter quotes strings with JSON escaping but **without** HTML
-  escaping (`json.Encoder.SetEscapeHTML(false)`): selector paths are full of
-  `>` separators and `\u003e` wasted five bytes of the digest budget per
-  separator. The committed golden fixture is regenerated accordingly.
-
-Normative references to the old values in §3c, §3e, §4, §9, and §10 are to be
-read with these constants.
-
-The §3c visibility rule is corrected: the claim that "`display:none` yields
+**Visibility (§3c rule 2, corrected).** The claim that "`display:none` yields
 zero client rects; no separate check needed" pruned every boxless container —
 `display: contents` custom elements (Reddit's `shreddit-*`/`faceplate-*`
 wrappers) and inline wrappers around block children also have zero client
 rects yet render their subtrees, which hid the entire story feed. The rule is
 now: an element is pruned iff computed `display === "none"` or
 `visibility === "hidden"`; an element with zero client rects is still visible
-when `display === "contents"` or it has element children. The
-`test/helpers/dom-stub.mjs` stub models hidden fixtures as computed
-`display: none` to match real browsers.
+when `display === "contents"` or it has element children. The `svg` branch
+now runs *after* this check so hidden labelled icons (per-post status
+tooltips) no longer leak into the digest. The `test/helpers/dom-stub.mjs`
+stub models hidden fixtures as computed `display: none` to match real
+browsers.
+
+**Budgets (tunables raised).**
+
+- `NODE_BUDGET`: 800 → 4000 kept nodes (the header/sidebar alone exhausted
+  800 before the walker reached the feed).
+- Table `rows` / list `items` caps: 40 → 120 each.
+- `readPageCap`: 16000 → 32000 bytes.
+- `observationTextCap` (spec 012): 16 KiB → 32 KiB, and the manual
+  tool-result cap in the controller rises to 32 KiB to match, so the digest
+  reaches both the model and the Tools console without mid-document
+  truncation. 32000 bytes ≈ 13k tokens is the practical maximum for the
+  16384-token model context (system prompt + tool schemas ≈ 3k tokens; only
+  the latest observation is retained in the prompt).
+
+**Density (more content per byte; §3b/§3e adjusted).**
+
+- The §4 emitter quotes strings with JSON escaping but **without** HTML
+  escaping (`json.Encoder.SetEscapeHTML(false)`): each `\u003e` selector
+  separator wasted five bytes. The committed golden fixture is regenerated.
+- Selector segments omit `:nth-of-type(1)` when the element is the only
+  sibling of its tag (uniqueness is unchanged under the child combinator).
+- `sel` is emitted only where it serves interaction or follow-up queries:
+  nodes whose tag is in `{a, video, audio, iframe, table, form, input,
+  select, textarea, button, h1…h6}` keep it; childless text-only leaves drop
+  it (the nearest kept ancestor locates them); `img` and `svg` nodes never
+  carry one (the enclosing link/button is the actuation target, and
+  `dom_query` finds media by attribute).
+- Duplicate links are dropped: a later `a` (or flattened list item) whose
+  `href` matches an earlier one and whose full text is empty or identical is
+  removed with its subtree. Feed pages double every story link with invisible
+  overlay/screen-reader anchors.
+- A link, button, label, or heading with no text of its own and a single
+  plain text-only leaf child absorbs the child's text in place.
+- Childless text-only leaves whose text contains no letters or digits
+  (decorative separators such as "•") are dropped.
+- Media `src` values longer than 80 characters lose their query string
+  (resize/signature parameters); the asset path identifies the resource.
+  `href` values are never stripped — links must stay navigable.
+
+Normative references to the old constants and rules in §3b, §3c, §3e, §4,
+§9, and §10 are to be read with these amendments.

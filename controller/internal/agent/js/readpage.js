@@ -14,6 +14,8 @@
     "a", "img", "video", "audio", "iframe", "table", "form", "input",
     "select", "textarea", "button", "h1", "h2", "h3", "h4", "h5", "h6",
   ]);
+  // Tags that absorb a sole plain-text leaf child as their own text.
+  const ABSORB = new Set(["a", "button", "label", "h1", "h2", "h3", "h4", "h5", "h6"]);
   const SEMANTIC = new Set([
     "h1", "h2", "h3", "h4", "h5", "h6", "a", "img", "video", "audio", "iframe",
     "table", "form", "input", "select", "textarea", "button", "label", "ul", "ol",
@@ -108,6 +110,17 @@
 
   function capURL(raw) {
     const url = resolveURL(raw);
+    return url.length > HREF_CAP ? url.slice(0, HREF_CAP) + "…" : url;
+  }
+
+  // Media srcs identify the asset by path; long signed CDN query strings
+  // (resize params, signatures) only burn digest budget. Links keep theirs.
+  function capSrc(raw) {
+    let url = resolveURL(raw);
+    if (url.length > 80 && !url.startsWith("data:")) {
+      const cut = url.indexOf("?");
+      if (cut > 0) url = url.slice(0, cut);
+    }
     return url.length > HREF_CAP ? url.slice(0, HREF_CAP) + "…" : url;
   }
 
@@ -298,7 +311,7 @@
     }
     if (tag === "img" || tag === "video" || tag === "audio" || tag === "source" ||
         tag === "iframe" || tag === "embed") {
-      const src = capURL(el.getAttribute("src"));
+      const src = capSrc(el.getAttribute("src"));
       if (src) node.src = src;
     }
     if (tag === "img") {
@@ -329,7 +342,7 @@
     if (text) node.text = text;
   }
 
-  function walkElement(el, insideLink) {
+  function walkElement(el) {
     if (budgetHit) return null;
     const tag = el.tagName.toLowerCase();
     if (PRUNE.has(tag)) return null;
@@ -370,7 +383,7 @@
       const children = [];
       for (const child of el.children) {
         if (budgetHit) break;
-        const walked = walkElement(child, insideLink || tag === "a");
+        const walked = walkElement(child);
         if (walked) children.push(walked);
       }
       if (children.length) node.children = children;
@@ -380,21 +393,37 @@
         if (budgetHit) break;
         const childTag = child.tagName.toLowerCase();
         if (childTags.has(childTag) || childTag === "label") {
-          const walked = walkElement(child, insideLink || tag === "a");
+          const walked = walkElement(child);
           if (walked) children.push(walked);
         }
       }
       if (children.length) node.children = children;
+    }
+    // A link, button, label, or heading with no text of its own and a single
+    // plain text leaf child absorbs that text: `a > span "u/X"` digests as
+    // the link with text. Generic wrappers instead hoist via collapse.
+    if (ABSORB.has(tag) && !node.text && node.children && node.children.length === 1) {
+      const only = node.children[0];
+      const keys = Object.keys(only);
+      if (keys.length === 2 && only.tag && typeof only.text === "string") {
+        node.text = only.text;
+        delete node.children;
+      }
     }
     if (!SEL_KEEP.has(tag) && !node.children && node.text) {
       let extra = false;
       for (const key in node) {
         if (key !== "tag" && key !== "sel" && key !== "text") { extra = true; break; }
       }
-      if (!extra) delete node.sel;
+      if (!extra) {
+        // Decorative separator leaves ("•", "|") carry no content.
+        if (!/[\p{L}\p{N}]/u.test(node.text)) return null;
+        delete node.sel;
+      }
     }
-    // An image anywhere inside a link is located by the link's sel.
-    if (tag === "img" && insideLink) delete node.sel;
+    // Images are observation content, not actuation targets: the enclosing
+    // link or button carries the sel, and dom_query finds imgs by src/alt.
+    if (tag === "img") delete node.sel;
     return node;
   }
 
@@ -435,7 +464,7 @@
   if (document.body) {
     for (const child of document.body.children) {
       if (budgetHit) break;
-      const walked = walkElement(child, false);
+      const walked = walkElement(child);
       if (walked) body.push(walked);
     }
   }
