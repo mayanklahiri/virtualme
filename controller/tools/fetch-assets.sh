@@ -12,7 +12,7 @@ LUCIDE_URL="https://github.com/lucide-icons/lucide/releases/download/1.26.0/luci
 LUCIDE_SHA256="7b3c98ebbd473db33057f75fd67076957ba59d7a9ccd2098d3754800fe533e84"
 HERO_URL="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/NASA-Apollo8-Dec24-Earthrise.jpg/1280px-NASA-Apollo8-Dec24-Earthrise.jpg"
 HERO_SHA256="da22ac0b5fdbc1ebf1c080c8481d80e2b8b1ea22e2e7fee7215ab0c819e333e0"
-ICONS=(house folder-kanban list-checks activity message-circle mail monitor menu x sun moon palette send square trash-2 copy check external-link triangle-alert bot terminal wrench brain clock-3 chevron-down chevron-right volume-2 play pause plus)
+ICONS=(house folder-kanban list-checks activity message-circle mail monitor menu x sun moon palette send square trash-2 copy check external-link triangle-alert bot terminal wrench brain clock-3 chevron-down chevron-right volume-2 play pause plus circle-x loader-circle)
 FONT_ROWS=(
   "SpaceGrotesk.woff2|https://fonts.gstatic.com/s/spacegrotesk/v22/V8mDoQDjQSkFtoMM3T6r8E7mPbF4Cw.woff2|0640890476fc1198ab4de571fb658de443c4d85b66466ec09534a8737ab1ce9d"
   "JetBrainsMono.woff2|https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbV2o-flEEny0FZhsfKu5WU4xD7OwE.woff2|18be452724bfdc236c074ca94a249a7f41a86752c7d04ab258ce9ed5651f6a7e"

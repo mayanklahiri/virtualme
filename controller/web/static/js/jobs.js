@@ -56,6 +56,21 @@ export function jobSecondary(job) {
   }
 }
 
+/**
+ * Hide tool-call noise from the activity stream. Jiggler bursts (recorded as
+ * kind "tool", name "jiggle") follow their own toggle regardless of the
+ * tool-call toggle; every other kind is always shown.
+ * @param {Data[]} events
+ * @param {{showTools: boolean, showJiggler: boolean}} options
+ */
+export function filterActivity(events, { showTools, showJiggler }) {
+  return events.filter((event) => {
+    if (event?.kind !== "tool") return true;
+    if (event?.name === "jiggle") return showJiggler;
+    return showTools;
+  });
+}
+
 /** @param {string} name */
 function icon(name) {
   const namespace = "http:" + "//www.w3.org/2000/svg";
@@ -124,6 +139,11 @@ export function initJobs(send) {
   const activityEmpty = /** @type {HTMLParagraphElement} */ (document.querySelector("#activity-empty"));
   const detail = /** @type {HTMLElement} */ (document.querySelector("#job-detail"));
   const curtain = /** @type {HTMLElement} */ (document.querySelector("#job-detail-curtain"));
+  const showTools = /** @type {HTMLInputElement} */ (document.querySelector("#activity-show-tools"));
+  const showJiggler = /** @type {HTMLInputElement} */ (document.querySelector("#activity-show-jiggler"));
+  // Below 64rem the detail pane is a slide-in overlay; at desktop width it is
+  // a persistent third column with a placeholder.
+  const overlayMedia = matchMedia("(max-width: 63.999rem)");
   /** @type {Data} */
   let queue = { upcoming: [], running: null, finished: [] };
   /** @type {Data[]} */
@@ -133,14 +153,22 @@ export function initJobs(send) {
   /** @type {HTMLElement | undefined} */
   let previousFocus;
 
+  function renderPlaceholder() {
+    const note = document.createElement("p");
+    note.className = "empty-note";
+    note.textContent = "Select a queue or activity row to inspect it.";
+    detail.replaceChildren(note);
+  }
+
   function closeDetail() {
-    if (detail.hidden) return;
+    const wasOverlayOpen = detail.classList.contains("open") && overlayMedia.matches;
+    selected = undefined;
     detail.classList.remove("open");
     curtain.classList.remove("open");
     document.body.classList.remove("job-detail-locked");
     curtain.hidden = true;
-    detail.hidden = true;
-    previousFocus?.focus();
+    renderPlaceholder();
+    if (wasOverlayOpen) previousFocus?.focus();
   }
 
   /** @param {string} type @param {number} ts */
@@ -262,8 +290,7 @@ export function initJobs(send) {
     selected = { kind, value };
     previousFocus = trigger ?? document.activeElement;
     detail.replaceChildren(kind === "queue" ? queueDetails(value) : activityDetails(value));
-    detail.hidden = false;
-    if (matchMedia("(max-width: 47.999rem)").matches) {
+    if (overlayMedia.matches) {
       curtain.hidden = false;
       document.body.classList.add("job-detail-locked");
     }
@@ -281,11 +308,17 @@ export function initJobs(send) {
     button.type = "button";
     button.className = `job-row ${phase}`;
     if (phase === "finished") {
-      // Single small status dot; no clock icon, so success is one light per row.
-      const dot = document.createElement("span");
-      dot.className = `job-result-dot ${job.result?.ok ? "ok" : "error"}`;
-      dot.setAttribute("aria-label", job.result?.ok ? "Succeeded" : "Failed");
-      button.append(dot);
+      // Explicit iconography: checkmark for done, error mark for failed;
+      // the old green dot read as "running/go".
+      const status = icon(job.result?.ok ? "check" : "circle-x");
+      status.classList.add("job-status", job.result?.ok ? "ok" : "error");
+      status.setAttribute("aria-label", job.result?.ok ? "Succeeded" : "Failed");
+      button.append(status);
+    } else if (phase === "running") {
+      const spinner = icon("loader-circle");
+      spinner.classList.add("job-status", "spin");
+      spinner.setAttribute("aria-label", "Running");
+      button.append(spinner);
     } else {
       button.append(icon("clock-3"));
     }
@@ -344,6 +377,10 @@ export function initJobs(send) {
     button.append(chip(event.kind || "event"));
     appendText(button, "activity-name", event.name || event.kind).title = event.name || event.kind;
     appendText(button, "activity-summary", event.summary || "").title = event.summary || "";
+    const duration = document.createElement("span");
+    duration.className = "activity-duration";
+    if (Number(event.detail?.durationMs) > 0) duration.append(durationElement(event.detail.durationMs));
+    button.append(duration);
     button.addEventListener("click", () => openDetail("activity", event, button));
     item.append(button);
     return item;
@@ -351,9 +388,25 @@ export function initJobs(send) {
 
   function renderActivity() {
     activities = activities.slice(0, 200);
-    activityList.replaceChildren(...activities.map(activityRow));
-    activityEmpty.hidden = activities.length > 0;
+    const visible = filterActivity(activities, {
+      showTools: showTools.checked,
+      showJiggler: showJiggler.checked,
+    });
+    activityList.replaceChildren(...visible.map(activityRow));
+    activityEmpty.hidden = visible.length > 0;
   }
+
+  showTools.checked = localStorage.getItem("vm-activity-tools") === "1";
+  showJiggler.checked = localStorage.getItem("vm-activity-jiggler") === "1";
+  showTools.addEventListener("change", () => {
+    localStorage.setItem("vm-activity-tools", showTools.checked ? "1" : "0");
+    renderActivity();
+  });
+  showJiggler.addEventListener("change", () => {
+    localStorage.setItem("vm-activity-jiggler", showJiggler.checked ? "1" : "0");
+    renderActivity();
+  });
+  renderPlaceholder();
 
   curtain.addEventListener("click", closeDetail);
   detail.addEventListener("keydown", (event) => {
