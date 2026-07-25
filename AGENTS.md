@@ -51,22 +51,30 @@ actuation, and bounded bash execution. DOM observations carry the page URL
 and title, omit layout-only noise, and always fit the model's context;
 `navigate` waits for the page to settle. CDP never performs input or
 navigation; agent screenshots and step logs (including observation text)
-persist under `$VM_DATA_DIR/agent/`. Chromium uses documented deterministic
+persist under `$VM_DATA_DIR/agent/`. The vision coordinate grid is drawn only
+on agent observations; manual Tools-console screenshots are pure captures.
+Chromium uses documented deterministic
 automation flags and one undecorated full-screen virtual-desktop surface.
 Its agent and fallback-chat system prompts are embedded from reviewable plain
 text in `controller/prompts/`; wording changes require a spec amendment.
 The server-driven `/tools` console lists every agent definition, generates
 forms from its JSON schema, and serializes manual calls through the job queue;
-manual results and timings enter the persistent activity ledger.
+manual results and timings enter the persistent activity ledger. Tool results
+render by shape: page-shaped JSON becomes a linked title plus plain text and
+KEY=value runs become sorted tables.
+Chat renders GFM pipe tables, buffers the latest task's agent steps
+server-side for websocket-reconnect replay, and declares no live regions.
 The loopback-only `ttsd` service wraps pinned sherpa-onnx and Piper Lessac/Alba
 artifacts; the controller streams its audio to the Speech tab, OpenAI-compatible
 speech clients, and the agent's `speak` tool. Bounded speech history persists
 in Valkey and exact sentence renders use a disposable on-disk LRU cache.
 The controller composes stdlib MIME/CID mail, signs it with a persistent DKIM
 key, and submits it to the supervised dma queue for direct-MX or smarthost
-delivery. The Mail console defensively reads dma envelope/message pairs and its
-bounded flush log to show recipients, text previews, errors, next-flush timing,
-and a session-only lifecycle timeline; mail state lives under `$VM_DATA_DIR/mail/`.
+delivery. The Mail console defensively reads dma envelope/message pairs to show
+recipients, text previews, errors, and next-flush timing; a durable Valkey
+outbox tracks each submission (queued, left queue, error, cleared) and a
+confirmed Clear queue control removes spooled mail. Mail state lives under
+`$VM_DATA_DIR/mail/`.
 All LLM work runs sequentially through a Valkey-backed interactive/scheduled
 job queue with visibility recovery, retries, dead-lettering, time-bucket
 scheduling, and initiator-disconnect cancellation.
@@ -74,7 +82,9 @@ Recurring projects persist natural-language tasks and selectors in Valkey,
 run through that queue without modifying chat history, and own scratch
 directories under `$VM_DATA_DIR/projects/`.
 The Jobs console combines queue envelopes with a Valkey-backed activity ledger
-fed by LLM, agent-tool, speech, and mail lifecycle events.
+fed by LLM, agent-tool, speech, and mail lifecycle events in a responsive
+three-pane layout with explicit status icons, per-event durations, and
+persisted tool-call/jiggler visibility filters.
 The console home separates health from an aligned host/address/capacity grid,
 shows browser-reachable and container-network addresses plus the controller
 build version, and uses committed outlined-path wordmark/monogram assets. Its
@@ -82,8 +92,10 @@ connection watch combines server uptime, current websocket duration, and
 motion/reduced-motion-aware live state.
 The default-on jiggler produces bursty humanlike mouse trajectories through
 `xdotool` every 8 to 27 seconds, yields only to the agent's actuation lock,
-persists its Status-page switch in Valkey, and records each completed burst in
-the activity ledger.
+persists its switch in Valkey, and records each completed burst in the
+activity ledger. The Status page groups it with a scheduler-pause toggle in a
+Quick Options panel; the Valkey-backed pause flag stops scheduled-job
+promotion without touching interactive work.
 The controller detects the first visible NVIDIA, AMD, or Intel GPU once at
 startup without affecting health. It includes static GPU identity in state and
 persists utilization/memory metrics when NVIDIA or AMD sysfs sampling is
@@ -94,7 +106,12 @@ selects the baked Vulkan llama.cpp runtime with full offload when a GPU device
 is injected, else the CPU build.
 Status charts share a persistent lookback, bounded boundary-aligned locale
 ticks, responsive title/control headers, timestamp-true hover selection, and
-the theme-defined `--p1` through `--p8` series ramp.
+the theme-defined `--p1` through `--p8` series ramp. Every chart downsamples
+client-side to at most 120 bars (gauges average, counters sum); GPU
+utilization and memory draw side by side, and dedicated charts track LLM
+tokens, effective token throughput, and browser actions by category from
+per-sample counters drained by the state collector.
+Durations render through one graded component and shared short formatting.
 
 ## Skills
 
@@ -134,3 +151,4 @@ the theme-defined `--p1` through `--p8` series ramp.
 | [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing |
 | [024](specs/024-brand-chrome-polish.md) | Brand wordmark, wristwatch live indicator, and console polish |
 | [025](specs/025-release-presentation.md) | Marvin release notes, registry metadata, and the /do-release skill |
+| [026](specs/026-console-fixes.md) | Console bugfix sweep: chat, speech, charts, jobs, mail, tools, screenshots |

@@ -109,32 +109,32 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/` | Console home: host and reachable/container addresses, live health/capacity, build version, model, and links |
 | `/projects` | Recurring natural-language tasks, schedules, manual runs, and recent results |
 | `/projects/<id>` | Project task, schedule, status, run history, and scratch-directory details |
-| `/jobs` | Queue timeline, fine-grained machine activity, and type-specific details |
-| `/tools` | Authoritative agent-tool list, schema-generated forms, and queue-backed manual invocation |
-| `/status` | Service health, system/GPU meters, active time selectors, the default-on jiggler switch, and persistent per-process/GPU metrics |
+| `/jobs` | Queue, filterable machine activity with durations, and type-specific details in three panes |
+| `/tools` | Authoritative agent-tool list, schema-generated forms, queue-backed manual invocation, and structured result rendering |
+| `/status` | Service health, system/GPU meters, LLM token/throughput and browser-action charts, active time selectors, Quick Options (jiggler and scheduler pause), and persistent per-process/GPU metrics |
 | `/chat` | Markdown chat, generation controls, LLM progress, and conversation totals |
 | `/speech` | Two-voice streaming local speech with seeds, persistent history/replay, and disk cache |
-| `/mail` | Outbound-mail composer, message-level queue contents/errors/next-flush timing, activity, and DKIM DNS record |
+| `/mail` | Outbound-mail composer, durable outbox with per-message status, queue contents/errors/next-flush timing, queue clearing, and DKIM DNS record |
 | `/desktop-view` | Embedded private noVNC desktop |
 | `/healthz` | Aggregate JSON health for all eight services |
 | `/ws` | Websocket: live state, metrics, queued jobs, activity, tool manifests/invocation, chat, agent, TTS, and mail frames |
 | `POST /v1/audio/speech` | OpenAI-compatible local speech API (`wav` or raw `pcm`) |
 | `/desktop/` | Redirect to the noVNC client; child paths reverse-proxy noVNC and websockify |
 
-History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status charts offer synchronized `15m` through `30d` lookbacks, boundary-aligned locale-aware time ticks, responsive titles and controls, and theme-consistent series colors; the page also shows the server-local scheduler clock and active selector tokens. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, the browser-reachable address, up to two container-interface addresses, uptime, CPU/load, memory, disk capacity, build version, and a detected GPU beside a theme-tinted Earthrise image.
+History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status charts offer synchronized `15m` through `30d` lookbacks, boundary-aligned locale-aware time ticks, responsive titles and controls, and theme-consistent series colors; every chart downsamples client-side to at most 120 bars, GPU utilization and memory draw side by side, and dedicated charts track LLM tokens in/out, effective token throughput, and browser actions by category. The page also shows the server-local scheduler clock and active selector tokens. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, the browser-reachable address, up to two container-interface addresses, uptime, CPU/load, memory, disk capacity, build version, and a detected GPU beside a theme-tinted Earthrise image.
 
-The sidebar connection watch shows the controller hostname and port. Its outer
-arc maps server uptime onto the current 24-hour period, the hand advances once
-per minute while linked, and the center pip is green when live, red while
-reconnecting, and muted while connecting. The text below reports server uptime
-and the current browser connection duration. Reduced-motion mode freezes the
-hand and disables pulsing without removing the color-coded state.
+The sidebar connection watch shows the controller hostname and port beside a
+status pip that is green when live, red while reconnecting, and muted while
+connecting. The text below reports server uptime and the current browser
+connection duration. Reduced-motion mode disables pulsing without removing the
+color-coded state.
 
-The Status-page Jiggler switch is on by default. The controller moves the
-virtual desktop's OS cursor in short humanlike bursts every 8 to 27 seconds,
-yields only while the agent holds the input-actuation lock, and records each
-burst in Jobs activity. Switching it off persists in Valkey across reloads and
-container restarts.
+The Status-page Quick Options panel groups quick toggles with hover help. The
+default-on Jiggler switch moves the virtual desktop's OS cursor in short
+humanlike bursts every 8 to 27 seconds, yields only while the agent holds the
+input-actuation lock, and records each burst in Jobs activity. The scheduler
+pause switch stops scheduled-job promotion without touching interactive work.
+Both switches persist in Valkey across reloads and container restarts.
 
 GPU detection is best-effort and multi-vendor. The Status card reports the
 first visible NVIDIA, AMD, or Intel GPU and available model/VRAM/driver
@@ -150,8 +150,8 @@ Closing Chromium in `/desktop-view` automatically brings back one blank tab. Chr
 ### Browser agent
 
 Messages in `/chat` can ask Virtual Me to operate Chromium. The local model can
-observe a gridded screenshot, compact rendered DOM, page URL/title/text, and
-system information. Precise CSS extraction, multi-assertion validation,
+observe a screenshot (gridded for its vision only), compact rendered DOM, page
+URL/title/text, and system information. Precise CSS extraction, multi-assertion validation,
 side-effect-guarded page evaluation, and layout/occlusion debugging provide
 additional read-only CDP observations; it acts through `xdotool` OS
 mouse/keyboard input or a bounded bash tool. CDP is method-allowlisted and
@@ -162,7 +162,9 @@ model call or tool process.
 Use `/tools` to inspect the exact definitions available to the local model and
 invoke any tool manually. Forms are generated from the server schemas, calls
 join the same sequential queue as chat/project work, and results are retained
-in the Jobs activity ledger. This can invoke `bash` and browser actuation;
+in the Jobs activity ledger. Results render by shape: page-shaped JSON becomes
+a linked title plus plain text, `KEY=value` runs become sorted tables, and
+manual screenshots return pure captures without the agent's coordinate grid. This can invoke `bash` and browser actuation;
 under the v1 trust model it has no additional authentication, so expose the
 console only on a trusted private network.
 
@@ -189,12 +191,13 @@ directory and its operator data.
 
 Use `/jobs` to see what the machine is actually doing. The queue card groups
 rows into Running now (at most one; only that row pulses), Up next, and
-Recently finished, each row led by a short type-derived name and kind pill.
-The newest-first activity ledger records each LLM generation,
-agent tool call, speech synthesis, and mail submission; selecting a row opens
-its payload, result, timing, and type-specific details. Jiggler bursts also
-appear as `jiggle` tool events. The bounded ledger
-persists in Valkey across container restarts.
+Recently finished, each row led by a short type-derived name, kind pill, and an
+explicit status icon (check, error, or spinner). The newest-first activity
+ledger records each LLM generation, agent tool call, speech synthesis, and
+mail submission with its run time; selecting a row opens its payload, result,
+timing, and type-specific details in a third pane at desktop widths. Tool
+calls and jiggler bursts are hidden by default behind persisted filter
+toggles. The bounded ledger persists in Valkey across container restarts.
 
 ### Local speech
 
@@ -222,9 +225,10 @@ default, or through a configured STARTTLS smarthost. Optional controller-side
 DKIM signing exposes the DNS TXT name and value to publish in the status panel.
 Expandable queue rows show the envelope recipient, subject, age, plain-text
 preview, attachment types/sizes, newest recorded delivery error, and a live
-countdown to the next queue flush. The countdown is not a delivery guarantee:
-dma may apply its own retry backoff. The session activity timeline is held only
-in controller memory.
+countdown to the next queue flush; a confirmed Clear queue control removes all
+spooled mail. The countdown is not a delivery guarantee: dma may apply its own
+retry backoff. A durable Valkey outbox tracks each submission as queued, left
+queue (dma cannot distinguish delivered from bounced), error, or cleared.
 
 | Environment | Purpose |
 |---|---|
@@ -292,6 +296,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [023](specs/023-mail-transparency.md) | Mail queue transparency: contents, errors, and retry timing |
 | [024](specs/024-brand-chrome-polish.md) | Brand wordmark, wristwatch live indicator, and console polish |
 | [025](specs/025-release-presentation.md) | Marvin release notes, registry metadata, and the /do-release skill |
+| [026](specs/026-console-fixes.md) | Console bugfix sweep: chat, speech, charts, jobs, mail, tools, screenshots |
 
 ### CI/CD
 

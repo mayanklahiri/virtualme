@@ -39,9 +39,9 @@ also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 - `http://localhost:8080/` — console home
 - `http://localhost:8080/projects` — recurring projects and schedules
 - `http://localhost:8080/projects/<id>` — project task, runs, and scratch details
-- `http://localhost:8080/jobs` — queue timeline, machine activity, and details
-- `http://localhost:8080/tools` — agent definitions and queue-backed manual invocation
-- `http://localhost:8080/status` — service/GPU status, active time selectors, default-on jiggler switch, and tiered metrics
+- `http://localhost:8080/jobs` — queue, filterable machine activity, and details
+- `http://localhost:8080/tools` — agent definitions, queue-backed manual invocation, and structured results
+- `http://localhost:8080/status` — service/GPU status, LLM token and browser-action charts, active time selectors, Quick Options toggles, and tiered metrics
 - `http://localhost:8080/chat` — shared local-model chat
 - `http://localhost:8080/speech` — streaming local text-to-speech
 - `http://localhost:8080/mail` — outbound-mail composer, queue, and DKIM status
@@ -64,33 +64,38 @@ come from the container network namespace and may not be reachable from the
 LAN. The theme button in the sidebar footer opens the eight-theme picker and
 its automatic/light/dark variant controls; selections persist in the browser.
 
-The sidebar connection watch shows controller hostname and port. Its outer arc
-maps uptime onto the current 24-hour period, the hand advances while the
-websocket is live, and the center pip is green when live, red while
-reconnecting, or muted while connecting. The second line reports server uptime
-and the current browser-link duration. Reduced-motion mode freezes the hand and
-disables pulsing while preserving the state colors.
+The sidebar connection watch shows controller hostname and port beside a
+status pip that is green when live, red while reconnecting, or muted while
+connecting. The second line reports server uptime and the current browser-link
+duration. Reduced-motion mode disables pulsing while preserving the state
+colors.
 
 Use `/jobs` to see what the machine is actually doing. The queue card groups
 rows into Running now (at most one; only that row pulses), Up next, and
-Recently finished, with short type-derived names and kind pills; the activity
-list below is newest-first and records finer-grained LLM, tool, speech, and
-mail actions.
+Recently finished, with short type-derived names, kind pills, and explicit
+status icons; the newest-first activity list records finer-grained LLM, tool,
+speech, and mail actions with run times. Tool calls and jiggler bursts are
+hidden by default behind persisted filter toggles, and details open in a third
+pane at desktop widths.
 
 Use `/tools` to inspect every definition available to the local model and
 invoke it with a schema-generated form. Manual calls wait in the same
-sequential queue and their results appear in Jobs activity. The page can run
+sequential queue and their results appear in Jobs activity; page-shaped JSON
+renders as a linked title plus text, env output as sorted tables, and manual
+screenshots have no coordinate grid. The page can run
 `bash` and browser-input tools; it has no additional authentication under the
 v1 trust model, so use it only on a trusted private network.
 
-The Jiggler switch on `/status` is on by default. It moves the virtual desktop
-cursor in short humanlike bursts every 8 to 27 seconds, yields only while the
-agent holds the input-actuation lock, and records each burst on `/jobs`.
-Switching it off persists across page reloads and container restarts in
-Valkey.
+The Quick Options panel on `/status` groups quick toggles with hover help. The
+default-on Jiggler switch moves the virtual desktop cursor in short humanlike
+bursts every 8 to 27 seconds, yields only while the agent holds the
+input-actuation lock, and records each burst on `/jobs`. The scheduler pause
+switch stops scheduled-job promotion without touching interactive work. Both
+switches persist across page reloads and container restarts in Valkey.
 
 The GPU card on `/status` always reports presence, vendor, model, and available
-parameters. A utilization/memory chart appears only when sampling is supported.
+parameters. Side-by-side utilization and memory charts appear only when
+sampling is supported.
 NVIDIA passthrough is automatic when `start` detects `nvidia-smi` or Docker's
 `nvidia` runtime; `--no-gpu` opts out. AMD/Intel `/dev/dri` passthrough is
 host-specific and must be configured directly with Docker; the CLI has no
@@ -163,8 +168,10 @@ age is time since the dma spool pair was created; "retry" counts down to the
 next queue flush, not a guaranteed delivery attempt, because dma may apply
 backoff. The newest recorded attempt error comes from the envelope when
 available, otherwise the bounded `~/.virtualme/mail/flush.log`. Text previews
-are read directly from queued messages and the 20-entry timeline is
-controller-memory-only. Keep the private key mode at 0600.
+are read directly from queued messages. The `/mail` Outbox is a durable
+Valkey-backed list tracking each submission as queued, left queue, error, or
+cleared; the confirmed Clear queue control removes all spooled mail. Keep the
+private key mode at 0600.
 
 ## Troubleshooting
 
