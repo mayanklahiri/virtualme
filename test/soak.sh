@@ -53,6 +53,10 @@ else
   say "skipping image build (--no-build)"
 fi
 
+say "running e2e suite as a required first phase (E2E_SKIP_BUILD=1)"
+# E2E_AGENT is passed through unmodified; soak neither forces nor suppresses it.
+E2E_SKIP_BUILD=1 bash test/e2e.sh || fail "e2e suite failed; soak flows not started"
+
 say "restarting container on fresh data dir ${DATA_DIR}"
 ./cli.sh stop >/dev/null 2>&1 || true
 VIRTUALME_DATA="$DATA_DIR" ./cli.sh start >/dev/null || fail "cli start"

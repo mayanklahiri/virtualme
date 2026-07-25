@@ -46,8 +46,12 @@ start_vm() {
   fi
 }
 
-echo "e2e: [1/19] CLI build (tags :dev and the start tag)"
-./cli.sh build >/dev/null || fail "cli build"
+if [ "${E2E_SKIP_BUILD:-0}" = "1" ]; then
+  echo "e2e: [1/19] skipping CLI build (E2E_SKIP_BUILD=1)"
+else
+  echo "e2e: [1/19] CLI build (tags :dev and the start tag)"
+  ./cli.sh build >/dev/null || fail "cli build"
+fi
 
 ./cli.sh stop >/dev/null 2>&1 || true
 echo "e2e: [2/19] starting SMTP sink and CLI on fresh data dir ${DATA_DIR}"
