@@ -101,20 +101,44 @@
     return value.length > ATTR_CAP ? value.slice(0, ATTR_CAP) + "…" : value;
   }
 
+  function elementsByTag(rootEl, tag) {
+    const out = [];
+    const walk = (el) => {
+      for (const child of el.children ?? []) {
+        if (child.tagName.toLowerCase() === tag) out.push(child);
+        walk(child);
+      }
+    };
+    if (rootEl) walk(rootEl);
+    return out;
+  }
+
+  function allText(el, cap) {
+    let text = "";
+    const walk = (node) => {
+      if (node.nodeType === 3) text += node.nodeValue;
+      else if (node.nodeType === 1) {
+        for (const child of node.childNodes ?? []) walk(child);
+      }
+    };
+    for (const child of el.childNodes ?? []) walk(child);
+    return normalize(text, cap);
+  }
+
   function labelFor(el) {
     const id = el.getAttribute("id");
     if (id) {
-      for (const label of document.getElementsByTagName("label")) {
+      for (const label of elementsByTag(document.body, "label")) {
         if (label.getAttribute("for") === id) {
-          const text = normalize(label.textContent, ATTR_CAP);
+          const text = allText(label, ATTR_CAP);
           if (text) return text;
         }
       }
     }
     let parent = el.parentElement;
     while (parent) {
-      if (parent.tagName.toLowerCase() === "label") {
-        const text = normalize(parent.textContent, ATTR_CAP);
+      if (parent.tagName && parent.tagName.toLowerCase() === "label") {
+        const text = allText(parent, ATTR_CAP);
         if (text) return text;
       }
       parent = parent.parentElement;
@@ -153,7 +177,7 @@
     const head = {};
     const lang = document.documentElement.getAttribute("lang");
     if (lang) head.lang = capAttr(lang);
-    for (const meta of document.head.getElementsByTagName("meta")) {
+    for (const meta of elementsByTag(document.head, "meta")) {
       const name = meta.getAttribute("name");
       if (name === "description") {
         const content = capAttr(meta.getAttribute("content"));
@@ -173,7 +197,7 @@
       for (const key of keys) sorted[key] = head.og[key];
       head.og = sorted;
     }
-    for (const link of document.head.getElementsByTagName("link")) {
+    for (const link of elementsByTag(document.head, "link")) {
       if (link.getAttribute("rel") === "canonical") {
         const href = capURL(link.getAttribute("href"));
         if (href) head.canonical = href;
@@ -184,7 +208,7 @@
 
   function extractTable(table) {
     const rows = [];
-    const trs = table.getElementsByTagName("tr");
+    const trs = elementsByTag(table, "tr");
     let truncated = false;
     for (let i = 0; i < trs.length && rows.length < MAX_ROWS; i++) {
       const cells = [];
@@ -280,7 +304,7 @@
       const placeholder = capAttr(el.getAttribute("placeholder"));
       if (placeholder) node.placeholder = placeholder;
       if (type !== "password") {
-        const value = capAttr(el.getAttribute("value") || (tag === "textarea" ? el.textContent : ""));
+        const value = capAttr(el.getAttribute("value") || (tag === "textarea" ? allText(el, ATTR_CAP) : ""));
         if (value) node.value = value;
       }
       const label = labelFor(el);
@@ -316,8 +340,9 @@
 
     kept++;
     if (kept >= NODE_BUDGET) {
+      // Stop descending; the single marker node is appended at body level.
       budgetHit = true;
-      return { note: "truncated: node budget reached" };
+      return null;
     }
 
     const node = { tag, sel: selectorFor(el) };
@@ -357,8 +382,7 @@
     }
   }
   const collapsed = collapse(body);
-  if (budgetHit && collapsed.length &&
-      collapsed[collapsed.length - 1].note !== "truncated: node budget reached") {
+  if (budgetHit) {
     collapsed.push({ note: "truncated: node budget reached" });
   }
   return {

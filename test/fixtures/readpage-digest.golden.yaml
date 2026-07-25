@@ -1,0 +1,33 @@
+title: "Golden \"Digest\"\nLine two"
+url: "https://example.com/golden"
+head:
+  lang: "en"
+  og:
+    image: "https://example.com/i.png"
+    title: "OG"
+body:
+  - tag: "h1"
+    sel: "body \u003e h1:nth-of-type(1)"
+    text: "Héading ünïcode"
+  - tag: "table"
+    sel: "body \u003e table:nth-of-type(1)"
+    rows:
+      -
+        - "A"
+        - "B"
+      -
+        - "1"
+        - ""
+  - tag: "ul"
+    sel: "body \u003e ul:nth-of-type(1)"
+    items:
+      - text: "Item"
+        href: "https://example.com/item"
+  - tag: "p"
+    sel: "body \u003e p:nth-of-type(1)"
+    text: "para"
+    children:
+      - tag: "a"
+        sel: "body \u003e p:nth-of-type(1) \u003e a:nth-of-type(1)"
+        text: "link"
+        href: "https://example.com/a"

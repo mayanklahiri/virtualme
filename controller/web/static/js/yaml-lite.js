@@ -33,14 +33,15 @@ function parseMapping(nodes, index, indent) {
   let cursor = index;
   while (cursor < nodes.length && nodes[cursor].indent > indent) {
     const node = nodes[cursor];
-    if (node.line.startsWith("- ")) break;
+    if (node.line === "-" || node.line.startsWith("- ")) break;
     const colon = node.line.indexOf(":");
     if (colon < 0) throw new Error("expected key");
     const key = node.line.slice(0, colon);
     const rest = node.line.slice(colon + 1).trim();
     cursor++;
     if (rest === "") {
-      if (cursor < nodes.length && nodes[cursor].indent > node.indent && nodes[cursor].line.startsWith("- ")) {
+      if (cursor < nodes.length && nodes[cursor].indent > node.indent &&
+          (nodes[cursor].line.startsWith("- ") || nodes[cursor].line === "-")) {
         const seq = parseSequence(nodes, cursor, node.indent);
         mapping[key] = seq.value;
         cursor = seq.index;
@@ -65,10 +66,33 @@ function parseSequence(nodes, index, indent) {
   /** @type {any[]} */
   const items = [];
   let cursor = index;
-  while (cursor < nodes.length && nodes[cursor].indent > indent && nodes[cursor].line.startsWith("- ")) {
+  while (cursor < nodes.length && nodes[cursor].indent > indent &&
+         (nodes[cursor].line.startsWith("- ") || nodes[cursor].line === "-")) {
     const node = nodes[cursor];
+    if (node.line === "-") {
+      // Bare dash: a nested sequence (e.g. table rows) at deeper indent.
+      cursor++;
+      if (cursor < nodes.length && nodes[cursor].indent > node.indent) {
+        if (nodes[cursor].line.startsWith("- ") || nodes[cursor].line === "-") {
+          const child = parseSequence(nodes, cursor, node.indent);
+          items.push(child.value);
+          cursor = child.index;
+        } else {
+          const child = parseMapping(nodes, cursor, node.indent);
+          items.push(child.value);
+          cursor = child.index;
+        }
+      } else {
+        throw new Error("bare sequence dash without nested block");
+      }
+      continue;
+    }
     const itemText = node.line.slice(2);
     cursor++;
+    if (itemText.startsWith('"') || /^-?\d+$/.test(itemText)) {
+      items.push(parseScalar(itemText));
+      continue;
+    }
     if (itemText.includes(": ") && !itemText.endsWith(":")) {
       const itemColon = itemText.indexOf(": ");
       const itemKey = itemText.slice(0, itemColon);
@@ -98,6 +122,7 @@ function parseSequence(nodes, index, indent) {
 /** @param {string} raw */
 function parseScalar(raw) {
   const text = raw.trim();
+  if (/^-?\d+$/.test(text)) return Number(text);
   if (!text.startsWith('"')) throw new Error("only double-quoted strings are supported");
   return JSON.parse(text);
 }

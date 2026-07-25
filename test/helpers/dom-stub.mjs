@@ -97,12 +97,13 @@ export function createDOMStub(fixture) {
 
   const location = { href: fixture.url ?? "https://example.com/" };
 
-  function querySelectorAll(selector) {
+  /** @param {(el: any) => boolean} predicate */
+  function findAll(predicate) {
     const matches = [];
     const walk = (nodes) => {
       for (const node of nodes) {
         if (node.nodeType !== 1) continue;
-        if (selectorMatches(node, selector)) matches.push(node);
+        if (predicate(node)) matches.push(node);
         walk(node.children ?? []);
       }
     };
@@ -110,14 +111,61 @@ export function createDOMStub(fixture) {
     return matches;
   }
 
-  /** @param {any} el @param {string} selector */
-  function selectorMatches(el, selector) {
-    if (selector.startsWith("#")) {
-      return el.id === selector.slice(1);
+  // Supports the selector subset the agent tools emit: bare tag, #id, and
+  // `body > tag:nth-of-type(k)` paths with #id restarts (spec 027 §3e).
+  function querySelectorAll(selector) {
+    if (!selector.includes(" > ")) {
+      if (selector.startsWith("#")) {
+        const id = selector.slice(1).replace(/\\(.)/g, "$1");
+        return findAll((el) => el.id === id);
+      }
+      const tag = selector.toLowerCase();
+      return findAll((el) => el.tagName.toLowerCase() === tag);
     }
-    const tagMatch = selector.match(/^([a-z0-9-]+)$/i);
-    if (tagMatch) return el.tagName.toLowerCase() === tagMatch[1].toLowerCase();
-    return el.tagName.toLowerCase() === "a" && selector === "a";
+    const segments = selector.split(" > ").map((part) => part.trim());
+    /** @type {any[]} */
+    let contexts;
+    let start = 0;
+    if (segments[0] === "body") {
+      contexts = [bodyEl];
+      start = 1;
+    } else if (segments[0].startsWith("#")) {
+      const id = segments[0].slice(1).replace(/\\(.)/g, "$1");
+      contexts = findAll((el) => el.id === id);
+      start = 1;
+    } else {
+      contexts = [bodyEl];
+    }
+    for (let index = start; index < segments.length; index++) {
+      const segment = segments[index];
+      /** @type {any[]} */
+      const next = [];
+      for (const context of contexts) {
+        if (segment.startsWith("#")) {
+          const id = segment.slice(1).replace(/\\(.)/g, "$1");
+          for (const child of context.children ?? []) {
+            if (child.id === id) next.push(child);
+          }
+          continue;
+        }
+        const match = segment.match(/^([a-z0-9-]+)(?::nth-of-type\((\d+)\))?$/i);
+        if (!match) return [];
+        const tag = match[1].toLowerCase();
+        const nth = match[2] ? Number(match[2]) : 0;
+        let count = 0;
+        for (const child of context.children ?? []) {
+          if (child.tagName.toLowerCase() !== tag) continue;
+          count++;
+          if (!nth) next.push(child);
+          else if (count === nth) {
+            next.push(child);
+            break;
+          }
+        }
+      }
+      contexts = next;
+    }
+    return contexts;
   }
 
   document.querySelectorAll = querySelectorAll;

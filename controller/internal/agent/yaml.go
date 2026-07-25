@@ -156,44 +156,72 @@ func encodeSequence(items []any, indent int, context string) string {
 }
 
 func digestToYAML(digest map[string]any) string {
+	pruneEmpty(digest)
 	text := encodeYAML(digest)
-	for len(text) > readPageCap {
-		if !dropLastBodyNode(digest) {
-			break
-		}
+	if len(text) <= readPageCap {
+		return text
+	}
+	// Reserve room for the marker line so the marker itself never overflows.
+	markerRoom := len(`  - note: "truncated: page digest exceeded budget"`) + 1
+	for len(text)+markerRoom > readPageCap && dropLastBodyNode(digest) {
 		text = encodeYAML(digest)
 	}
+	appendBudgetMarker(digest)
+	text = encodeYAML(digest)
 	if len(text) > readPageCap {
 		return text[:readPageCap]
-	}
-	if needsBudgetMarker(digest) && len(text)+len(`note: "truncated: page digest exceeded budget"`) <= readPageCap {
-		appendBudgetMarker(digest)
-		text = encodeYAML(digest)
-	}
-	if len(text) > readPageCap {
-		for len(text) > readPageCap && dropLastBodyNode(digest) {
-			text = encodeYAML(digest)
-		}
-		appendBudgetMarker(digest)
-		text = encodeYAML(digest)
-		if len(text) > readPageCap {
-			return text[:readPageCap]
-		}
 	}
 	return text
 }
 
-func needsBudgetMarker(digest map[string]any) bool {
-	body, ok := digest["body"].([]any)
-	if !ok || len(body) == 0 {
-		return false
+// pruneEmpty drops empty strings, sequences, and mappings recursively so the
+// emitter never produces flow-style "{}"/"[]" outside the §4 subset.
+func pruneEmpty(mapping map[string]any) bool {
+	for key, item := range mapping {
+		switch typed := item.(type) {
+		case map[string]any:
+			if pruneEmpty(typed) {
+				delete(mapping, key)
+			}
+		case []any:
+			pruned := pruneSeq(typed)
+			if len(pruned) == 0 {
+				delete(mapping, key)
+			} else {
+				mapping[key] = pruned
+			}
+		case string:
+			if typed == "" {
+				delete(mapping, key)
+			}
+		case nil:
+			delete(mapping, key)
+		}
 	}
-	last, ok := body[len(body)-1].(map[string]any)
-	if !ok {
-		return true
+	return len(mapping) == 0
+}
+
+func pruneSeq(items []any) []any {
+	kept := items[:0]
+	for _, item := range items {
+		switch typed := item.(type) {
+		case map[string]any:
+			if !pruneEmpty(typed) {
+				kept = append(kept, item)
+			}
+		case []any:
+			pruned := pruneSeq(typed)
+			if len(pruned) > 0 {
+				kept = append(kept, any(pruned))
+			}
+		case nil:
+		default:
+			// Strings stay even when empty: row cells are positional and a
+			// quoted empty scalar is inside the §4 subset.
+			kept = append(kept, item)
+		}
 	}
-	note, _ := last["note"].(string)
-	return note != "truncated: page digest exceeded budget"
+	return kept
 }
 
 func appendBudgetMarker(digest map[string]any) {
