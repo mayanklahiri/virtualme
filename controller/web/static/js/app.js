@@ -12,6 +12,7 @@ import { initMail } from "./mail.js";
 import { initProjects } from "./projects.js";
 import { initJobs } from "./jobs.js";
 import { initTools } from "./tools.js";
+import { initData } from "./data.js";
 
 initTheme();
 initNav();
@@ -23,6 +24,7 @@ const mail = initMail((value) => socket.send(value));
 const projects = initProjects((value) => socket.send(value));
 const jobs = initJobs((value) => socket.send(value));
 const tools = initTools((value) => socket.send(value));
+const data = initData();
 const agent = initAgent(chat.log, (text) => chat.setStatus(text));
 const jigglerSwitch = document.querySelector("#jiggler-switch");
 jigglerSwitch.addEventListener("click", () => {
@@ -134,4 +136,5 @@ initRouter((page) => {
   if (page === "jobs") jobs.enter();
   else jobs.close();
   if (page === "tools") tools.enter();
+  data.show(page);
 });

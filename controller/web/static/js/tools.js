@@ -16,7 +16,7 @@ function fieldID(name) {
 }
 
 /** Full-screen image overlay with a download control. @param {string} src @param {string} alt */
-function openLightbox(src, alt) {
+export function openLightbox(src, alt) {
   const previous = /** @type {HTMLElement | null} */ (document.activeElement);
   const overlay = document.createElement("div");
   overlay.className = "lightbox";

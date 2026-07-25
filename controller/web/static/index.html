@@ -46,6 +46,7 @@
         <a href="/projects" data-nav><svg class="icon"><use href="/icons.svg#i-folder-kanban"/></svg>Projects</a>
         <a href="/jobs" data-nav><svg class="icon"><use href="/icons.svg#i-list-checks"/></svg>Jobs</a>
         <a href="/tools" data-nav><svg class="icon"><use href="/icons.svg#i-wrench"/></svg>Tools</a>
+        <a href="/data" data-nav><svg class="icon"><use href="/icons.svg#i-folder-kanban"/></svg>Data</a>
         <a href="/status" data-nav><svg class="icon"><use href="/icons.svg#i-activity"/></svg>Status</a>
         <a href="/chat" data-nav><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg>Chat</a>
         <a href="/speech" data-nav><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg>Speech</a>
@@ -185,6 +186,18 @@
           <nav id="tools-list" class="tools-list" aria-label="Tools"></nav>
           <form id="tool-form" class="tools-form" hidden></form>
           <aside id="tool-output" class="tool-output" hidden></aside>
+        </div>
+      </section>
+
+      <section data-page="data" hidden class="data-page" aria-labelledby="data-title">
+        <div class="page-heading">
+          <div><h1 id="data-title">Data</h1><p class="page-caption">Read-only explorer of the persistent data volume.</p></div>
+        </div>
+        <div class="data-grid">
+          <nav id="data-tree" class="data-tree tree" aria-label="Data volume"></nav>
+          <aside id="data-viewer" class="data-viewer">
+            <p class="data-empty">Select a file to inspect it.</p>
+          </aside>
         </div>
       </section>
 

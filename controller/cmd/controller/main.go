@@ -24,6 +24,7 @@ import (
 	assets "github.com/mayanklahiri/virtualme/controller"
 	"github.com/mayanklahiri/virtualme/controller/internal/agent"
 	"github.com/mayanklahiri/virtualme/controller/internal/chat"
+	"github.com/mayanklahiri/virtualme/controller/internal/datafs"
 	"github.com/mayanklahiri/virtualme/controller/internal/gpu"
 	"github.com/mayanklahiri/virtualme/controller/internal/health"
 	"github.com/mayanklahiri/virtualme/controller/internal/jiggler"
@@ -83,7 +84,8 @@ func spaHandler(staticFS fs.FS) http.Handler {
 	files := http.FileServer(http.FS(staticFS))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/healthz") || strings.HasPrefix(r.URL.Path, "/ws") ||
-			strings.HasPrefix(r.URL.Path, "/desktop/") || strings.HasPrefix(r.URL.Path, "/v1/audio/speech") {
+			strings.HasPrefix(r.URL.Path, "/desktop/") || strings.HasPrefix(r.URL.Path, "/v1/audio/speech") ||
+			strings.HasPrefix(r.URL.Path, "/api/data/") {
 			http.NotFound(w, r)
 			return
 		}
@@ -110,10 +112,10 @@ func spaHandler(staticFS fs.FS) http.Handler {
 }
 
 func newMux(cfg health.Config, hub *ws.Hub, desktopURL *url.URL, clients ...*tts.Client) *http.ServeMux {
-	return newMuxWithActivity(cfg, hub, desktopURL, nil, clients...)
+	return newMuxWithActivity(cfg, hub, desktopURL, nil, "", clients...)
 }
 
-func newMuxWithActivity(cfg health.Config, hub *ws.Hub, desktopURL *url.URL, activity *jobs.Activity, clients ...*tts.Client) *http.ServeMux {
+func newMuxWithActivity(cfg health.Config, hub *ws.Hub, desktopURL *url.URL, activity *jobs.Activity, dataDir string, clients ...*tts.Client) *http.ServeMux {
 	client := &tts.Client{URL: "http://127.0.0.1:" + envOr("VM_TTS_PORT", "8082")}
 	if len(clients) > 0 && clients[0] != nil {
 		client = clients[0]
@@ -139,6 +141,9 @@ func newMuxWithActivity(cfg health.Config, hub *ws.Hub, desktopURL *url.URL, act
 	}
 	mux.HandleFunc("/desktop", redirectDesktop)
 	mux.HandleFunc("/desktop/", redirectDesktop)
+	if dataDir != "" {
+		datafs.Mount(mux, dataDir)
+	}
 	staticFS, err := fs.Sub(assets.WebFS, "web/dist")
 	if err != nil {
 		panic(err)
@@ -640,7 +645,7 @@ func main() {
 	log.Println("state: collector started (2s, tiered metrics)")
 	log.Println("desktop: proxying", desktopURL)
 	log.Println("controller: listening on", addr)
-	server := &http.Server{Addr: addr, Handler: newMuxWithActivity(cfg, hub, desktopURL, activity, ttsClient), ReadHeaderTimeout: 5 * time.Second}
+	server := &http.Server{Addr: addr, Handler: newMuxWithActivity(cfg, hub, desktopURL, activity, dataDir, ttsClient), ReadHeaderTimeout: 5 * time.Second}
 	errs := make(chan error, 1)
 	go func() { errs <- server.ListenAndServe() }()
 	select {
