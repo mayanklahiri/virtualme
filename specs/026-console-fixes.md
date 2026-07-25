@@ -22,7 +22,8 @@ a new scheduler-pause toggle; S6 rates divide by active generation time; S5
 groups actions as observe/actuate/bash/speak; J3 uses a persistent third
 details column; M2 clears the whole queue behind a confirm step; M3 persists
 a durable Valkey outbox with statuses queued / left queue / error / cleared;
-U3 sets the wordmark in Chakra Petch Bold; X1 removes the grid only for
+U3's Chakra Petch wordmark is superseded by the Archivo Black small-caps
++ Caveat "me" lockup (see 024 amendment); X1 removes the grid only for
 manual captures; T2 parses env text client-side.
 
 ## 1. Chat (C1, C2, C3)
@@ -140,10 +141,10 @@ The module must not construct `AudioContext` (spec 020 invariant holds).
    five divergent formatters in jobs, mail, conn, render, projects, tools.
 2. **U2.** Every render site whose CSS ellipsizes sets `title` to the full
    text (jobs summaries/names, mail subjects, project rows).
-3. **U3.** The wordmark is regenerated in Chakra Petch Bold with "me" scaled
-   to visual balance against "Virtual" (same optical weight, red accent
-   kept); the monogram and favicon follow. The font is fetched by pinned
-   URL + sha256 in the generator script. Amends spec 024 §4.
+3. **U3.** Superseded: the wordmark is Archivo Black small-caps `VIRTUAL`
+   plus a larger Caveat `me` (italic skew, fixed red); see the 024
+   amendment "Small-caps block VIRTUAL + larger Caveat me". The monogram
+   and favicon stay on the Chakra/mark path unless separately retuned.
 4. **U4.** The wristwatch dial is removed everywhere; the host box keeps a
    status pip, `host:port`, and an uptime line, with comfortable padding.
    Amends spec 024 §5.

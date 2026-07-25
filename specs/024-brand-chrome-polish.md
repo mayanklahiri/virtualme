@@ -190,3 +190,20 @@ pinned URL + sha256 in the generator) with "me" scaled to visual balance
 against "Virtual" (red accent kept). The §5 wristwatch dial is removed from
 both locations; the host box keeps a status pip, `host:port`, and an uptime
 line with comfortable padding.
+
+
+### 2026-07-24 — Small-caps block "VIRTUAL" + larger Caveat "me"
+
+Supersedes the Chakra Petch single-face recipe (U3 / prior amendment). The
+two-face lockup returns, with hierarchy flipped toward "me":
+
+- **`VIRTUAL`** — Archivo Black, rendered as small-caps (all-caps letterforms
+  at 10.5-unit cap height), tighter block tracking (−0.03 em), filled
+  `var(--wordmark-fill, #7d8590)`, optically centered against the taller
+  "me" ink box.
+- **`me`** — Caveat again (casual handwritten face; `skewX(-8)` italic lean,
+  baseline-compensated), oversized to 58 units so it dominates, filled the
+  fixed brand red `#d63b2f`.
+- Generator: `scripts/gen-wordmark.mjs` (pinned Archivo Black + Caveat
+  sha256s unchanged from the earlier two-face amendment). Sidebar CSS:
+  `.wordmark-svg` sized from the generated viewBox (~115×22 px).

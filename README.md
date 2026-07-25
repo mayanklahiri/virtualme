@@ -111,6 +111,7 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/projects/<id>` | Project task, schedule, status, run history, and scratch-directory details |
 | `/jobs` | Queue, filterable machine activity with durations, and type-specific details in three panes |
 | `/tools` | Authoritative agent-tool list, schema-generated forms, queue-backed manual invocation, and structured result rendering |
+| `/data` | Read-only explorer of `$VM_DATA_DIR` (tree + typed viewers; trust-model visible) |
 | `/status` | Service health, system/GPU meters, LLM token/throughput and browser-action charts, active time selectors, Quick Options (jiggler and scheduler pause), and persistent per-process/GPU metrics |
 | `/chat` | Markdown chat, generation controls, LLM progress, and conversation totals |
 | `/speech` | Two-voice streaming local speech with seeds, persistent history/replay, and disk cache |
@@ -119,9 +120,11 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/healthz` | Aggregate JSON health for all eight services |
 | `/ws` | Websocket: live state, metrics, queued jobs, activity, tool manifests/invocation, chat, agent, TTS, and mail frames |
 | `POST /v1/audio/speech` | OpenAI-compatible local speech API (`wav` or raw `pcm`) |
+| `GET /api/data/list` | Read-only directory listing under `$VM_DATA_DIR` (path-contained; trust model) |
+| `GET /api/data/file` | Read-only file stream under `$VM_DATA_DIR` (text capped at 256 KiB unless `download=1`) |
 | `/desktop/` | Redirect to the noVNC client; child paths reverse-proxy noVNC and websockify |
 
-History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status charts offer synchronized `15m` through `30d` lookbacks, boundary-aligned locale-aware time ticks, responsive titles and controls, and theme-consistent series colors; every chart downsamples client-side to at most 120 bars, GPU utilization and memory (in GB) draw side by side, and dedicated charts track LLM tokens in/out, effective token throughput, and browser actions by category. The Status top banner carries overall health, the server-local scheduler clock with active selector tokens, and uptime. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, the browser-reachable address, up to two container-interface addresses, uptime, CPU/load, memory, disk capacity, build version, and a detected GPU beside a theme-tinted Earthrise image.
+History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status charts offer synchronized `15m` through `30d` lookbacks, boundary-aligned locale-aware time ticks, responsive titles and controls, and theme-consistent series colors; every chart downsamples client-side to at most 120 bars, CPU load and memory plus GPU utilization and memory (in GB) draw side by side, and dedicated charts track LLM tokens in/out, effective token throughput, and browser actions by category. The Status top banner carries overall health, the server-local scheduler clock with active selector tokens, and uptime. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, the browser-reachable address, up to two container-interface addresses, uptime, CPU/load, memory, disk capacity, build version, and a detected GPU beside a theme-tinted Earthrise image.
 
 The sidebar connection watch shows the controller hostname and port beside a
 status pip that is green when live, red while reconnecting, and muted while
@@ -302,6 +305,8 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [024](specs/024-brand-chrome-polish.md) | Brand wordmark, wristwatch live indicator, and console polish |
 | [025](specs/025-release-presentation.md) | Marvin release notes, registry metadata, and the /do-release skill |
 | [026](specs/026-console-fixes.md) | Console bugfix sweep: chat, speech, charts, jobs, mail, tools, screenshots |
+| [027](specs/027-structured-read-page.md) | Structured YAML `read_page` digest, tree UI, and tool-testing soak |
+| [028](specs/028-data-explorer.md) | Read-only Data explorer tab and `/api/data/*` volume API |
 
 ### CI/CD
 

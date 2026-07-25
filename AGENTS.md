@@ -157,3 +157,5 @@ Durations render through one graded component and shared short formatting.
 | [024](specs/024-brand-chrome-polish.md) | Brand wordmark, wristwatch live indicator, and console polish |
 | [025](specs/025-release-presentation.md) | Marvin release notes, registry metadata, and the /do-release skill |
 | [026](specs/026-console-fixes.md) | Console bugfix sweep: chat, speech, charts, jobs, mail, tools, screenshots |
+| [027](specs/027-structured-read-page.md) | Structured YAML `read_page` digest, tree UI, and tool-testing soak |
+| [028](specs/028-data-explorer.md) | Read-only Data explorer tab and `/api/data/*` volume API |
