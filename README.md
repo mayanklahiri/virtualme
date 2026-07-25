@@ -129,7 +129,9 @@ history), `agent/` (agent artifacts and manual `dom-dumps/` development
 captures), `projects/` (per-project scratch space),
 `tts-cache/` (recomputable synthesized audio), and `mail/` (dma config/spool,
 bounded flush log, flush marker, and the DKIM private key), plus the mode-0600
-`virtualme.config.yaml` master configuration. Chromium settings,
+`virtualme.config.yaml` master configuration and mode-0600
+`controller-lifecycle.json` crash/clean marker. Notification history and its
+global read state live in the Valkey AOF. Chromium settings,
 projects, and queued mail survive container and image replacement. The
 container runs as the invoking host uid/gid, so
 every data file is host-owned. Everything else is intentionally ephemeral or
@@ -158,6 +160,7 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/projects` | Recurring natural-language tasks, schedules, manual runs, and recent results |
 | `/projects/<id>` | Project task, schedule, status, run history, and scratch-directory details |
 | `/jobs` | Queue, filterable machine activity with durations, and type-specific details in three panes |
+| `/notifications` | Durable assistant/service messages with global unread state, filters, paged history, and structured details |
 | `/tools` | Authoritative agent-tool list plus manual-only development tools (`dump_dom`), schema-generated forms, queue-backed manual invocation, and structured result rendering |
 | `/data` | Read-only icon/list explorer of `$VM_DATA_DIR` with sortable size summaries, deep links, a resizable preview pane, and typed viewers |
 | `/config` | Schema-driven master configuration read/edit view with optimistic saves and deliberate service restart |
@@ -167,7 +170,7 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/mail` | Outbound-mail composer, durable outbox with per-message status, queue contents/errors/next-flush timing, queue clearing, and DKIM DNS record |
 | `/desktop-view` | Embedded private noVNC desktop |
 | `/healthz` | Aggregate JSON health for all eight services |
-| `/ws` | Websocket: live state, metrics, queued jobs, activity, tool manifests/invocation, chat, agent, TTS, and mail frames |
+| `/ws` | Websocket: live state, metrics, notifications, queued jobs, activity, tool manifests/invocation, chat, agent, TTS, and mail frames |
 | `POST /v1/audio/speech` | OpenAI-compatible local speech API (`wav` or raw `pcm`) |
 | `GET /api/data/list` | Read-only directory listing under `$VM_DATA_DIR` (path-contained; trust model) |
 | `GET /api/data/file` | Read-only file stream under `$VM_DATA_DIR` (text capped at 256 KiB unless `download=1`) |
@@ -279,6 +282,22 @@ mail submission with its run time; selecting a row opens its payload, result,
 timing, and type-specific details in a third pane at desktop widths. Tool
 calls and jiggler bursts are hidden by default behind persisted filter
 toggles. The bounded ledger persists in Valkey across container restarts.
+
+### Notifications
+
+The sidebar bell and `/notifications` page show the newest 500 durable
+assistant and local-service messages. Unread state is global: reading in one
+connected tab updates every tab, and state survives reconnects, controller
+restarts, container stops, and image replacement. The page provides server
+type/read filters, 50-row websocket paging, deep-linked structured details,
+and a mobile detail slide-over. The agent's `notify` tool creates a durable
+message without adding a second activity record.
+
+Graceful shutdown records a clean lifecycle notification. A forced controller
+kill is detected from `controller-lifecycle.json` and produces one idempotent
+unclean-startup message; deliberate configuration restarts produce explicit
+shutdown/startup messages instead. Notification protocol is websocket-only;
+there is no notification HTTP API.
 
 ### Local speech
 
@@ -404,7 +423,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [029](specs/029-readpage-goldens.md) | `read_page` DOM goldens, layout-table fidelity, 32K context, and proportionate caps |
 | [030](specs/030-docs-site.md) | Static Astro documentation/marketing site, shared themes, local docs CLI, and orphan-branch Pages publication |
 | [031](specs/031-master-config.md) | Master configuration schema, strict YAML loader, preflight, console, restart flow, and generated reference |
-| [032](specs/032-assistant-notifications.md) | Accepted durable assistant-notifications follow-up; not yet implemented |
+| [032](specs/032-assistant-notifications.md) | Durable assistant notifications, global read state, lifecycle markers, agent tool, and console UI |
 | [033](specs/033-telegram.md) | Accepted authorized Telegram integration follow-up; not yet implemented |
 | [034](specs/034-agent-context-budget.md) | Preflight agent context budgeting, scaled observations, adaptive completions, and graduated recovery |
 

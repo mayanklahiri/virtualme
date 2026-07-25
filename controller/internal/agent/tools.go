@@ -22,6 +22,7 @@ import (
 
 	"github.com/mayanklahiri/virtualme/controller/internal/actuation"
 	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
+	"github.com/mayanklahiri/virtualme/controller/internal/notifications"
 	"github.com/mayanklahiri/virtualme/controller/internal/tts"
 )
 
@@ -213,6 +214,7 @@ func (t *localTools) Definitions() []Tool {
 		{Name: "bash", Description: "Run a one-shot bash command in the container; cwd and exported variables persist for this task.", Schema: schema(`{"type":"object","properties":{"command":{"type":"string"},"timeoutSec":{"type":"integer","minimum":1,"maximum":300}},"required":["command"],"additionalProperties":false}`)},
 		{Name: "system_info", Description: "Probe the local OS, packages, environment, paths, disk, and services.", Schema: schema(`{"type":"object","properties":{"topic":{"type":"string","enum":["os","packages","env","paths","all"]}},"additionalProperties":false}`)},
 		{Name: "speak", Description: "Speak text aloud to the user through the console (local text-to-speech). Use when the user asks to hear something or an audible response is clearly better.", Schema: schema(`{"type":"object","properties":{"text":{"type":"string","maxLength":4096},"speed":{"type":"number","minimum":0.5,"maximum":2}},"required":["text"],"additionalProperties":false}`)},
+		{Name: "notify", Description: "Create a durable notification for the user when a background result, warning, or failure deserves attention. Keep the title and one-line summary concise; detail must be structured data, never HTML.", Schema: schema(`{"type":"object","properties":{"type":{"type":"string","enum":["info","success","warning","error"],"description":"Notification severity/type."},"subtype":{"type":"string","maxLength":48,"pattern":"^[a-z][a-z0-9._-]{0,47}$"},"title":{"type":"string","maxLength":120},"summary":{"type":"string","maxLength":240},"detail":{"type":"object"}},"required":["type","title","summary"],"additionalProperties":false}`)},
 	}
 }
 
@@ -446,9 +448,41 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 		return t.systemInfo(ctx, raw)
 	case "speak":
 		return t.speak(ctx, raw)
+	case "notify":
+		return t.notify(ctx, raw)
 	default:
 		return ToolResult{}, fmt.Errorf("unknown tool %q", name)
 	}
+}
+
+func (t *localTools) notify(ctx context.Context, raw json.RawMessage) (ToolResult, error) {
+	if t.cfg.Notifications == nil {
+		return ToolResult{}, errors.New("notifications unavailable")
+	}
+	var args struct {
+		Type    string         `json:"type"`
+		Subtype string         `json:"subtype"`
+		Title   string         `json:"title"`
+		Summary string         `json:"summary"`
+		Detail  map[string]any `json:"detail"`
+	}
+	if err := decodeArgs(raw, &args); err != nil {
+		return ToolResult{}, err
+	}
+	detail := json.RawMessage(`{}`)
+	if args.Detail != nil {
+		detail, _ = json.Marshal(args.Detail)
+	}
+	notification, err := t.cfg.Notifications.Create(ctx, notifications.CreateRequest{
+		Type: args.Type, Subtype: args.Subtype, Sender: "agent", Title: args.Title,
+		Summary: args.Summary, Renderer: "agent", Detail: detail,
+	})
+	if err != nil {
+		return ToolResult{}, err
+	}
+	return ToolResult{
+		Text: notification.ID, Summary: "Created notification " + notification.ID,
+	}, nil
 }
 
 func capToolText(text string, limit int) string {

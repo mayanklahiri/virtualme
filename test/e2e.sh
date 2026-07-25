@@ -47,9 +47,9 @@ start_vm() {
 }
 
 if [ "${E2E_SKIP_BUILD:-0}" = "1" ]; then
-  echo "e2e: [1/20] skipping CLI build (E2E_SKIP_BUILD=1)"
+  echo "e2e: [1/21] skipping CLI build (E2E_SKIP_BUILD=1)"
 else
-  echo "e2e: [1/20] CLI build (tags :dev and the start tag)"
+  echo "e2e: [1/21] CLI build (tags :dev and the start tag)"
   ./cli.sh build >/dev/null || fail "cli build"
 fi
 
@@ -76,7 +76,7 @@ expect_invalid_config() {
 }
 
 ./cli.sh stop >/dev/null 2>&1 || true
-echo "e2e: [2a/20] invalid master configs fail before longruns"
+echo "e2e: [2a/21] invalid master configs fail before longruns"
 expect_invalid_config "malformed" "indentation must use two spaces" $'version:\n   bad: 1\n'
 expect_invalid_config "unknown-key" "unknown configuration key" $'version: 1\nunknown: true\n'
 expect_invalid_config "wrong-type" "agent.maxSteps" $'version: 1\nagent:\n  maxSteps: fast\n'
@@ -84,7 +84,7 @@ expect_invalid_config "duplicate-key" "duplicate key" $'version: 1\nversion: 1\n
 expect_invalid_config "bad-secret" "mail.smarthost.password" \
   $'version: 1\nmail:\n  smarthost:\n    host: smtp.example\n    username: user\n    password: DO_NOT_LEAK_031\n'
 
-echo "e2e: [2b/20] preflight applies YAML and legacy service settings"
+echo "e2e: [2b/21] preflight applies YAML and legacy service settings"
 CONFIG_ROOT="$(mktemp -d)"
 printf '%s' $'desktop:\n  resolution: 1280x720x24\n' >"$CONFIG_ROOT/virtualme.config.yaml"
 chmod 600 "$CONFIG_ROOT/virtualme.config.yaml"
@@ -114,7 +114,7 @@ docker exec "$NAME" grep -q "VM_EFFECTIVE_RESOLUTION='1366x768x24'" /run/virtual
 VIRTUALME_DATA="$LEGACY_ROOT" ./cli.sh stop >/dev/null || fail "legacy config stop"
 rm -rf "$LEGACY_ROOT"
 
-echo "e2e: [2/20] starting SMTP sink and CLI on fresh data dir ${DATA_DIR}"
+echo "e2e: [2/21] starting SMTP sink and CLI on fresh data dir ${DATA_DIR}"
 MAIL_SINK_HOST=0.0.0.0 MAIL_SINK_ACCEPT_DELAY_MS=1500 \
   node test/mail-sink.mjs "$MAIL_CAPTURE" >/tmp/virtualme-mail-sink.log 2>&1 &
 MAIL_SINK_PID=$!
@@ -126,7 +126,7 @@ export VM_MAIL_DKIM_DOMAIN=example.test
 export VM_MAIL_FLUSH_SEC=5
 start_vm >/dev/null || fail "cli start"
 
-echo "e2e: [3/20] waiting for all-green /healthz (timeout ${TIMEOUT}s)"
+echo "e2e: [3/21] waiting for all-green /healthz (timeout ${TIMEOUT}s)"
 wait_healthy
 [ -f "$DATA_DIR/virtualme.config.yaml" ] || fail "master config was not seeded"
 [ "$(stat -c %a "$DATA_DIR/virtualme.config.yaml")" = 600 ] || fail "master config mode is not 600"
@@ -138,7 +138,7 @@ docker exec "$NAME" configctl docs --check \
   --output /opt/virtualme/docs/src/generated/config-reference.json >/dev/null \
   || fail "config documentation stale"
 
-echo "e2e: [3a/20] config save conflicts, preflight failure, and restart lifecycle"
+echo "e2e: [3a/21] config save conflicts, preflight failure, and restart lifecycle"
 controller_pid=$(docker exec "$NAME" pgrep -x controller)
 llama_pid=$(docker exec "$NAME" pgrep -f '/llama-server')
 docker exec -u 0 "$NAME" chmod 500 /run/virtualme
@@ -170,7 +170,7 @@ node -e '
       body.effective.llama.contextTokens !== 32769) process.exit(1);
 ' "$BASE" || fail "restarted config hashes/effective value did not converge"
 
-echo "e2e: [4/20] orchestrator serves branded SPA assets and sourcemaps"
+echo "e2e: [4/21] orchestrator serves branded SPA assets and sourcemaps"
 code=$(curl -s -o /tmp/e2e-index.html -w '%{http_code}' "$BASE/")
 [ "$code" = 200 ] || fail "GET / returned $code"
 grep -q "Virtual Me" /tmp/e2e-index.html || fail "SPA markup missing from /"
@@ -187,8 +187,8 @@ curl -fsS "$BASE/js/app.js" | grep -q "sourceMappingURL" || fail "app.js missing
 curl -fsS -o /dev/null "$BASE/js/app.js.map" || fail "app.js.map not served"
 curl -fsS -o /dev/null "$BASE/css/app.css.map" || fail "app.css.map not served"
 
-echo "e2e: [5/20] SPA history routes fall back while missing assets stay 404"
-for route in projects status speech mail desktop-view data; do
+echo "e2e: [5/21] SPA history routes fall back while missing assets stay 404"
+for route in projects jobs notifications tools status speech mail desktop-view data config; do
   code=$(curl -s -o /tmp/e2e-route.html -w '%{http_code}' "$BASE/$route")
   [ "$code" = 200 ] && grep -q "Virtual Me" /tmp/e2e-route.html \
     || fail "SPA fallback failed for /$route"
@@ -196,19 +196,19 @@ done
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/js/nope.js")
 [ "$code" = 404 ] || fail "missing asset returned $code (expected 404)"
 
-echo "e2e: [6/20] websocket endpoint rejects non-upgrade with 400"
+echo "e2e: [6/21] websocket endpoint rejects non-upgrade with 400"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/ws")
 [ "$code" = 400 ] || fail "GET /ws returned $code (expected 400)"
 
-echo "e2e: [7/20] remote desktop (noVNC via reverse proxy) serves 2xx"
+echo "e2e: [7/21] remote desktop (noVNC via reverse proxy) serves 2xx"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/desktop/vnc.html")
 [ "$code" = 200 ] || fail "GET /desktop/vnc.html returned $code"
 
-echo "e2e: [8/20] a browser window is visible on the virtual display"
+echo "e2e: [8/21] a browser window is visible on the virtual display"
 docker exec -e DISPLAY=:99 "$NAME" xdotool search --onlyvisible --class chromium >/dev/null \
   || fail "no visible chromium window on :99"
 
-echo "e2e: [9/20] state frames include hostname and disk capacity"
+echo "e2e: [9/21] state frames include hostname and disk capacity"
 node test/state-probe.mjs "ws://127.0.0.1:${PORT}/ws" || fail "state probe"
 if [ "${E2E_GPU:-0}" = "1" ]; then
   node test/gpu-probe.mjs "ws://127.0.0.1:${PORT}/ws" || fail "GPU probe"
@@ -218,11 +218,16 @@ fi
 node test/jiggler-probe.mjs true "ws://127.0.0.1:${PORT}/ws" || fail "jiggler enable"
 node test/jiggler-probe.mjs false "ws://127.0.0.1:${PORT}/ws" || fail "jiggler disable"
 
-echo "e2e: [10/20] metrics protocol returns raw and 15-minute tiers"
+echo "e2e: [9a/21] durable notifications converge across websocket clients"
+notification_output=$(node test/notifications-probe.mjs "$BASE") || fail "notifications probe"
+echo "$notification_output"
+notification_id="${notification_output##* }"
+
+echo "e2e: [10/21] metrics protocol returns raw and 15-minute tiers"
 node test/metrics-probe.mjs "ws://127.0.0.1:${PORT}/ws" || fail "metrics probe"
 
 
-echo "e2e: [11/20] data explorer lists the volume and rejects traversal"
+echo "e2e: [11/21] data explorer lists the volume and rejects traversal"
 list_json=$(curl -fsS "$BASE/api/data/list")
 echo "$list_json" | grep -Eq '"name":"(metrics|valkey)"' \
   || fail "data list missing metrics/valkey: $list_json"
@@ -244,10 +249,10 @@ ctype=$(curl -fsS -o /dev/null -w '%{content_type}' "$BASE/api/data/file?path=e2
 echo "$ctype" | grep -qi 'json' || fail "e2e-data.json content type is $ctype"
 grep -q '"e2e":true' /tmp/e2e-data-file || fail "e2e-data.json body mismatch"
 
-echo "e2e: [12/20] local TTS streams speech and serves OpenAI-compatible WAV"
+echo "e2e: [12/21] local TTS streams speech and serves OpenAI-compatible WAV"
 node test/tts-probe.mjs "ws://127.0.0.1:${PORT}/ws" "$BASE" || fail "tts probe"
 
-echo "e2e: [13/20] outbound mail reaches sink with MIME, CID, and DKIM"
+echo "e2e: [13/21] outbound mail reaches sink with MIME, CID, and DKIM"
 # The stdlib fixture is intentionally plaintext; production remains strict
 # STARTTLS. Permit fallback only in this disposable test configuration.
 printf 'OPPORTUNISTIC_TLS\n' >> "$DATA_DIR/mail/dma.conf"
@@ -260,22 +265,22 @@ grep -qi '^Content-ID:' "$MAIL_CAPTURE" || fail "captured mail lacks Content-ID"
 grep -qi 'cid:img1@virtualme' "$MAIL_CAPTURE" || fail "captured mail lacks cid reference"
 grep -qi '^DKIM-Signature:' "$MAIL_CAPTURE" || fail "captured mail lacks DKIM signature"
 
-echo "e2e: [14/20] queue probe runs through pushed, running, and finished states"
+echo "e2e: [14/21] queue probe runs through pushed, running, and finished states"
 node test/queue-probe.mjs "ws://127.0.0.1:${PORT}/ws" || fail "queue probe"
 
-echo "e2e: [15/20] project CRUD and manual run persist through the queue"
+echo "e2e: [15/21] project CRUD and manual run persist through the queue"
 project_output=$(node test/projects-probe.mjs "ws://127.0.0.1:${PORT}/ws") || fail "projects probe"
 printf '%s\n' "$project_output"
 project_id="${project_output##*id=}"
 [ -n "$project_id" ] || fail "projects probe did not report id"
 
-echo "e2e: [16/20] chat round-trip streams at least one delta"
+echo "e2e: [16/21] chat round-trip streams at least one delta"
 node test/chat-probe.mjs "ws://127.0.0.1:${PORT}/ws" || fail "chat probe"
 
-echo "e2e: [17/20] chat generation can be stopped after its first delta"
+echo "e2e: [17/21] chat generation can be stopped after its first delta"
 node test/chat-probe.mjs --stop "ws://127.0.0.1:${PORT}/ws" || fail "chat stop probe"
 
-echo "e2e: [18/20] optional browser-agent tasks produce browser and speech steps"
+echo "e2e: [18/21] optional browser-agent tasks produce browser and speech steps"
 if [ "${E2E_AGENT:-0}" = "1" ]; then
   probe_output=$(AGENT_E2E_TIMEOUT="${AGENT_E2E_TIMEOUT:-600}" \
     node test/agent-probe.mjs "ws://127.0.0.1:${PORT}/ws") || fail "agent probe"
@@ -307,14 +312,14 @@ else
   echo "e2e: jiggler motion skipped (set E2E_JIGGLER=1 to enable)"
 fi
 
-echo "e2e: [19/20] direct mode accepts and queues deferred mail"
+echo "e2e: [19/21] direct mode accepts and queues deferred mail"
 ./cli.sh stop >/dev/null || fail "cli stop before direct mode"
 unset VM_MAIL_SMARTHOST VM_MAIL_SMARTHOST_PORT
 start_vm >/dev/null || fail "cli start (direct mode)"
 wait_healthy
 node test/mail-probe.mjs --direct "ws://127.0.0.1:${PORT}/ws" || fail "mail direct probe"
 
-echo "e2e: [20/20] restart preserves chat, projects, speech, metrics, mail spool, and DKIM key"
+echo "e2e: [20/21] restart preserves chat, projects, speech, metrics, mail spool, and DKIM key"
 compgen -G "$DATA_DIR/valkey/*" >/dev/null \
   || fail "valkey persistence is empty before restart"
 compgen -G "$DATA_DIR/tts-cache/*.wav" >/dev/null \
@@ -323,6 +328,8 @@ config_hash=$(sha256sum "$DATA_DIR/virtualme.config.yaml" | cut -d' ' -f1)
 ./cli.sh stop >/dev/null || fail "cli stop"
 start_vm >/dev/null || fail "cli start (restart)"
 wait_healthy
+[ -f "$DATA_DIR/controller-lifecycle.json" ] || fail "controller lifecycle marker missing"
+[ "$(stat -c %a "$DATA_DIR/controller-lifecycle.json")" = 600 ] || fail "controller lifecycle marker mode is not 600"
 [ "$(sha256sum "$DATA_DIR/virtualme.config.yaml" | cut -d' ' -f1)" = "$config_hash" ] \
   || fail "restart changed canonical master config bytes"
 [ -f "$DATA_DIR/metrics/tier0.json" ] || fail "metrics tier0.json missing after restart"
@@ -341,6 +348,20 @@ node test/jiggler-probe.mjs --expect false "ws://127.0.0.1:${PORT}/ws" \
 [ -s "$DATA_DIR/mail/dkim.key" ] || fail "DKIM key missing after restart"
 [ "$(stat -c %a "$DATA_DIR/mail/dkim.key")" = 600 ] || fail "DKIM key mode is not 600"
 compgen -G "$DATA_DIR/mail/spool/*" >/dev/null || fail "mail spool lost across restart"
+node test/notifications-probe.mjs --verify-lifecycle "$BASE" "$notification_id" 0 \
+  || fail "notification clean/config lifecycle probe"
+echo "e2e: [21/21] forced controller kill emits one unclean lifecycle notification"
+controller_pid=$(docker exec "$NAME" pgrep -x controller)
+docker exec "$NAME" kill -KILL "$controller_pid" >/dev/null 2>&1 || true
+deadline=$(( $(date +%s) + TIMEOUT ))
+until new_controller_pid=$(docker exec "$NAME" pgrep -x controller 2>/dev/null) \
+  && [ "$new_controller_pid" != "$controller_pid" ] \
+  && curl -fsS "$BASE/healthz" 2>/dev/null | grep -q '"ok":true'; do
+  [ "$(date +%s)" -lt "$deadline" ] || fail "controller did not recover after forced kill"
+  sleep 2
+done
+node test/notifications-probe.mjs --verify-lifecycle "$BASE" "$notification_id" 1 \
+  || fail "notification unclean lifecycle probe"
 
 ./cli.sh stop >/dev/null
 echo "e2e: OK"

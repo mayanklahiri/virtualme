@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,6 +34,7 @@ import (
 	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 	"github.com/mayanklahiri/virtualme/controller/internal/mail"
 	"github.com/mayanklahiri/virtualme/controller/internal/metrics"
+	"github.com/mayanklahiri/virtualme/controller/internal/notifications"
 	"github.com/mayanklahiri/virtualme/controller/internal/projects"
 	"github.com/mayanklahiri/virtualme/controller/internal/state"
 	"github.com/mayanklahiri/virtualme/controller/internal/tts"
@@ -384,8 +386,11 @@ func main() {
 		SendmailPath: master.Mail.SendmailPath, MailSpoolDir: master.Mail.SpoolDirectory,
 	}
 	hub := ws.NewHub()
-	activity := jobs.NewActivity(valkey.New(cfg.ValkeyAddr), hub.Broadcast)
-	speechLog := tts.NewLog(valkey.New(cfg.ValkeyAddr), hub.Broadcast)
+	sharedValkey := valkey.New(cfg.ValkeyAddr)
+	notificationService := notifications.New(sharedValkey, loaded.DataDir, hub.Broadcast)
+	notificationLifecycle := notifications.NewLifecycle(notificationService)
+	activity := jobs.NewActivity(sharedValkey, hub.Broadcast)
+	speechLog := tts.NewLog(sharedValkey, hub.Broadcast)
 	ttsClient := &tts.Client{
 		URL: "http://" + master.TTS.Address,
 		Log: speechLog,
@@ -434,6 +439,7 @@ func main() {
 		Activity:      activity,
 		Broadcast:     hub.Broadcast,
 		Counters:      llmCounters,
+		Notifications: notificationService,
 	}
 	localTools := agent.NewLocalTools(agentConfig)
 	agentConfig.Executor = localTools
@@ -605,6 +611,9 @@ func main() {
 		if jigglerService.HandleMessage(payload) {
 			return
 		}
+		if notificationService.HandleMessage(conn, payload) {
+			return
+		}
 		chatService.HandleClientMessage(conn, payload)
 	})
 	hub.SetOnConnect(func(conn *ws.Conn) {
@@ -619,6 +628,12 @@ func main() {
 		_ = conn.WriteText(activity.Message())
 		_ = conn.WriteText(speechLog.Message())
 		_ = conn.WriteText(toolsList)
+		if message, err := notificationService.Message(); err != nil {
+			log.Printf("notifications: on-connect snapshot: %v", err)
+			_ = conn.WriteText([]byte(`{"type":"notification-error","requestId":"","code":"persistence_failed","error":"notification state unavailable"}`))
+		} else {
+			_ = conn.WriteText(message)
+		}
 	})
 	hub.SetOnDisconnect(jobManager.DropInitiator)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -630,6 +645,11 @@ func main() {
 	if err := jigglerService.Start(ctx); err != nil {
 		log.Fatal("jiggler: startup failed:", err)
 	}
+	startupCtx, startupCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	if err := notificationLifecycle.Startup(startupCtx); err != nil {
+		log.Printf("notifications: lifecycle startup: %v", err)
+	}
+	startupCancel()
 	go collector.Run(ctx)
 	persistDone := make(chan struct{})
 	go func() {
@@ -637,7 +657,7 @@ func main() {
 		close(persistDone)
 	}()
 	log.Println("health: eight concurrent probes configured")
-	log.Println("websocket: state hub ready (chat + metrics + tts + mail + jobs + projects wired)")
+	log.Println("websocket: state hub ready (chat + metrics + tts + mail + jobs + projects + notifications wired)")
 	log.Println("chat: queued llama-backed shared conversation ready")
 	log.Println("jobs: sequential worker and scheduler ready")
 	log.Println("agent: OS-level browser-control loop ready")
@@ -652,6 +672,29 @@ func main() {
 	configService, err := configapi.New(configapi.Options{
 		Loaded: loaded, Broadcast: hub.Broadcast,
 		Coordinator: coordinator,
+		Planner:     notificationLifecycle,
+		Notifier: configapi.ConfigNotifierFunc(func(ctx context.Context, notice configapi.SaveNotice) error {
+			keys := append([]string(nil), notice.ChangedKeys...)
+			sort.Strings(keys)
+			if len(keys) > 64 {
+				keys = keys[:64]
+			}
+			for index, key := range keys {
+				runes := []rune(key)
+				if len(runes) > 120 {
+					keys[index] = string(runes[:120])
+				}
+			}
+			detail, _ := json.Marshal(map[string]any{
+				"changedKeys": keys, "restartRequired": notice.RestartRequired, "revision": notice.Revision,
+			})
+			_, err := notificationService.Create(ctx, notifications.CreateRequest{
+				Type: "success", Subtype: "config-saved", Sender: "config",
+				Title: "Configuration saved", Summary: "Master configuration was saved successfully.",
+				Renderer: "configuration", Detail: detail,
+			})
+			return err
+		}),
 		Shutdown: func(services []string) {
 			select {
 			case restartRequests <- services:
@@ -673,12 +716,22 @@ func main() {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		lifecycleCtx, lifecycleCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		if err := notificationLifecycle.Shutdown(lifecycleCtx); err != nil {
+			log.Printf("notifications: lifecycle shutdown: %v", err)
+		}
+		lifecycleCancel()
 		_ = server.Shutdown(shutdownCtx)
 		<-errs
 		<-persistDone
 	case services := <-restartRequests:
 		stop()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		lifecycleCtx, lifecycleCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		if err := notificationLifecycle.Shutdown(lifecycleCtx); err != nil {
+			log.Printf("notifications: lifecycle restart shutdown: %v", err)
+		}
+		lifecycleCancel()
 		_ = server.Shutdown(shutdownCtx)
 		cancel()
 		<-errs

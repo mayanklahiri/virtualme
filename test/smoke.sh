@@ -246,7 +246,7 @@ compgen -G "$DATA_DIR/valkey/appendonly*" >/dev/null \
 for entry in "$DATA_DIR"/*; do
   [ -e "$entry" ] || continue
   case "$(basename "$entry")" in
-    valkey|chromium|xdg|metrics|agent|mail|projects|tts-cache|virtualme.config.yaml|virtualme.config.yaml.lock|.virtualme.config.yaml.tmp-*) ;;
+    valkey|chromium|xdg|metrics|agent|mail|projects|tts-cache|controller-lifecycle.json|virtualme.config.yaml|virtualme.config.yaml.lock|.virtualme.config.yaml.tmp-*) ;;
     *) fail "unexpected top-level data entry: $(basename "$entry")" ;;
   esac
 done

@@ -96,6 +96,31 @@ func TestCommandWireFormats(t *testing.T) {
 	}
 }
 
+func TestEvalWireAndNestedReply(t *testing.T) {
+	want := wire("EVAL", "return {1,ARGV[1],nil}", "2", "one", "two", "argument")
+	addr, wait := fakeValkey(t, want, "*3\r\n:1\r\n$8\r\nargument\r\n*-1\r\n")
+	reply, err := New(addr).Eval("return {1,ARGV[1],nil}", []string{"one", "two"}, "argument")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, ok := reply.([]any)
+	if !ok || len(items) != 3 || items[0] != int64(1) || items[1] != "argument" || items[2] != nil {
+		t.Fatalf("reply = %#v", reply)
+	}
+	if got := wait(); got != want {
+		t.Fatalf("request = %q, want %q", got, want)
+	}
+}
+
+func TestEvalError(t *testing.T) {
+	want := wire("EVAL", "bad", "0")
+	addr, wait := fakeValkey(t, want, "-ERR injected\r\n")
+	if _, err := New(addr).Eval("bad", nil); err == nil || !strings.Contains(err.Error(), "injected") {
+		t.Fatalf("error = %v", err)
+	}
+	_ = wait()
+}
+
 func TestArrayAndNilReplies(t *testing.T) {
 	t.Run("lrange", func(t *testing.T) {
 		want := wire("LRANGE", "k", "0", "-1")

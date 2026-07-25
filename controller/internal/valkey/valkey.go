@@ -42,6 +42,15 @@ func (v *Client) do(args ...string) (any, error) {
 	return parseReply(bufio.NewReader(conn))
 }
 
+// Eval executes one atomic Lua script with explicit keys and arguments.
+func (v *Client) Eval(script string, keys []string, args ...string) (any, error) {
+	command := make([]string, 0, 3+len(keys)+len(args))
+	command = append(command, "EVAL", script, strconv.Itoa(len(keys)))
+	command = append(command, keys...)
+	command = append(command, args...)
+	return v.do(command...)
+}
+
 func parseReply(reader *bufio.Reader) (any, error) {
 	line, err := reader.ReadString('\n')
 	if err != nil {

@@ -10,7 +10,9 @@ INTER_URL="https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip"
 INTER_SHA256="9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e"
 LUCIDE_URL="https://github.com/lucide-icons/lucide/releases/download/1.26.0/lucide-icons-1.26.0.zip"
 LUCIDE_SHA256="7b3c98ebbd473db33057f75fd67076957ba59d7a9ccd2098d3754800fe533e84"
-ICONS=(house folder folder-kanban file file-braces image layout-grid list list-checks activity message-circle mail monitor menu x sun moon palette send square trash-2 copy check external-link download triangle-alert bot terminal wrench brain clock-3 chevron-down chevron-right chevron-left arrow-up arrow-down grip-vertical volume-2 play pause plus circle-x loader-circle)
+ICONS=(house folder folder-kanban file file-braces image layout-grid list list-checks activity message-circle mail monitor menu x sun moon palette send square trash-2 copy check external-link download triangle-alert bot terminal wrench brain clock-3 chevron-down chevron-right chevron-left arrow-up arrow-down grip-vertical volume-2 play pause plus circle-x loader-circle bell circle-check settings)
+# Lucide 1.26 names this glyph info.svg; retain the spec's stable sprite ID.
+ICON_ALIASES=("info|circle-info")
 FONT_ROWS=(
   "SpaceGrotesk.woff2|https://fonts.gstatic.com/s/spacegrotesk/v22/V8mDoQDjQSkFtoMM3T6r8E7mPbF4Cw.woff2|0640890476fc1198ab4de571fb658de443c4d85b66466ec09534a8737ab1ce9d"
   "JetBrainsMono.woff2|https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbV2o-flEEny0FZhsfKu5WU4xD7OwE.woff2|18be452724bfdc236c074ca94a249a7f41a86752c7d04ab258ce9ed5651f6a7e"
@@ -30,6 +32,10 @@ for row in "${FONT_ROWS[@]}"; do
 done
 for icon in "${ICONS[@]}"; do
   [[ -s "$ICON_DEST/$icon.svg" ]] || complete=0
+done
+for row in "${ICON_ALIASES[@]}"; do
+  IFS='|' read -r _ destination <<<"$row"
+  [[ -s "$ICON_DEST/$destination.svg" ]] || complete=0
 done
 if [[ "$complete" = 1 ]]; then
   echo "fetch-assets: assets present"
@@ -59,6 +65,10 @@ icons_complete=1
 for icon in "${ICONS[@]}"; do
   [[ -s "$ICON_DEST/$icon.svg" ]] || icons_complete=0
 done
+for row in "${ICON_ALIASES[@]}"; do
+  IFS='|' read -r _ destination <<<"$row"
+  [[ -s "$ICON_DEST/$destination.svg" ]] || icons_complete=0
+done
 if [[ "$icons_complete" = 0 ]]; then
   curl -fsSL --retry 3 -o "$tmp/lucide.zip" "$LUCIDE_URL"
   echo "$LUCIDE_SHA256  $tmp/lucide.zip" | sha256sum -c -
@@ -66,6 +76,12 @@ if [[ "$icons_complete" = 0 ]]; then
     entry="$(unzip -Z1 "$tmp/lucide.zip" | awk -v name="$icon.svg" '$0 == name || $0 ~ ("/" name "$") { found=$0 } END { print found }')"
     [[ -n "$entry" ]] || { echo "fetch-assets: missing Lucide icon $icon" >&2; exit 1; }
     unzip -p "$tmp/lucide.zip" "$entry" > "$ICON_DEST/$icon.svg"
+  done
+  for row in "${ICON_ALIASES[@]}"; do
+    IFS='|' read -r source destination <<<"$row"
+    entry="$(unzip -Z1 "$tmp/lucide.zip" | awk -v name="$source.svg" '$0 == name || $0 ~ ("/" name "$") { found=$0 } END { print found }')"
+    [[ -n "$entry" ]] || { echo "fetch-assets: missing Lucide icon $source" >&2; exit 1; }
+    unzip -p "$tmp/lucide.zip" "$entry" > "$ICON_DEST/$destination.svg"
   done
 fi
 

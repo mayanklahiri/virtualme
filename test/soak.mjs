@@ -165,6 +165,103 @@ const flows = [
     },
   },
   {
+    name: "notifications-roundtrip",
+    async run(ws, flowLog) {
+      /** @type {string[]} */
+      const problems = [];
+      const second = new WebSocket(URL_WS);
+      /** @type {any[]} */
+      const framesA = [];
+      /** @type {any[]} */
+      const framesB = [];
+      /** @param {MessageEvent} event */
+      const onA = (event) => framesA.push(JSON.parse(String(event.data)));
+      /** @param {MessageEvent} event */
+      const onB = (event) => framesB.push(JSON.parse(String(event.data)));
+      ws.addEventListener("message", onA);
+      second.addEventListener("message", onB);
+      const waitOpen = new Promise((resolve, reject) => {
+        second.addEventListener("open", resolve, { once: true });
+        second.addEventListener("error", reject, { once: true });
+      });
+      /** @param {any[]} frames @param {(frame: any) => boolean} predicate @param {string} label */
+      const waitFor = async (frames, predicate, label) => {
+        const deadline = Date.now() + 60_000;
+        while (Date.now() < deadline) {
+          const frame = frames.find(predicate);
+          if (frame) return frame;
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        throw new Error(`notifications ${label} timed out`);
+      };
+      try {
+        await waitOpen;
+        ws.send(JSON.stringify({ type: "tools-list-req" }));
+        const tools = await waitFor(framesA, (frame) => frame.type === "tools-list", "manifest");
+        const notify = tools.tools?.find((/** @type {any} */ tool) => tool.name === "notify");
+        if (!notify) problems.push("notify missing from tools-list");
+        if (notify?.schema?.additionalProperties !== false) problems.push("notify schema permits extra properties");
+        const invocation = randomUUID();
+        ws.send(JSON.stringify({
+          type: "tool-invoke", id: invocation, tool: "notify",
+          args: { type: "success", subtype: "soak", title: `Soak ${invocation}`,
+            summary: "Two-client durable notification probe.", detail: { invocation } },
+        }));
+        const result = await waitFor(framesA,
+          (frame) => frame.type === "tool-result" && frame.id === invocation, "tool result");
+        if (!result.ok || !/^[0-9A-HJKMNP-TV-Z]{26}$/.test(result.text ?? "")) {
+          problems.push(`notify tool failed or returned invalid ULID: ${JSON.stringify(result)}`);
+          return { steps: [], reply: "", chatError: "", probeProblems: problems };
+        }
+        const id = result.text;
+        const stateA = await waitFor(framesA,
+          (frame) => frame.type === "notifications-state" && frame.notifications?.some((/** @type {any} */ item) => item.id === id), "A create");
+        const stateB = await waitFor(framesB,
+          (frame) => frame.type === "notifications-state" && frame.notifications?.some((/** @type {any} */ item) => item.id === id), "B create");
+        if (stateA.unread !== stateB.unread) problems.push("create unread counts diverged");
+        second.close();
+        const third = new WebSocket(URL_WS);
+        /** @type {any[]} */
+        const framesC = [];
+        third.addEventListener("message", (event) => framesC.push(JSON.parse(String(event.data))));
+        await new Promise((resolve, reject) => {
+          third.addEventListener("open", resolve, { once: true });
+          third.addEventListener("error", reject, { once: true });
+        });
+        await waitFor(framesC,
+          (frame) => frame.type === "notifications-state" && frame.notifications?.some((/** @type {any} */ item) => item.id === id && !item.readAtMs), "reconnect");
+        ws.send(JSON.stringify({ type: "notification-read", requestId: randomUUID(), id }));
+        const readA = await waitFor(framesA,
+          (frame) => frame.type === "notifications-state" && frame.change?.kind === "read" && frame.change.id === id, "A read");
+        const readC = await waitFor(framesC,
+          (frame) => frame.type === "notifications-state" && frame.change?.kind === "read" && frame.change.id === id, "C read");
+        if (!readA.change.readAtMs || readA.change.readAtMs !== readC.change.readAtMs) problems.push("read timestamps diverged");
+        third.send(JSON.stringify({ type: "notifications-read-all", requestId: randomUUID() }));
+        await waitFor(framesA, (frame) => frame.type === "notifications-state" && frame.unread === 0, "A read-all");
+        const allC = await waitFor(framesC, (frame) => frame.type === "notifications-state" && frame.unread === 0, "C read-all");
+        const firstReadAt = allC.notifications.find((/** @type {any} */ item) => item.id === id)?.readAtMs;
+        third.send(JSON.stringify({ type: "notifications-read-all", requestId: randomUUID() }));
+        const repeat = await waitFor(framesC,
+          (frame) => frame.type === "notifications-state" && frame.unread === 0 &&
+            frame.notifications?.find((/** @type {any} */ item) => item.id === id)?.readAtMs === firstReadAt, "idempotent read-all");
+        if (!repeat) problems.push("idempotent read-all missing");
+        third.close();
+        flowLog(`notification ${id} converged across clients`);
+      } finally {
+        ws.removeEventListener("message", onA);
+        second.removeEventListener("message", onB);
+        second.close();
+      }
+      return { steps: [], reply: "", chatError: "", probeProblems: problems };
+    },
+    hard(r) {
+      return r.probeProblems ?? [];
+    },
+    soft() {
+      return [];
+    },
+  },
+  {
     name: "tools-roundtrip",
     run(ws, flowLog) {
       return new Promise((resolve, reject) => {

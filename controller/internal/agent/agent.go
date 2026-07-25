@@ -20,6 +20,7 @@ import (
 
 	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 	"github.com/mayanklahiri/virtualme/controller/internal/metrics"
+	"github.com/mayanklahiri/virtualme/controller/internal/notifications"
 	"github.com/mayanklahiri/virtualme/controller/internal/tts"
 	"github.com/mayanklahiri/virtualme/controller/prompts"
 )
@@ -88,6 +89,12 @@ type Config struct {
 	TTS           *tts.Client
 	Activity      jobs.ActivityRecorder
 	Counters      *metrics.Counters
+	Notifications NotificationCreator
+}
+
+// NotificationCreator is the narrow durable-notification tool seam.
+type NotificationCreator interface {
+	Create(context.Context, notifications.CreateRequest) (notifications.Notification, error)
 }
 
 // ActionCategory maps one executed tool to a metrics action category.

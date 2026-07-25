@@ -14,6 +14,7 @@ import { initJobs } from "./jobs.js";
 import { initTools } from "./tools.js";
 import { initData } from "./data.js";
 import { initConfig } from "./config.js";
+import { initNotifications } from "./notifications.js";
 
 initTheme();
 initNav();
@@ -27,6 +28,7 @@ const jobs = initJobs((value) => socket.send(value));
 const tools = initTools((value) => socket.send(value));
 const data = initData();
 const configuration = initConfig();
+const notifications = initNotifications((value) => socket.send(value));
 const agent = initAgent(chat.log, (text) => chat.setStatus(text));
 const jigglerSwitch = document.querySelector("#jiggler-switch");
 jigglerSwitch.addEventListener("click", () => {
@@ -58,6 +60,7 @@ function onStatus(status, connectedSince) {
   speech.status(status);
   mail.connection(status);
   configuration.connection(status);
+  notifications.status(status);
 }
 
 function onMessage(message) {
@@ -135,6 +138,12 @@ function onMessage(message) {
     case "config-restarting":
       configuration.restarting(message);
       break;
+    case "notifications-state":
+    case "notifications-page":
+    case "notification-detail":
+    case "notification-error":
+      notifications.frame(message);
+      break;
   }
 }
 
@@ -147,4 +156,6 @@ initRouter((page) => {
   if (page === "tools") tools.enter();
   data.show(page);
   configuration.show(page);
+  if (page === "notifications") notifications.enter();
+  else notifications.closePopover(false);
 });

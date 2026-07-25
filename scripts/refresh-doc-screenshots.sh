@@ -37,6 +37,7 @@ ROUTES=(
   "home-route|/"
   "projects|/projects"
   "jobs|/jobs"
+  "notifications|/notifications"
   "tools|/tools"
   "data|/data"
   "config|/config"

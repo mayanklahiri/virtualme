@@ -24,6 +24,16 @@ type fakeCoordinator struct {
 	preflights int
 }
 
+type fakePlanner struct {
+	calls int
+	err   error
+}
+
+func (f *fakePlanner) PlanConfigRestart(context.Context) error {
+	f.calls++
+	return f.err
+}
+
 func (f *fakeCoordinator) Preflight(context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -45,12 +55,13 @@ func TestConfigAPIProjectionSaveConflictAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	coordinator := new(fakeCoordinator)
+	planner := new(fakePlanner)
 	var broadcasts [][]byte
 	var broadcastMu sync.Mutex
 	notices := make(chan SaveNotice, 4)
 	shutdowns := make(chan []string, 1)
 	service, err := New(Options{
-		Loaded: loaded, Environment: []string{}, Coordinator: coordinator,
+		Loaded: loaded, Environment: []string{}, Coordinator: coordinator, Planner: planner,
 		Notifier: ConfigNotifierFunc(func(_ context.Context, notice SaveNotice) error {
 			notices <- notice
 			return nil
@@ -128,6 +139,9 @@ func TestConfigAPIProjectionSaveConflictAndRestart(t *testing.T) {
 	restart := request(t, mux, http.MethodPost, "/api/config/restart", map[string]any{"pendingHash": pendingHash})
 	if restart.Code != http.StatusAccepted {
 		t.Fatalf("restart: %d %s", restart.Code, restart.Body.String())
+	}
+	if planner.calls != 1 {
+		t.Fatalf("restart planner calls = %d", planner.calls)
 	}
 	select {
 	case services := <-shutdowns:

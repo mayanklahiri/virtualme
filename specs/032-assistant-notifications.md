@@ -1080,4 +1080,68 @@ Implementation order is normative:
 
 ## Amendments
 
-None.
+### 2026-07-25 — Execution record
+
+Spec 032 was implemented after spec 031 in the required N1-N3 order. Before
+production code was added, the focused Go tests failed on the absent
+`internal/notifications` model/service/lifecycle symbols and missing Valkey
+`Eval`, while the Node UI tests failed because `notifications.js` and its
+route/markup did not exist. Those failures were retained in the executor log
+as the red-first evidence.
+
+N1 adds the monotonic Crockford ULID generator, bounded text/detail
+canonicalization, ordered type/renderer registry, typed producer interface,
+dependency-free RESP2 `Eval`, four atomic Valkey scripts, 500-item retention,
+global first-read state, bounded websocket snapshots/pages/details, strict
+request handling, and synchronous durable-before-broadcast ordering. The
+mode-0600 atomic lifecycle marker covers first boot, clean stop, planned
+configuration restart, byte-identical pending recovery, and unexpected
+controller death. Controller wiring initializes lifecycle state before
+listening and finalizes it before HTTP shutdown.
+
+N2 adds the server-registry-driven bell, exact unread badges, keyboard/focus
+popover behavior, `/notifications` paging/filter/detail route, responsive
+slide-over, reconnect/error states, and DOM-only generic/lifecycle/
+configuration/agent renderers. Lucide 1.26 calls the requested circle-info
+glyph `info.svg`; the pinned fetch step writes that source under the stable
+`circle-info.svg` sprite name, so the protocol's `i-circle-info` identifier
+remains normative without changing the pinned archive.
+
+N3 adds the model-callable and Tools-page `notify` definition, queue-backed
+manual execution, fixed `agent` sender/renderer, config-save producer, and the
+restart-planner seam. No prompt, HTTP notification API, Telegram runtime,
+runtime dependency, Docker layer, or s6 service was added. Notification state
+and the lifecycle marker were added to the canonical persistence map and
+known-root gate.
+
+Verification and reconciliation:
+
+- Initial focused red: `go test ./internal/notifications ./internal/valkey`
+  failed on the absent package API and `Eval`; `node --test
+  test/notifications-ui.test.js` failed on the absent module.
+- Focused green: `go test ./internal/notifications ./internal/valkey
+  ./internal/agent ./internal/configapi ./cmd/controller`.
+- `npm run check` passed all deterministic gates, 104 Node tests, docs
+  check/build, web build, vet, and all Go tests.
+- A rebuilt `bash test/e2e.sh` passed the two-client create/reconnect/read/
+  read-all probe and the existing full-stack suite. The first probe attempt
+  exposed that its client did not retain frames arriving before waiter
+  registration; the probe was corrected to buffer frames, then the rebuilt
+  suite passed.
+- The expanded 21-step lifecycle e2e passed clean stop, planned config
+  restart shutdown/startup, persistent read state, forced controller kill,
+  exactly one `unclean-startup`, and fresh-client replay.
+- `SOAK_FLOW=notifications-roundtrip ./cli.sh soak --no-build` passed its
+  required e2e phase and the hard-only two-socket flow.
+- `npm run test:browser --prefix docs` passed all four desktop/mobile,
+  keyboard, theme, and navigation browser tests.
+- `/master-update` reconciled README, AGENTS, develop/operate skills,
+  persistence/spec tables, routes/protocol/tool/lifecycle documentation, and
+  refreshed all console screenshots plus new 480/960/1280 notification
+  screenshots.
+
+The default e2e run intentionally skipped its existing optional
+`E2E_AGENT=1`, `E2E_JIGGLER=1`, and explicit `E2E_GPU=1` probes. Hardware GPU
+was detected by the container but the optional GPU assertion mode was not
+enabled. These are not notification acceptance blockers; all notification
+live probes are deterministic and passed.

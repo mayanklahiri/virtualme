@@ -17,8 +17,62 @@ import (
 	"time"
 
 	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
+	"github.com/mayanklahiri/virtualme/controller/internal/notifications"
 	"github.com/mayanklahiri/virtualme/controller/internal/tts"
 )
+
+type fakeNotificationCreator struct {
+	request notifications.CreateRequest
+	err     error
+}
+
+func (f *fakeNotificationCreator) Create(_ context.Context, request notifications.CreateRequest) (notifications.Notification, error) {
+	f.request = request
+	if f.err != nil {
+		return notifications.Notification{}, f.err
+	}
+	return notifications.Notification{ID: "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, nil
+}
+
+func TestNotifyToolDefinitionAndExecution(t *testing.T) {
+	creator := new(fakeNotificationCreator)
+	tools := NewLocalTools(Config{Notifications: creator})
+	var definition *Tool
+	for _, candidate := range tools.Definitions() {
+		if candidate.Name == "notify" {
+			copy := candidate
+			definition = &copy
+		}
+	}
+	if definition == nil || !bytes.Contains(definition.Schema, []byte(`"additionalProperties":false`)) {
+		t.Fatal("notify definition is missing or permits unknown properties")
+	}
+	result, err := tools.Execute(context.Background(), "notify", json.RawMessage(
+		`{"type":"warning","subtype":"background","title":"Attention","summary":"Finished with warnings.","detail":{"count":2}}`,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Text != "01ARZ3NDEKTSV4RRFFQ69G5FAV" || result.Observe {
+		t.Fatalf("result = %#v", result)
+	}
+	if creator.request.Sender != "agent" || creator.request.Renderer != "agent" ||
+		creator.request.ID != "" || creator.request.OccurredAtMS != 0 {
+		t.Fatalf("trusted fields = %#v", creator.request)
+	}
+	if string(creator.request.Detail) != `{"count":2}` {
+		t.Fatalf("detail = %s", creator.request.Detail)
+	}
+	if _, err := tools.Execute(context.Background(), "notify", json.RawMessage(
+		`{"type":"info","title":"x","summary":"y","unknown":true}`,
+	)); err == nil {
+		t.Fatal("notify accepted an unknown property")
+	}
+	if _, err := NewLocalTools(Config{}).Execute(context.Background(), "notify", nil); err == nil ||
+		err.Error() != "notifications unavailable" {
+		t.Fatalf("missing creator error = %v", err)
+	}
+}
 
 type fakeExecutor struct {
 	mu    sync.Mutex

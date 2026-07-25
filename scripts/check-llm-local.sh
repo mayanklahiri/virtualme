@@ -123,6 +123,14 @@ grep -Fq 'virtualme.config.yaml' controller/internal/config/load.go || {
   echo "locality: master config is missing from internal/config" >&2
   rc=1
 }
+grep -Fq 'controller-lifecycle.json' controller/internal/notifications/lifecycle.go || {
+  echo "locality: controller lifecycle marker is missing from internal/notifications" >&2
+  rc=1
+}
+grep -Fq 'virtualme:notifications:' controller/internal/notifications/service.go || {
+  echo "locality: durable notification keys are missing from internal/notifications" >&2
+  rc=1
+}
 grep -Fq 'configctl preflight' docker/rootfs/etc/cont-init.d/15-config.sh || {
   echo "locality: config preflight is missing from container init" >&2
   rc=1

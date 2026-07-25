@@ -39,6 +39,9 @@ export function initTheme() {
 
   function togglePopover() {
     const opening = popover.hidden;
+    if (opening) {
+      dispatchEvent(new CustomEvent("themepopoveropen"));
+    }
     popover.hidden = !opening;
     themeButton.setAttribute("aria-expanded", String(opening));
     if (opening) {

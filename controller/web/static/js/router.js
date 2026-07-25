@@ -2,6 +2,7 @@ const routes = new Map([
   ["/", ["home", "Home"]],
   ["/projects", ["projects", "Projects"]],
   ["/jobs", ["jobs", "Jobs"]],
+  ["/notifications", ["notifications", "Notifications"]],
   ["/tools", ["tools", "Tools"]],
   ["/data", ["data", "Data"]],
   ["/config", ["config", "Config"]],
@@ -45,7 +46,7 @@ export function initRouter(onNavigate = () => {}) {
       return;
     }
     event.preventDefault();
-    history.pushState(null, "", url.pathname);
+    history.pushState(null, "", url.pathname + url.search);
     render();
   });
   addEventListener("popstate", render);

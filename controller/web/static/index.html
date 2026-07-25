@@ -47,6 +47,7 @@
         <a href="/" data-nav><svg class="icon"><use href="/icons.svg#i-house"/></svg>Home</a>
         <a href="/projects" data-nav><svg class="icon"><use href="/icons.svg#i-folder-kanban"/></svg>Projects</a>
         <a href="/jobs" data-nav><svg class="icon"><use href="/icons.svg#i-list-checks"/></svg>Jobs</a>
+        <a href="/notifications" data-nav><svg class="icon"><use href="/icons.svg#i-bell"/></svg>Notifications<span id="notification-nav-badge" class="notification-badge" hidden></span></a>
         <a href="/tools" data-nav><svg class="icon"><use href="/icons.svg#i-wrench"/></svg>Tools</a>
         <a href="/data" data-nav><svg class="icon"><use href="/icons.svg#i-folder"/></svg>Data</a>
         <a href="/config" data-nav><svg class="icon"><use href="/icons.svg#i-wrench"/></svg>Config</a>
@@ -57,6 +58,17 @@
         <a href="/desktop-view" data-nav><svg class="icon"><use href="/icons.svg#i-monitor"/></svg>Desktop</a>
       </div>
       <div class="sidebar-footer">
+        <button id="notification-bell" class="notification-bell" type="button" aria-haspopup="dialog" aria-controls="notification-popover" aria-expanded="false">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-bell"/></svg>
+          <span>Notifications</span><span id="notification-bell-badge" class="notification-badge" hidden></span>
+        </button>
+        <div id="notification-popover" class="notification-popover" role="dialog" aria-label="Recent notifications" hidden>
+          <div id="notification-popover-list"></div>
+          <div class="notification-popover-actions">
+            <button id="notification-popover-read-all" type="button">Mark all read</button>
+            <a href="/notifications" data-nav>View all notifications</a>
+          </div>
+        </div>
         <button id="theme-button" class="theme-button" type="button" aria-expanded="false" aria-controls="theme-popover">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-palette"/></svg>
           <span id="theme-current">Modern</span>
@@ -179,6 +191,28 @@
           <aside id="job-detail" class="job-detail" aria-label="Details"></aside>
         </div>
         <div id="job-detail-curtain" class="job-detail-curtain" hidden></div>
+      </section>
+
+      <section data-page="notifications" hidden class="notifications-page" aria-labelledby="notifications-title">
+        <div class="page-heading">
+          <div><h1 id="notifications-title">Notifications</h1>
+            <p class="page-caption">Messages from the assistant and local services.</p>
+          </div>
+          <button id="notifications-read-all" class="button" type="button">Mark all read</button>
+        </div>
+        <div id="notifications-status" class="notifications-status">Loading notifications…</div>
+        <div class="notifications-grid">
+          <section aria-label="Notification list">
+            <div id="notification-filters" class="notification-filters"></div>
+            <ol id="notification-list" class="notification-list"></ol>
+            <div class="notification-list-footer">
+              <span id="notification-list-count"></span>
+              <button id="notification-load-older" class="button" type="button" hidden>Load older</button>
+            </div>
+          </section>
+          <aside id="notification-detail" class="notification-detail" aria-label="Notification details">Select a notification to inspect it.</aside>
+        </div>
+        <div id="notification-detail-curtain" class="notification-detail-curtain" hidden></div>
       </section>
 
       <section data-page="tools" hidden class="tools-page" aria-labelledby="tools-title">

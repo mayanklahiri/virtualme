@@ -212,3 +212,10 @@ reserves the persistence lane without adding agent runtime behavior.
 |---|---|---|---|
 | Master runtime configuration | `$VM_DATA_DIR/virtualme.config.yaml` (mode `0600`) | `internal/config`, canonical atomic replacement | 031 |
 | First-start/write transients | `$VM_DATA_DIR/virtualme.config.yaml.lock`, `$VM_DATA_DIR/.virtualme.config.yaml.tmp-*` | `internal/config`, removed after success or failure | 031 |
+
+### 2026-07-25 — Assistant notifications
+
+| State | Path | Owner / mechanism | Introduced |
+|---|---|---|---|
+| Notification history and global read state | `$VM_DATA_DIR/valkey/` AOF (`virtualme:notifications:*`) | `internal/notifications` via atomic Valkey scripts | 032 |
+| Controller lifecycle crash/clean marker | `$VM_DATA_DIR/controller-lifecycle.json` | `internal/notifications` atomic file replace + directory sync | 032 |

@@ -37,6 +37,7 @@ precedence with a value-free deprecation warning.
 - `http://localhost:8080/projects` — recurring projects and schedules
 - `http://localhost:8080/projects/<id>` — project task, runs, and scratch details
 - `http://localhost:8080/jobs` — queue, filterable machine activity, and details
+- `http://localhost:8080/notifications` — durable assistant/service messages, global unread state, filters, and details
 - `http://localhost:8080/tools` — agent definitions, queue-backed manual invocation, and structured results
 - `http://localhost:8080/data` — read-only icon/list explorer with sortable sizes, deep links, and typed previews
 - `http://localhost:8080/config` — schema-driven master configuration, secret status, save, and restart
@@ -47,7 +48,7 @@ precedence with a value-free deprecation warning.
 - `http://localhost:8080/desktop-view` — embedded noVNC desktop
 - `http://localhost:8080/healthz` — aggregate JSON health
 - `http://localhost:8080/v1/audio/speech` — OpenAI-compatible local speech API
-- `ws://localhost:8080/ws` — live state, metrics, queue, tools, chat, agent, TTS, and mail frames
+- `ws://localhost:8080/ws` — live state, metrics, notifications, queue, tools, chat, agent, TTS, and mail frames
 - `http://localhost:8080/desktop/` — redirects to the noVNC client; child paths proxy noVNC and websockify
 
 The desktop UI opens `/desktop/vnc.html` with autoconnect, scaling, and the
@@ -94,6 +95,15 @@ status icons; the newest-first activity list records finer-grained LLM, tool,
 speech, and mail actions with run times. Tool calls and jiggler bursts are
 hidden by default behind persisted filter toggles, and details open in a third
 pane at desktop widths.
+
+The sidebar bell shows the global unread notification count; `/notifications`
+adds paged history, type/read filters, and structured detail. Reading in any
+tab updates all connected tabs. History/read state is in the Valkey AOF.
+`~/.virtualme/controller-lifecycle.json` records running, planned restart,
+pending clean notification, or clean state. After an unexpected controller
+kill, inspect that mode-0600 marker and logs if exactly one unclean-startup
+message does not appear; normal stops and configuration restarts should show
+their explicit lifecycle subtypes instead.
 
 Use `/tools` to inspect every model-callable tool plus manual-only development
 tools such as `dump_dom`, and invoke them with schema-generated forms. Manual

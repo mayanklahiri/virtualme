@@ -38,6 +38,14 @@ type RestartCoordinator interface {
 	Restart(context.Context, []string) error
 }
 
+type RestartPlanner interface {
+	PlanConfigRestart(context.Context) error
+}
+
+type RestartPlannerFunc func(context.Context) error
+
+func (fn RestartPlannerFunc) PlanConfigRestart(ctx context.Context) error { return fn(ctx) }
+
 type Service struct {
 	mu          sync.RWMutex
 	schema      *config.Schema
@@ -47,6 +55,7 @@ type Service struct {
 	resolver    *config.Resolver
 	notifier    ConfigNotifier
 	coordinator RestartCoordinator
+	planner     RestartPlanner
 	broadcast   func([]byte)
 	shutdown    func([]string)
 }
@@ -57,6 +66,7 @@ type Options struct {
 	Resolver    *config.Resolver
 	Notifier    ConfigNotifier
 	Coordinator RestartCoordinator
+	Planner     RestartPlanner
 	Broadcast   func([]byte)
 	Shutdown    func([]string)
 }
@@ -81,6 +91,9 @@ func New(options Options) (*Service, error) {
 	if options.Broadcast == nil {
 		options.Broadcast = func([]byte) {}
 	}
+	if options.Planner == nil {
+		options.Planner = RestartPlannerFunc(func(context.Context) error { return nil })
+	}
 	if options.Shutdown == nil {
 		options.Shutdown = func([]string) {}
 	}
@@ -88,6 +101,7 @@ func New(options Options) (*Service, error) {
 		schema: schema, startup: options.Loaded, current: options.Loaded,
 		environment: append([]string(nil), options.Environment...), resolver: options.Resolver,
 		notifier: options.Notifier, coordinator: options.Coordinator,
+		planner:   options.Planner,
 		broadcast: options.Broadcast, shutdown: options.Shutdown,
 	}, nil
 }
@@ -248,6 +262,13 @@ func (s *Service) restartHandler(w http.ResponseWriter, r *http.Request) {
 	cancel()
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_preflight_failed", config.RedactError(err.Error()).Error(), nil)
+		return
+	}
+	planCtx, planCancel := context.WithTimeout(r.Context(), 3*time.Second)
+	err = s.planner.PlanConfigRestart(planCtx)
+	planCancel()
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "restart_preparation_failed", config.RedactError(err.Error()).Error(), nil)
 		return
 	}
 	response := map[string]any{"ok": true, "restarting": true, "pendingHash": current.Hash}

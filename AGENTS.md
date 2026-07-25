@@ -28,7 +28,7 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `docs/` | Isolated static Astro documentation/marketing site, authored content/assets, committed generated inputs, and browser tests |
 | `common/themes/` | Canonical validated theme-token source shared by controller and docs |
 | `docker/` | Container image and supervised services (spec 002) |
-| `controller/` | Go control plane, master configuration, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached local TTS, outbound mail, read-only data explorer, and multi-page console |
+| `controller/` | Go control plane, durable notifications/lifecycle marker, master configuration, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached local TTS, outbound mail, read-only data explorer, and multi-page console |
 | `controller/internal/config`, `controller/cmd/configctl` | Embedded schema, strict YAML loader, atomic persistence, preflight exports, and deterministic docs reference |
 | `controller/prompts/` | Embedded plain-text agent and fallback-chat system prompts |
 
@@ -106,6 +106,13 @@ and rejects invalid present files before services start. `configctl preflight`
 exports non-secret supervisor settings and dma files before longruns.
 `/config` provides schema-driven read/edit views, optimistic atomic saves,
 redacted state, explicit secret refresh, and deliberate service restart.
+The notification service retains 500 immutable messages plus global read state
+in Valkey through atomic Lua scripts, broadcasts authoritative websocket
+snapshots/pages/details, and exposes a bell popover plus `/notifications`.
+Lifecycle evidence in mode-0600 `$VM_DATA_DIR/controller-lifecycle.json`
+distinguishes clean stops, crashes, and planned configuration restarts.
+Configuration saves and the agent's `notify` tool use narrow typed producer
+seams; notification creation itself does not duplicate activity-ledger events.
 Chat renders GFM pipe tables, buffers the latest task's agent steps
 server-side for websocket-reconnect replay, and declares no live regions.
 The loopback-only `ttsd` service wraps pinned sherpa-onnx and Piper Lessac
@@ -216,6 +223,6 @@ checked generated files under `docs/src/generated/` or `docs/src/styles/`.
 | [029](specs/029-readpage-goldens.md) | `read_page` DOM goldens, layout-table fidelity, 32K context, and proportionate caps |
 | [030](specs/030-docs-site.md) | Static Astro docs/marketing site, shared themes, source-checkout CLI, and Pages publication |
 | [031](specs/031-master-config.md) | Master configuration schema, strict loader, preflight/runtime migration, console, restart flow, and docs export |
-| [032](specs/032-assistant-notifications.md) | Accepted durable assistant-notifications follow-up; not yet implemented |
+| [032](specs/032-assistant-notifications.md) | Durable notifications, global read state, lifecycle markers, agent tool, and console UI |
 | [033](specs/033-telegram.md) | Accepted authorized Telegram integration follow-up; not yet implemented |
 | [034](specs/034-agent-context-budget.md) | Preflight agent context budgeting, scaled observations, adaptive completions, and graduated recovery |

@@ -113,6 +113,7 @@ requires a new spec.
 | `controller/internal/datafs` | Read-only, GET-only, path-contained list/file/recursive-size HTTP view of `$VM_DATA_DIR`; directory sizes use five-minute Valkey caching (no write endpoints — adding one requires a new spec) |
 | `controller/internal/config` | Embedded sole-source schema, typed model, strict YAML, precedence, secrets, validation, and atomic persistence |
 | `controller/internal/configapi` | Redacted REST projections, optimistic save, notifier seam, and restart coordination |
+| `controller/internal/notifications` | Durable notification model/validation, atomic Valkey scripts, websocket protocol, and crash/clean lifecycle marker |
 | `controller/cmd/configctl` | Container preflight/service export and deterministic docs export/check |
 | `controller/prompts` | Embedded plain-text agent and fallback-chat system prompts |
 | `controller/web/static` | Hand-written multi-page SPA, themes, charts, markdown, agent hooks |
@@ -233,6 +234,14 @@ a `.qo-label` that toggles the `.qo-tip` tooltip on tap) instead.
 GPU detection uses three-second, failure-silent vendor probes and an injectable
 sysfs root (default `/sys`) so AMD/Intel fixtures remain hermetic. The result is
 cached at startup; absence is normal and never affects health.
+
+Notification mutations must complete their atomic Valkey script before any
+websocket broadcast. Add a generic type in the ordered Go `Registry()` and pin
+its Lucide sprite; add a sender only by using the validated lowercase producer
+seam. A custom renderer requires one allowed-renderer registry entry and one
+DOM-only renderer map entry in `notifications.js` (never markup strings or
+browser-local state). Stateful additions must also update spec 007's canonical
+persistence map and known-root checks.
 
 ## How to add things
 
