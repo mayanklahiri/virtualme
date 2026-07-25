@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
+	"github.com/mayanklahiri/virtualme/controller/internal/metrics"
 	"github.com/mayanklahiri/virtualme/controller/internal/tts"
 	"github.com/mayanklahiri/virtualme/controller/prompts"
 )
@@ -83,6 +84,21 @@ type Config struct {
 	Executor      Executor
 	TTS           *tts.Client
 	Activity      jobs.ActivityRecorder
+	Counters      *metrics.Counters
+}
+
+// ActionCategory maps one executed tool to a metrics action category.
+func ActionCategory(toolName string, observe bool) string {
+	switch {
+	case toolName == "bash":
+		return "bash"
+	case toolName == "speak":
+		return "speak"
+	case observe:
+		return "observe"
+	default:
+		return "actuate"
+	}
 }
 
 // Result describes how an agent task terminated.
@@ -312,6 +328,9 @@ func (a *Agent) handle(ctx context.Context, userText string, includeHistory bool
 				result.Summary = call.Function.Name
 			}
 			thumbnail := a.recordStep(ctx, call, result, toolErr)
+			if a.cfg.Counters != nil {
+				a.cfg.Counters.AddAction(ActionCategory(call.Function.Name, result.Observe))
+			}
 			if a.cfg.Activity != nil {
 				var args any
 				if json.Unmarshal([]byte(call.Function.Arguments), &args) != nil {
@@ -465,8 +484,11 @@ type streamedReply struct {
 		} `json:"delta"`
 	} `json:"choices"`
 	Timings struct {
-		PromptN    int `json:"prompt_n"`
-		PredictedN int `json:"predicted_n"`
+		PromptN     int     `json:"prompt_n"`
+		PredictedN  int     `json:"predicted_n"`
+		CacheN      int     `json:"cache_n"`
+		PromptMs    float64 `json:"prompt_ms"`
+		PredictedMs float64 `json:"predicted_ms"`
 	} `json:"timings"`
 }
 
@@ -513,6 +535,8 @@ func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta 
 	var text strings.Builder
 	calls := make(map[int]*ToolCall)
 	usage := tokenUsage{}
+	cachedTokens := 0
+	promptMs, predictedMs := 0.0, 0.0
 	fallbackCompletionTokens := 0
 	scanner := bufio.NewScanner(response.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
@@ -533,6 +557,15 @@ func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta 
 		}
 		if chunk.Timings.PredictedN > 0 {
 			usage.CompletionTokens = chunk.Timings.PredictedN
+		}
+		if chunk.Timings.CacheN > 0 {
+			cachedTokens = chunk.Timings.CacheN
+		}
+		if chunk.Timings.PromptMs > 0 {
+			promptMs = chunk.Timings.PromptMs
+		}
+		if chunk.Timings.PredictedMs > 0 {
+			predictedMs = chunk.Timings.PredictedMs
 		}
 		if len(chunk.Choices) == 0 {
 			continue
@@ -562,6 +595,9 @@ func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta 
 	}
 	if usage.CompletionTokens == 0 {
 		usage.CompletionTokens = fallbackCompletionTokens
+	}
+	if a.cfg.Counters != nil {
+		a.cfg.Counters.AddLLM(usage.PromptTokens, usage.CompletionTokens, cachedTokens, promptMs, predictedMs)
 	}
 	ordered := make([]ToolCall, 0, len(calls))
 	for index := 0; index < len(calls); index++ {

@@ -31,6 +31,19 @@ jigglerSwitch.addEventListener("click", () => {
     enabled: jigglerSwitch.getAttribute("aria-checked") !== "true",
   });
 });
+const schedulerSwitch = document.querySelector("#scheduler-switch");
+schedulerSwitch.addEventListener("click", () => {
+  // The switch reflects "paused"; scheduler-set carries "enabled" (running).
+  socket.send({
+    type: "scheduler-set",
+    enabled: schedulerSwitch.getAttribute("aria-checked") === "true",
+  });
+});
+for (const hint of document.querySelectorAll(".qo-hint")) {
+  hint.addEventListener("click", () => {
+    hint.closest(".qo-row")?.classList.toggle("qo-open");
+  });
+}
 
 function onStatus(status, connectedSince) {
   connectionWatch.status(status, connectedSince);

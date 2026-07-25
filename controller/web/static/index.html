@@ -187,9 +187,20 @@
             <p id="gpu-caption" class="metric-caption">Start with --gpus to pass one through.</p></div>
           </article>
           <article class="metric selector-card"><h2>Active time selectors</h2><p id="scheduler-clock"></p><ul id="scheduler-active" class="legend"></ul></article>
-          <article class="metric jiggler-card">
-            <div><label id="jiggler-label">Jiggler <span class="metric-caption">ambient humanlike mouse motion</span></label>
-            <button id="jiggler-switch" class="switch" role="switch" aria-checked="false" aria-labelledby="jiggler-label" type="button"><span class="knob"></span></button></div>
+          <article class="metric quick-options">
+            <h2>Quick Options</h2>
+            <div class="qo-row">
+              <div><label id="jiggler-label">Jiggler</label>
+              <button class="qo-hint" type="button" aria-label="What does Jiggler do?">?</button>
+              <p class="qo-help">Ambient humanlike mouse motion every 8–27&nbsp;s while the agent is idle, so the desktop never looks abandoned.</p></div>
+              <button id="jiggler-switch" class="switch" role="switch" aria-checked="false" aria-labelledby="jiggler-label" type="button"><span class="knob"></span></button>
+            </div>
+            <div class="qo-row">
+              <div><label id="scheduler-label">Pause scheduled runs</label>
+              <button class="qo-hint" type="button" aria-label="What does pausing scheduled runs do?">?</button>
+              <p class="qo-help">Stops recurring projects from being promoted into the job queue. Chat and manual tool calls keep running.</p></div>
+              <button id="scheduler-switch" class="switch" role="switch" aria-checked="false" aria-labelledby="scheduler-label" type="button"><span class="knob"></span></button>
+            </div>
           </article>
         </div>
         <div class="charts">
@@ -209,13 +220,49 @@
             <canvas id="chart-mem" tabindex="0" role="img" aria-label="Stacked per-process memory usage bars"></canvas>
             <ul id="process-legend" class="legend"></ul>
           </figure>
-          <figure id="gpu-chart" class="chart" hidden>
+          <div id="gpu-charts" class="chart-row" hidden>
+            <figure class="chart">
+              <div class="chart-head">
+                <div class="chart-title"><h3>GPU utilization</h3><p>percent busy</p></div>
+                <div class="lookback" role="radiogroup" aria-label="Time window" data-lookback></div>
+              </div>
+              <canvas id="chart-gpu-util" tabindex="0" role="img" aria-label="GPU utilization bars"></canvas>
+              <ul id="gpu-util-legend" class="legend"></ul>
+            </figure>
+            <figure class="chart">
+              <div class="chart-head">
+                <div class="chart-title"><h3>GPU memory</h3><p>MiB used</p></div>
+                <div class="lookback" role="radiogroup" aria-label="Time window" data-lookback></div>
+              </div>
+              <canvas id="chart-gpu-mem" tabindex="0" role="img" aria-label="GPU memory usage bars"></canvas>
+              <ul id="gpu-mem-legend" class="legend"></ul>
+            </figure>
+          </div>
+          <div class="chart-row">
+            <figure class="chart">
+              <div class="chart-head">
+                <div class="chart-title"><h3>LLM tokens</h3><p>tokens per bucket, in and out</p></div>
+                <div class="lookback" role="radiogroup" aria-label="Time window" data-lookback></div>
+              </div>
+              <canvas id="chart-tokens" tabindex="0" role="img" aria-label="Stacked LLM token counts"></canvas>
+              <ul id="tokens-legend" class="legend"></ul>
+            </figure>
+            <figure class="chart">
+              <div class="chart-head">
+                <div class="chart-title"><h3>LLM throughput</h3><p>effective tokens per second</p></div>
+                <div class="lookback" role="radiogroup" aria-label="Time window" data-lookback></div>
+              </div>
+              <canvas id="chart-throughput" tabindex="0" role="img" aria-label="LLM input and output token rates"></canvas>
+              <ul id="throughput-legend" class="legend"></ul>
+            </figure>
+          </div>
+          <figure class="chart">
             <div class="chart-head">
-              <div class="chart-title"><h3>GPU utilization</h3><p>percent busy · memory MiB</p></div>
+              <div class="chart-title"><h3>Browser actions</h3><p>agent tool calls by category</p></div>
               <div class="lookback" role="radiogroup" aria-label="Time window" data-lookback></div>
             </div>
-            <canvas id="chart-gpu" tabindex="0" role="img" aria-label="GPU utilization and memory usage"></canvas>
-            <ul id="gpu-legend" class="legend"></ul>
+            <canvas id="chart-actions" tabindex="0" role="img" aria-label="Stacked agent action counts by category"></canvas>
+            <ul id="actions-legend" class="legend"></ul>
           </figure>
         </div>
         <div id="chart-tooltip" class="tooltip" hidden></div>

@@ -32,11 +32,12 @@ type System struct {
 	GPUMemTotalMB float64 `json:"gpuMemTotalMB,omitempty"`
 }
 
-// Scheduler describes the server-local scheduling clock.
+// Scheduler describes the server-local scheduling clock and pause state.
 type Scheduler struct {
 	LocalTime string   `json:"localTime"`
 	TZ        string   `json:"tz"`
 	Active    []string `json:"active"`
+	Paused    bool     `json:"paused"`
 }
 
 // Jiggler describes the persisted ambient-motion setting.
@@ -72,6 +73,9 @@ type Snapshot struct {
 	Scheduler Scheduler        `json:"scheduler"`
 	Jiggler   Jiggler          `json:"jiggler"`
 	GPU       gpu.Info         `json:"gpu"`
+	// Counters carries per-period LLM/action deltas so live charts can
+	// append them at the state cadence.
+	Counters metrics.CounterSnapshot `json:"counters"`
 }
 
 func schedulerState(now time.Time) Scheduler {
@@ -108,7 +112,16 @@ type Collector struct {
 	dataDir   string
 	jiggler   func() bool
 	gpu       gpu.Info
+
+	schedPaused func() bool
+	counters    *metrics.Counters
 }
+
+// SetSchedulerPaused installs the scheduler pause-state probe.
+func (c *Collector) SetSchedulerPaused(fn func() bool) { c.schedPaused = fn }
+
+// SetCounters installs the LLM/action counter accumulator drained per sample.
+func (c *Collector) SetCounters(counters *metrics.Counters) { c.counters = counters }
 
 // ReadSystem parses Linux procfs load and memory data.
 func ReadSystem(loadavg, meminfo string) System {
@@ -280,6 +293,12 @@ func (c *Collector) collect() {
 	if c.jiggler != nil {
 		snapshot.Jiggler.Enabled = c.jiggler()
 	}
+	if c.schedPaused != nil {
+		snapshot.Scheduler.Paused = c.schedPaused()
+	}
+	if c.counters != nil {
+		snapshot.Counters = c.counters.Drain()
+	}
 	payload, err := json.Marshal(snapshot)
 	if err != nil {
 		return
@@ -291,11 +310,17 @@ func (c *Collector) collect() {
 		procCPU[i] = process.CPUPct
 	}
 	if c.store != nil {
-		c.store.Add(metrics.Sample{
+		sample := metrics.Sample{
 			Ts: snapshot.Ts, Cores: cores, ProcCPU: procCPU, ProcMemMB: procMem,
 			Load1: system.Load1, MemUsedMB: system.MemUsedMB, MemTotalMB: system.MemTotalMB,
 			GPUUtil: system.GPUUtil, GPUMemMB: system.GPUMemMB,
-		})
+		}
+		delta := snapshot.Counters
+		sample.TokIn, sample.TokOut, sample.TokCached = delta.TokIn, delta.TokOut, delta.TokCached
+		sample.LLMPromptMs, sample.LLMPredictMs = delta.LLMPromptMs, delta.LLMPredictMs
+		sample.ActObserve, sample.ActActuate = delta.ActObserve, delta.ActActuate
+		sample.ActBash, sample.ActSpeak = delta.ActBash, delta.ActSpeak
+		c.store.Add(sample)
 	}
 	c.broadcast(payload)
 }

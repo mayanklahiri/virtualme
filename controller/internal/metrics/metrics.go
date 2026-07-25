@@ -22,6 +22,17 @@ type Sample struct {
 	MemTotalMB int       `json:"memTotalMB"`
 	GPUUtil    float64   `json:"gpuUtil,omitempty"`
 	GPUMemMB   float64   `json:"gpuMemMB,omitempty"`
+	// Counter fields (deltas per sample window) are summed, not averaged,
+	// when rolling up into coarser tiers.
+	TokIn        int     `json:"tokIn,omitempty"`
+	TokOut       int     `json:"tokOut,omitempty"`
+	TokCached    int     `json:"tokCached,omitempty"`
+	LLMPromptMs  float64 `json:"llmPromptMs,omitempty"`
+	LLMPredictMs float64 `json:"llmPredictMs,omitempty"`
+	ActObserve   int     `json:"actObserve,omitempty"`
+	ActActuate   int     `json:"actActuate,omitempty"`
+	ActBash      int     `json:"actBash,omitempty"`
+	ActSpeak     int     `json:"actSpeak,omitempty"`
 }
 
 type tierDef struct {
@@ -109,6 +120,15 @@ func mean(samples []Sample) Sample {
 		result.MemTotalMB += sm.MemTotalMB
 		result.GPUUtil += sm.GPUUtil
 		result.GPUMemMB += sm.GPUMemMB
+		result.TokIn += sm.TokIn
+		result.TokOut += sm.TokOut
+		result.TokCached += sm.TokCached
+		result.LLMPromptMs += sm.LLMPromptMs
+		result.LLMPredictMs += sm.LLMPredictMs
+		result.ActObserve += sm.ActObserve
+		result.ActActuate += sm.ActActuate
+		result.ActBash += sm.ActBash
+		result.ActSpeak += sm.ActSpeak
 	}
 	n := float64(len(samples))
 	for i := range result.Cores {

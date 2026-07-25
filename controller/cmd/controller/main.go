@@ -410,6 +410,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	llmCounters := new(metrics.Counters)
 	agentConfig := agent.Config{
 		CDPURL:        "http://127.0.0.1:9222",
 		Display:       envOr("VM_DISPLAY", ":99"),
@@ -426,6 +427,7 @@ func main() {
 		TTS:           ttsClient,
 		Activity:      activity,
 		Broadcast:     hub.Broadcast,
+		Counters:      llmCounters,
 	}
 	localTools := agent.NewLocalTools(agentConfig)
 	agentConfig.Executor = localTools
@@ -436,6 +438,7 @@ func main() {
 		agentConfig,
 	)
 	chatService.SetActivity(activity)
+	chatService.SetCounters(llmCounters)
 	jobManager := jobs.New(valkey.New(cfg.ValkeyAddr), hub.Broadcast)
 	chatService.SetJobManager(jobManager)
 	jobManager.Register("chat", chatService.Execute)
@@ -449,6 +452,8 @@ func main() {
 		cfg, "/proc", metricsStore, hub.Broadcast, gpuInfo, jigglerService.Enabled,
 		state.Runtime{Version: version, HTTPAddr: addr},
 	)
+	collector.SetCounters(llmCounters)
+	collector.SetSchedulerPaused(jobManager.SchedulerPaused)
 	projectService := projects.New(
 		valkey.New(cfg.ValkeyAddr), jobManager, chatService, dataDir, hub.Broadcast,
 	)
@@ -468,6 +473,7 @@ func main() {
 		started := time.Now()
 		result, toolErr := localTools.Execute(ctx, request.Tool, request.Args)
 		duration := time.Since(started).Milliseconds()
+		llmCounters.AddAction(agent.ActionCategory(request.Tool, result.Observe))
 		text := capText(result.Text, 16*1024)
 		errorText := ""
 		if toolErr != nil {

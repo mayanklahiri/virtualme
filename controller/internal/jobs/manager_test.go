@@ -333,6 +333,36 @@ func TestDropInitiatorCancelsAndPreservesScheduled(t *testing.T) {
 	}
 }
 
+func TestSchedulerPauseSkipsPromotion(t *testing.T) {
+	manager, server := newTestManager(t)
+	manager.RegisterSource(func(now time.Time) []Envelope {
+		return []Envelope{{Type: "x", Selector: "hourly"}}
+	})
+	if manager.SchedulerPaused() {
+		t.Fatal("scheduler must default to running")
+	}
+	if err := manager.SetSchedulerPaused(true); err != nil {
+		t.Fatal(err)
+	}
+	if !manager.SchedulerPaused() {
+		t.Fatal("expected paused after SetSchedulerPaused(true)")
+	}
+	manager.schedule()
+	server.mu.Lock()
+	promoted := len(server.lists[readyScheduled])
+	server.mu.Unlock()
+	if promoted != 0 {
+		t.Fatalf("paused scheduler promoted %d jobs", promoted)
+	}
+	if err := manager.SetSchedulerPaused(false); err != nil {
+		t.Fatal(err)
+	}
+	manager.schedule()
+	if env := decodeAt(t, server, readyScheduled, 0); env.Priority != "scheduled" {
+		t.Fatalf("resumed scheduler env = %+v", env)
+	}
+}
+
 func TestSchedulerJitterAndQueueStateTruncation(t *testing.T) {
 	manager, server := newTestManager(t)
 	now := time.Date(2026, 7, 22, 9, 0, 0, 0, time.UTC)

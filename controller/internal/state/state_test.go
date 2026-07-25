@@ -78,7 +78,7 @@ func TestSnapshotJSON(t *testing.T) {
 		`"gpuMemTotalMB":1024`,
 		`"processes":[{"name":"xvfb","cpuPct":1.5,"memMB":42}]`,
 		`"cores":[25]`,
-		`"scheduler":{"localTime":"2026-07-22T09:00:00-07:00","tz":"America/Los_Angeles","active":["morning","anytime"]}`,
+		`"scheduler":{"localTime":"2026-07-22T09:00:00-07:00","tz":"America/Los_Angeles","active":["morning","anytime"],"paused":false}`,
 		`"jiggler":{"enabled":true}`,
 		`"gpu":{"present":true,"vendor":"nvidia","model":"Test GPU","params":[{"key":"VRAM","value":"1024 MiB"}],"sampler":"nvidia-smi"}`,
 	} {

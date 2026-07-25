@@ -159,5 +159,9 @@ export function renderState(snapshot) {
     "aria-checked",
     String(snapshot.jiggler?.enabled === true),
   );
+  document.querySelector("#scheduler-switch").setAttribute(
+    "aria-checked",
+    String(scheduler.paused === true),
+  );
   updateConnectionSnapshot(snapshot);
 }

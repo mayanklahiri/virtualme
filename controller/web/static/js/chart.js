@@ -1,4 +1,12 @@
+import { downsample, MAX_BARS } from "./chart-data.js";
+
 const PROCESSES = ["xvfb", "openbox", "x11vnc", "novnc", "valkey", "llama", "chromium", "controller"];
+// Counter fields accumulate across merged buckets instead of averaging.
+const SUM_MODES = {
+  tokIn: "sum", tokOut: "sum", tokCached: "sum",
+  llmPromptMs: "sum", llmPredictMs: "sum",
+  actObserve: "sum", actActuate: "sum", actBash: "sum", actSpeak: "sum",
+};
 const LOOKBACKS = ["15m", "1h", "3h", "12h", "1d", "3d", "7d", "30d"];
 const SPANS = { "15m": 900e3, "1h": 3600e3, "3h": 10800e3, "12h": 43200e3, "1d": 86400e3, "3d": 259200e3, "7d": 604800e3, "30d": 2592000e3 };
 const TICK_STEPS = {
@@ -83,7 +91,16 @@ function metricSample(snapshot) {
     procMemMB: PROCESSES.map((name) => Number(byName.get(name)?.memMB) || 0),
     gpuUtil: Number(snapshot.system?.gpuUtil) || 0,
     gpuMemMB: Number(snapshot.system?.gpuMemMB) || 0,
+    ...counterFields(snapshot.counters),
   };
+}
+
+function counterFields(source) {
+  const out = {};
+  for (const key of Object.keys(SUM_MODES)) {
+    out[key] = Number(source?.[key]) || 0;
+  }
+  return out;
 }
 
 function css(name) {
@@ -317,12 +334,14 @@ function makeChart({
 }
 
 export function initCharts(send) {
-  const gpuFigure = document.querySelector("#gpu-chart");
+  const gpuFigure = document.querySelector("#gpu-charts");
   const tooltip = document.querySelector("#chart-tooltip");
   const lookbackBoxes = [...document.querySelectorAll("[data-lookback]")];
   let lookback = LOOKBACKS.includes(localStorage.getItem("vm-lookback")) ? localStorage.getItem("vm-lookback") : "1h";
   let samples = [];
   let resSec = 2;
+  // Downsampled view all charts render from; refreshed by draw().
+  let view = { samples: [], resSec: 2 };
   let live = false;
   let gpuEnabled;
   let gpuMemTotalMB = 0;
@@ -372,8 +391,8 @@ export function initCharts(send) {
   select(lookback);
 
   const shared = {
-    getSamples: () => samples,
-    getResolution: () => resSec,
+    getSamples: () => view.samples,
+    getResolution: () => view.resSec,
     getLookback: () => lookback,
     tooltip,
   };
@@ -411,49 +430,89 @@ export function initCharts(send) {
       : `${Math.round(value)}MiB`,
     formatValue: (value) => `${value} MiB`,
   });
-  const gpuChart = makeChart({
+  const gpuUtilChart = makeChart({
     ...shared,
-    canvas: document.querySelector("#chart-gpu"),
-    legend: document.querySelector("#gpu-legend"),
+    canvas: document.querySelector("#chart-gpu-util"),
+    legend: document.querySelector("#gpu-util-legend"),
     title: "GPU utilization",
-    series: (sample) => [sample.gpuUtil, sample.gpuMemMB],
-    seriesNames: () => ["utilization", "memory used"],
+    series: (sample) => [sample.gpuUtil],
+    seriesNames: () => ["utilization"],
     unit: "%",
     maxFn: () => 100,
-    formatValue: (value, index) => index === 0 ? `${value.toFixed(1)}%` : `${value.toFixed(1)} MiB`,
-    renderSeries({ context, width, scale, parts, resSec: resolution, barBounds }) {
-      const memoryMax = Math.max(gpuMemTotalMB, 1, ...samples.map((sample) => sample.gpuMemMB || 0));
-      const memoryScale = scales(samples, width, context.canvas.getBoundingClientRect().height, memoryMax, SPANS[lookback]);
-      context.fillStyle = css("--p1");
-      for (const part of parts) {
-        part.forEach((sample, index) => {
-          const bar = barBounds(part, index, scale, width, resolution);
-          context.fillRect(bar.left, scale.y(sample.gpuUtil || 0), bar.width, scale.y(0) - scale.y(sample.gpuUtil || 0));
-        });
-        context.beginPath();
-        part.forEach((sample, index) => {
-          const x = memoryScale.x(sample.ts);
-          const y = memoryScale.y(sample.gpuMemMB || 0);
-          if (index === 0) context.moveTo(x, y);
-          else context.lineTo(x, y);
-        });
-        context.strokeStyle = css("--p2");
-        context.lineWidth = 2;
-        context.stroke();
-      }
-      context.fillStyle = css("--muted");
-      context.font = `10px ${css("--font-body")}`;
-      context.textAlign = "right";
-      context.textBaseline = "top";
-      context.fillText(`${Math.round(memoryMax)} MiB`, width - PAD.right, PAD.top);
-    },
+    formatValue: (value) => `${value.toFixed(1)}%`,
+  });
+  const gpuMemChart = makeChart({
+    ...shared,
+    canvas: document.querySelector("#chart-gpu-mem"),
+    legend: document.querySelector("#gpu-mem-legend"),
+    title: "GPU memory",
+    series: (sample) => [sample.gpuMemMB],
+    seriesNames: () => ["memory used"],
+    unit: "MiB",
+    maxFn: (chartSamples) => Math.max(gpuMemTotalMB, 1, ...chartSamples.map((sample) => sample.gpuMemMB || 0)),
+    formatTick: (value) => value >= 1024
+      ? `${(value / 1024).toFixed(value % 1024 === 0 ? 0 : 1)}GiB`
+      : `${Math.round(value)}MiB`,
+    formatValue: (value) => `${value.toFixed(0)} MiB`,
+  });
+  const hasCached = () => view.samples.some((sample) => sample.tokCached > 0);
+  const tokensChart = makeChart({
+    ...shared,
+    canvas: document.querySelector("#chart-tokens"),
+    legend: document.querySelector("#tokens-legend"),
+    title: "LLM tokens",
+    series: (sample) => hasCached()
+      ? [sample.tokIn, sample.tokOut, sample.tokCached]
+      : [sample.tokIn, sample.tokOut],
+    seriesNames: () => hasCached() ? ["in", "out", "cached"] : ["in", "out"],
+    unit: "",
+    maxFn: (chartSamples) => Math.max(1, ...chartSamples.map((sample) =>
+      (sample.tokIn || 0) + (sample.tokOut || 0) + (hasCached() ? sample.tokCached || 0 : 0))),
+    formatValue: (value) => `${Math.round(value)} tok`,
+  });
+  // Effective rate per bucket: tokens over the LLM phase time actually spent.
+  const rates = (sample) => [
+    sample.llmPromptMs > 0 ? sample.tokIn / (sample.llmPromptMs / 1000) : 0,
+    sample.llmPredictMs > 0 ? sample.tokOut / (sample.llmPredictMs / 1000) : 0,
+  ];
+  const throughputChart = makeChart({
+    ...shared,
+    canvas: document.querySelector("#chart-throughput"),
+    legend: document.querySelector("#throughput-legend"),
+    title: "LLM throughput",
+    series: rates,
+    seriesNames: () => ["in tok/s", "out tok/s"],
+    unit: "",
+    maxFn: (chartSamples) => Math.max(1, ...chartSamples.map((sample) =>
+      rates(sample).reduce((sum, value) => sum + value, 0))),
+    formatValue: (value) => `${value.toFixed(1)} tok/s`,
+  });
+  const ACTION_NAMES = ["observe", "actuate", "bash", "speak"];
+  const actionsChart = makeChart({
+    ...shared,
+    canvas: document.querySelector("#chart-actions"),
+    legend: document.querySelector("#actions-legend"),
+    title: "Browser actions",
+    series: (sample) => [sample.actObserve, sample.actActuate, sample.actBash, sample.actSpeak],
+    seriesNames: () => ACTION_NAMES,
+    unit: "",
+    maxFn: (chartSamples) => Math.max(1, ...chartSamples.map((sample) =>
+      (sample.actObserve || 0) + (sample.actActuate || 0) + (sample.actBash || 0) + (sample.actSpeak || 0))),
+    formatValue: (value) => `${Math.round(value)}`,
   });
 
   function draw() {
     lastDrawMs = Date.now();
+    view = downsample(samples, resSec, MAX_BARS, SUM_MODES);
     cpuChart.draw();
     memoryChart.draw();
-    if (gpuEnabled) gpuChart.draw();
+    if (gpuEnabled) {
+      gpuUtilChart.draw();
+      gpuMemChart.draw();
+    }
+    tokensChart.draw();
+    throughputChart.draw();
+    actionsChart.draw();
   }
   addEventListener("resize", draw);
   addEventListener("themechange", draw);
@@ -475,6 +534,7 @@ export function initCharts(send) {
         procMemMB: (sample.procMemMB ?? []).map(Number),
         gpuUtil: Number(sample.gpuUtil) || 0,
         gpuMemMB: Number(sample.gpuMemMB) || 0,
+        ...counterFields(sample),
       }));
       memTotalMB = Number(message.samples?.at(-1)?.memTotalMB) || memTotalMB;
       draw();

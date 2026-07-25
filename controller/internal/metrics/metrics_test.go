@@ -32,6 +32,57 @@ func TestTierWindowMean(t *testing.T) {
 	}
 }
 
+func TestCounterFieldsSumInTiers(t *testing.T) {
+	store := NewStore(t.TempDir())
+	base := time.Now().Add(-time.Minute)
+	for i := range 15 {
+		store.Add(Sample{
+			Ts: base.Add(time.Duration(i) * 2 * time.Second).UnixMilli(),
+			// Gauges keep mean semantics; counters must sum in roll-up.
+			GPUUtil: 10,
+			TokIn:   2, TokOut: 3, TokCached: 1,
+			LLMPromptMs: 100, LLMPredictMs: 200,
+			ActObserve: 1, ActActuate: 2, ActBash: 1, ActSpeak: 1,
+		})
+	}
+	got := store.tiers[1].samples[0]
+	if got.GPUUtil != 10 {
+		t.Fatalf("gauge mean = %+v", got)
+	}
+	if got.TokIn != 30 || got.TokOut != 45 || got.TokCached != 15 {
+		t.Fatalf("token sums = %+v", got)
+	}
+	if got.LLMPromptMs != 1500 || got.LLMPredictMs != 3000 {
+		t.Fatalf("timing sums = %+v", got)
+	}
+	if got.ActObserve != 15 || got.ActActuate != 30 || got.ActBash != 15 || got.ActSpeak != 15 {
+		t.Fatalf("action sums = %+v", got)
+	}
+}
+
+func TestCountersDrainResets(t *testing.T) {
+	counters := new(Counters)
+	counters.AddLLM(10, 5, 2, 40, 80)
+	counters.AddLLM(1, 1, 0, 10, 20)
+	counters.AddAction("observe")
+	counters.AddAction("actuate")
+	counters.AddAction("actuate")
+	counters.AddAction("bash")
+	counters.AddAction("speak")
+	counters.AddAction("unknown-defaults-to-actuate")
+	first := counters.Drain()
+	if first.TokIn != 11 || first.TokOut != 6 || first.TokCached != 2 ||
+		first.LLMPromptMs != 50 || first.LLMPredictMs != 100 {
+		t.Fatalf("llm drain = %+v", first)
+	}
+	if first.ActObserve != 1 || first.ActActuate != 3 || first.ActBash != 1 || first.ActSpeak != 1 {
+		t.Fatalf("action drain = %+v", first)
+	}
+	if second := counters.Drain(); second != (CounterSnapshot{}) {
+		t.Fatalf("drain must reset: %+v", second)
+	}
+}
+
 func TestRingCaps(t *testing.T) {
 	for i, def := range tierDefs {
 		var samples []Sample

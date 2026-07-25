@@ -67,3 +67,14 @@ test("hover hit-testing selects the nearest timestamp across a gap", () => {
   assert.equal(nearestSampleIndex(samples, 60_000), 1);
   assert.equal(nearestSampleIndex(samples, 100_000), 2);
 });
+
+test("status markup carries split GPU charts and the new LLM/action charts", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const html = await readFile(new URL("../controller/web/static/index.html", import.meta.url), "utf8");
+  for (const id of ["chart-gpu-util", "chart-gpu-mem", "chart-tokens", "chart-throughput", "chart-actions"]) {
+    assert.ok(html.includes(`id="${id}"`), `index.html has #${id}`);
+  }
+  assert.ok(!html.includes('id="chart-gpu"'), "combined GPU chart removed");
+  assert.ok(html.includes("Quick Options"), "Quick Options panel present");
+  assert.ok(html.includes('id="scheduler-switch"'), "scheduler pause switch present");
+});

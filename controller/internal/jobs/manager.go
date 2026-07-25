@@ -25,6 +25,7 @@ const (
 	inflightSinceKey = "virtualme:jobs:inflight-since"
 	doneKey          = "virtualme:jobs:done"
 	deadKey          = "virtualme:jobs:dead"
+	schedulerPaused  = "virtualme:scheduler:paused"
 )
 
 // Result is the terminal summary persisted with a job.
@@ -371,7 +372,41 @@ func randomInstant(start, end time.Time) time.Time {
 	return start.Add(time.Duration(value.Int64()))
 }
 
+// SchedulerPaused reports the Valkey-backed pause flag; absent means running.
+func (m *Manager) SchedulerPaused() bool {
+	value, err := m.client.Get(schedulerPaused)
+	return err == nil && value != nil && *value == "1"
+}
+
+// SetSchedulerPaused persists the pause flag and broadcasts the new state.
+func (m *Manager) SetSchedulerPaused(paused bool) error {
+	value := "0"
+	if paused {
+		value = "1"
+	}
+	if err := m.client.Set(schedulerPaused, value); err != nil {
+		return err
+	}
+	m.broadcastSchedulerState()
+	return nil
+}
+
+// SchedulerStateMessage returns the scheduler-state frame.
+func (m *Manager) SchedulerStateMessage() []byte {
+	payload, _ := json.Marshal(map[string]any{"type": "scheduler-state", "paused": m.SchedulerPaused()})
+	return payload
+}
+
+func (m *Manager) broadcastSchedulerState() {
+	if m.broadcast != nil {
+		m.broadcast(m.SchedulerStateMessage())
+	}
+}
+
 func (m *Manager) schedule() {
+	if m.SchedulerPaused() {
+		return
+	}
 	now := m.now()
 	m.mu.Lock()
 	sources := append([]source(nil), m.sources...)
@@ -577,8 +612,9 @@ func (m *Manager) broadcastState() {
 // HandleMessage handles the spec's queue websocket messages.
 func (m *Manager) HandleMessage(conn *ws.Conn, payload []byte) bool {
 	var request struct {
-		Type string `json:"type"`
-		Job  struct {
+		Type    string `json:"type"`
+		Enabled *bool  `json:"enabled"`
+		Job     struct {
 			Type    string          `json:"type"`
 			Payload json.RawMessage `json:"payload"`
 		} `json:"job"`
@@ -588,6 +624,15 @@ func (m *Manager) HandleMessage(conn *ws.Conn, payload []byte) bool {
 	}
 	if request.Type == "queue-peek" {
 		_ = conn.WriteText(m.StateMessage())
+		return true
+	}
+	if request.Type == "scheduler-set" {
+		if request.Enabled != nil {
+			// enabled=true means the scheduler runs (paused=false).
+			if err := m.SetSchedulerPaused(!*request.Enabled); err != nil {
+				log.Println("jobs: setting scheduler pause failed:", err)
+			}
+		}
 		return true
 	}
 	if request.Type != "job-push" {

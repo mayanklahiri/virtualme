@@ -18,6 +18,7 @@ import (
 
 	"github.com/mayanklahiri/virtualme/controller/internal/agent"
 	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
+	"github.com/mayanklahiri/virtualme/controller/internal/metrics"
 	"github.com/mayanklahiri/virtualme/controller/internal/valkey"
 	"github.com/mayanklahiri/virtualme/controller/internal/ws"
 	"github.com/mayanklahiri/virtualme/controller/prompts"
@@ -50,6 +51,7 @@ type Service struct {
 	agent      *agent.Agent
 	jobs       *jobs.Manager
 	activity   jobs.ActivityRecorder
+	counters   *metrics.Counters
 
 	mu             sync.Mutex
 	history        []Message
@@ -90,6 +92,11 @@ func (s *Service) SetJobManager(manager *jobs.Manager) {
 // SetActivity installs the machine activity recorder.
 func (s *Service) SetActivity(activity jobs.ActivityRecorder) {
 	s.activity = activity
+}
+
+// SetCounters installs the metrics accumulator for fallback-chat LLM usage.
+func (s *Service) SetCounters(counters *metrics.Counters) {
+	s.counters = counters
 }
 
 // NewWithAgent creates the production chat service with browser-agent routing.
@@ -579,6 +586,8 @@ func (s *Service) generate(ctx context.Context, env jobs.Envelope) (string, erro
 
 	var reply strings.Builder
 	promptTokens, completionTokens := 0, 0
+	cachedTokens := 0
+	promptMs, predictedMs := 0.0, 0.0
 	generatingAnnounced := false
 	scanner := bufio.NewScanner(response.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -601,6 +610,9 @@ func (s *Service) generate(ctx context.Context, env jobs.Envelope) (string, erro
 			Timings struct {
 				PromptN            int     `json:"prompt_n"`
 				PredictedN         int     `json:"predicted_n"`
+				CacheN             int     `json:"cache_n"`
+				PromptMs           float64 `json:"prompt_ms"`
+				PredictedMs        float64 `json:"predicted_ms"`
 				PredictedPerSecond float64 `json:"predicted_per_second"`
 			} `json:"timings"`
 		}
@@ -612,6 +624,15 @@ func (s *Service) generate(ctx context.Context, env jobs.Envelope) (string, erro
 		}
 		if chunk.Timings.PredictedN > 0 {
 			completionTokens = chunk.Timings.PredictedN
+		}
+		if chunk.Timings.CacheN > 0 {
+			cachedTokens = chunk.Timings.CacheN
+		}
+		if chunk.Timings.PromptMs > 0 {
+			promptMs = chunk.Timings.PromptMs
+		}
+		if chunk.Timings.PredictedMs > 0 {
+			predictedMs = chunk.Timings.PredictedMs
 		}
 		if len(chunk.Choices) == 0 {
 			continue
@@ -644,6 +665,9 @@ func (s *Service) generate(ctx context.Context, env jobs.Envelope) (string, erro
 	f.mu.Unlock()
 	if completionTokens == 0 {
 		completionTokens = fallbackTokens
+	}
+	if s.counters != nil {
+		s.counters.AddLLM(promptTokens, completionTokens, cachedTokens, promptMs, predictedMs)
 	}
 	s.finishReply(ctx, reply.String(), stopped, promptTokens, completionTokens, time.Since(started))
 	llmFinished = true
