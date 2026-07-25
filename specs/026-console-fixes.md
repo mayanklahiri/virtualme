@@ -79,9 +79,12 @@ The module must not construct `AudioContext` (spec 020 invariant holds).
 3. **S3 (GPU split).** The combined dual-scale GPU chart becomes two default
    renderer charts, GPU utilization (percent) and GPU memory (displayed in
    GB), side by side on desktop in a `.chart-row`. Amends spec 018 §3.2.
-4. **S4 (Quick Options).** The Jiggler pane becomes a "Quick Options" card of
-   labelled switches with hover/focus help text: the existing jiggler switch
-   and a new scheduler-pause switch. Scheduler pause: Valkey
+4. **S4 (Quick Options).** The Jiggler pane becomes a "Quick Options" card,
+   since restyled as a row of fixed-size cockpit-style lit buttons (`.qo-btn`
+   with a `.qo-lamp`, uppercase `.qo-label` beneath, `.qo-tip` tooltip on
+   hover/focus or label tap): JIGGLER, and SCHED whose lamp is lit while the
+   scheduler runs (UI polarity inverse of the stored flag). Scheduler pause:
+   Valkey
    `virtualme:scheduler:paused` (`"1"`/`"0"`, absent means running), WS
    `scheduler-set`, snapshot `scheduler.paused`, broadcast `scheduler-state`;
    while paused the time-bucket scheduler stops promoting due scheduled jobs

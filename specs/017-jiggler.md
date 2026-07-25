@@ -119,5 +119,7 @@ Unit tests cover the enabled-by-default load, the explicit-"0" opt-out, the
 ### 2026-07-24 — Jiggler pane becomes Quick Options (spec 026 S4)
 
 The Status-page Jiggler card is renamed "Quick Options" and hosts multiple
-labelled switches with hover/focus help text: the jiggler switch (unchanged
-semantics and persistence) and the spec 013 scheduler-pause switch.
+controls, since restyled as fixed-size cockpit-style lit buttons with
+uppercase labels beneath and tooltips on hover/focus (label tap on touch):
+JIGGLER (unchanged semantics and persistence) and the spec 013 SCHED button,
+whose lamp is lit while the scheduler runs.
