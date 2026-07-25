@@ -123,3 +123,57 @@ controls, since restyled as fixed-size cockpit-style lit buttons with
 uppercase labels beneath and tooltips on hover/focus (label tap on touch):
 JIGGLER (unchanged semantics and persistence) and the spec 013 SCHED button,
 whose lamp is lit while the scheduler runs.
+
+### 2026-07-24 — Visible cursor, display-truth geometry, slower human cadence
+
+Live observation in `/desktop-view`: the pointer is almost never visible;
+only occasional flashes appear during bursts, and when motion is visible it
+reads as far faster than human. Three defects, all fixed here; the §2/§3
+constants below supersede the originals.
+
+1. **Remote cursor was never rendered (root cause of invisibility).**
+   `docker/rootfs/etc/s6-overlay/s6-rc.d/svc-x11vnc/run` starts x11vnc with
+   `-noxfixes`, which disables the XFIXES cursor interface — x11vnc cannot
+   learn the cursor shape or reliably track its position, so VNC clients see
+   at most heuristic redraw flashes. Xvfb composites no cursor into the
+   framebuffer itself, so the overlay is the only way a remote viewer can see
+   the pointer. Fix: remove `-noxfixes` and add `-cursor most` (server-side
+   overlay with a sane arrow fallback when the X cursor is unnamed or blank).
+   `-noxdamage` stays. This is a rootfs service-script edit, not a numbered
+   layer change. Acceptance: with the jiggler on, the cursor is continuously
+   visible in `/desktop-view` for the whole traversal of every burst.
+2. **Geometry comes from the display, not the environment.** Clamp bounds
+   were taken from `VM_RESOLUTION` (default `1600x900`), which can disagree
+   with the real X display; any mismatch parks or strands the pointer outside
+   the visible framebuffer. Fix: at `Start`, query the live display with
+   `xdotool getdisplaygeometry` through the injected Runner (output `W H`;
+   up to 3 attempts, 1 s apart), override the constructor width/height when
+   the query yields sane values (both ≥ 5), and log a warning when it
+   disagrees with `VM_RESOLUTION`. The env value remains only a fallback.
+   Belt and braces: `move` re-clamps every point to
+   `[2, width−3] × [2, height−3]` immediately before invoking `xdotool
+   mousemove`, so no future code path can actuate outside the display.
+3. **Human-speed motion.** The §2 Fitts parameters produced 250–2200 ms
+   gestures whose minimum-jerk peak velocity (1.875·D/MT) exceeds
+   2500 px/s on cross-screen traversals — physically implausible and, over
+   VNC's sparse cursor updates, perceived as teleporting flashes. New
+   normative timing, replacing §2.1's constants:
+   - `a = 300 ms`, `b = 350 ms` (was 120/160); lognormal jitter unchanged.
+   - Clamp MT to `[900 ms, 4000 ms]` (was 250/2200).
+   - **Peak-velocity cap** (new, applied after the clamp):
+     `MT = min(6000 ms, max(MT, 1.875·D/650 px/s))` — no gesture's ideal
+     peak speed may exceed 650 px/s (*tunable 500–800*), so a full-diagonal
+     traversal becomes a multi-second glide.
+   - Corrective sub-movement `MT₂ ~ U(180, 360) ms` (was 90–180).
+   - The 12–18 ms inter-sample cadence, burst structure, 8–27 s silences,
+     and inter-movement pauses are unchanged — speed is governed entirely
+     by MT.
+
+Tests: trajectory unit tests assert the new duration clamps and that the
+maximum instantaneous sample speed (with noise) stays ≤ 650 px/s × 1.15;
+service tests fake `getdisplaygeometry` (valid, garbage, and failing
+responses) and assert bounds follow the query with env fallback plus the
+pre-`mousemove` re-clamp; the e2e motion probe is unchanged. Manual
+acceptance: watch one full burst in `/desktop-view` — the cursor is visible
+end-to-end, moves at a believable human pace, and never touches the display
+edge except during deliberate edge excursions.
