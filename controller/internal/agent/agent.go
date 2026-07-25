@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	defaultMaxSteps      = 25
+	defaultMaxSteps      = 500
 	defaultKeep          = 20
 	defaultContextTokens = 16384
 	maxToolRounds        = 4

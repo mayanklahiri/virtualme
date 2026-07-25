@@ -427,7 +427,7 @@ func main() {
 		BashPath:      "bash",
 		DataDir:       path.Join(dataDir, "agent"),
 		Manifest:      "/opt/agent/system-manifest.json",
-		MaxSteps:      envInt("VM_AGENT_MAX_STEPS", 25),
+		MaxSteps:      envInt("VM_AGENT_MAX_STEPS", 500),
 		KeepTasks:     envInt("VM_AGENT_KEEP_TASKS", 20),
 		ContextTokens: envInt("VM_LLAMA_CTX", 16384),
 		TTS:           ttsClient,

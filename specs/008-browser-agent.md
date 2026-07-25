@@ -244,3 +244,9 @@ Manual Tools-console screenshot invocations now return a pure, ungridded
 capture; only agent-loop observations composite the grid. The `screenshot`
 tool description says so. Same capture pipeline (`scrot` + ImageMagick),
 gated by an execution option set by the manual-tool executor.
+
+### 2026-07-24 — Raise default step cap to 500
+
+Default `VM_AGENT_MAX_STEPS` / `defaultMaxSteps` rises from 25 to 500 tool
+calls per user task. Cap behavior (stop + assistant message +
+`agent-status phase:"failed"`) is unchanged.
