@@ -114,3 +114,29 @@ to provide the requested screenshot without invoking the screenshot tool. The
 `lahiri-dom` prompt now states the existing hard requirement explicitly: it
 must call the tool before answering, and prose alone does not satisfy the
 request. The hard assertion remains unchanged.
+
+### 2026-07-24 — e2e becomes a required first phase of every soak run
+
+§6's "soak is additive and separate from e2e" posture is superseded: a soak
+run that skips the deterministic lifecycle suite can pass while the container
+is broken in ways the live flows never touch. From now on `./cli.sh soak`
+includes `test/e2e.sh` as a hard prerequisite:
+
+1. **One build.** `test/soak.sh` builds the image exactly once via
+   `./cli.sh build` (skipped entirely with `--no-build`, as today).
+   `test/e2e.sh` gains a skip-build mode — environment `E2E_SKIP_BUILD=1`
+   bypasses its own `./cli.sh build` step and uses the already-tagged
+   development image; all other e2e steps are unchanged.
+2. **Order.** After the (optional) build and before starting the soak
+   container, `test/soak.sh` runs `E2E_SKIP_BUILD=1 bash test/e2e.sh`,
+   streaming its output. A non-zero e2e exit fails the soak run immediately —
+   the live flows do not start. Only after e2e passes does soak perform its
+   own fresh-data-dir start and run `test/soak.mjs`.
+3. **Agent probe stays opt-in.** `E2E_AGENT` is passed through unmodified;
+   soak neither forces nor suppresses it.
+4. **Restore semantics unchanged.** The existing stop/restart-previous-
+   deployment behavior wraps the whole run (e2e phase included).
+
+`scripts/check.sh` is unaffected (constitution rule 5: e2e and soak both need
+Docker and are outside the deterministic gate). The `soak` CLI subcommand's
+help text notes that soak includes the full e2e suite.
