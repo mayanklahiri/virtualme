@@ -124,18 +124,23 @@ echo "e2e: [11/20] data explorer lists the volume and rejects traversal"
 list_json=$(curl -fsS "$BASE/api/data/list")
 echo "$list_json" | grep -Eq '"name":"(metrics|valkey)"' \
   || fail "data list missing metrics/valkey: $list_json"
+du_json=$(curl -fsS "$BASE/api/data/du")
+echo "$du_json" | grep -q '"sizes":{' \
+  || fail "data du missing sizes object: $du_json"
 for probe in \
   "$BASE/api/data/file?path=../../etc/passwd" \
-  "$BASE/api/data/file?path=%2e%2e%2f%2e%2e%2fetc%2fpasswd"
+  "$BASE/api/data/file?path=%2e%2e%2f%2e%2e%2fetc%2fpasswd" \
+  "$BASE/api/data/du?path=../../etc"
 do
   code=$(curl -s -o /dev/null -w '%{http_code}' "$probe")
   [ "$code" = 404 ] || fail "traversal probe $probe returned $code (expected 404)"
 done
-code=$(curl -s -o /tmp/e2e-data-file -w '%{http_code}' "$BASE/api/data/file?path=metrics/tier0.json")
-[ "$code" = 200 ] || fail "GET metrics/tier0.json returned $code"
-ctype=$(curl -fsS -o /dev/null -w '%{content_type}' "$BASE/api/data/file?path=metrics/tier0.json")
-echo "$ctype" | grep -qi 'json' || fail "metrics/tier0.json content type is $ctype"
-grep -q '{' /tmp/e2e-data-file || fail "metrics/tier0.json body empty"
+printf '{"e2e":true}\n' > "$DATA_DIR/e2e-data.json"
+code=$(curl -s -o /tmp/e2e-data-file -w '%{http_code}' "$BASE/api/data/file?path=e2e-data.json")
+[ "$code" = 200 ] || fail "GET e2e-data.json returned $code"
+ctype=$(curl -fsS -o /dev/null -w '%{content_type}' "$BASE/api/data/file?path=e2e-data.json")
+echo "$ctype" | grep -qi 'json' || fail "e2e-data.json content type is $ctype"
+grep -q '"e2e":true' /tmp/e2e-data-file || fail "e2e-data.json body mismatch"
 
 echo "e2e: [12/20] local TTS streams speech and serves OpenAI-compatible WAV"
 node test/tts-probe.mjs "ws://127.0.0.1:${PORT}/ws" "$BASE" || fail "tts probe"

@@ -10,7 +10,7 @@ INTER_URL="https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip"
 INTER_SHA256="9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e"
 LUCIDE_URL="https://github.com/lucide-icons/lucide/releases/download/1.26.0/lucide-icons-1.26.0.zip"
 LUCIDE_SHA256="7b3c98ebbd473db33057f75fd67076957ba59d7a9ccd2098d3754800fe533e84"
-ICONS=(house folder-kanban list-checks activity message-circle mail monitor menu x sun moon palette send square trash-2 copy check external-link triangle-alert bot terminal wrench brain clock-3 chevron-down chevron-right volume-2 play pause plus circle-x loader-circle)
+ICONS=(house folder folder-kanban file file-braces image layout-grid list list-checks activity message-circle mail monitor menu x sun moon palette send square trash-2 copy check external-link download triangle-alert bot terminal wrench brain clock-3 chevron-down chevron-right chevron-left arrow-up arrow-down grip-vertical volume-2 play pause plus circle-x loader-circle)
 FONT_ROWS=(
   "SpaceGrotesk.woff2|https://fonts.gstatic.com/s/spacegrotesk/v22/V8mDoQDjQSkFtoMM3T6r8E7mPbF4Cw.woff2|0640890476fc1198ab4de571fb658de443c4d85b66466ec09534a8737ab1ce9d"
   "JetBrainsMono.woff2|https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbV2o-flEEny0FZhsfKu5WU4xD7OwE.woff2|18be452724bfdc236c074ca94a249a7f41a86752c7d04ab258ce9ed5651f6a7e"

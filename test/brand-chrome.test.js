@@ -27,6 +27,10 @@ test("brand chrome markup and responsive contracts stay intact", async () => {
   assert.match(css, /\.quick-links\{grid-template-columns:1fr\}/);
   assert.match(css, /prefers-reduced-motion:reduce/);
   assert.match(css, /\[data-theme=contrast\] \.wordmark-svg/);
+  assert.doesNotMatch(html, /class="brand-mark"/);
+  assert.match(css, /\.wordmark-svg\{width:12\.5rem;max-width:100%;height:auto;/);
+  assert.match(css, /\.brand\{[^}]*overflow:visible/);
+  assert.match(wordmark, /viewBox="-0\.74 0\.7 128\.5 23\.53"/);
   assert.match(render, /snapshot\.services\.length/);
   assert.doesNotMatch(wordmark, /<text\b/);
   assert.match(wordmark, /var\(--wordmark-fill/);

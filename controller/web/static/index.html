@@ -37,7 +37,6 @@
     <div id="nav-curtain" class="nav-curtain" hidden></div>
     <nav id="sidebar" class="sidebar" aria-label="Primary">
       <a class="brand" href="/" data-nav aria-label="Virtual Me home">
-        <img class="brand-mark" src="/brand/virtualme-mark.png" width="32" height="32" alt="">
         <svg class="wordmark-svg" role="img" aria-label="Virtual Me"><use href="/icons.svg#i-wordmark"/></svg>
       </a>
       <button id="nav-close" class="icon-button nav-close" type="button" aria-label="Close navigation">
@@ -48,7 +47,7 @@
         <a href="/projects" data-nav><svg class="icon"><use href="/icons.svg#i-folder-kanban"/></svg>Projects</a>
         <a href="/jobs" data-nav><svg class="icon"><use href="/icons.svg#i-list-checks"/></svg>Jobs</a>
         <a href="/tools" data-nav><svg class="icon"><use href="/icons.svg#i-wrench"/></svg>Tools</a>
-        <a href="/data" data-nav><svg class="icon"><use href="/icons.svg#i-folder-kanban"/></svg>Data</a>
+        <a href="/data" data-nav><svg class="icon"><use href="/icons.svg#i-folder"/></svg>Data</a>
         <a href="/status" data-nav><svg class="icon"><use href="/icons.svg#i-activity"/></svg>Status</a>
         <a href="/chat" data-nav><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg>Chat</a>
         <a href="/speech" data-nav><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg>Speech</a>
@@ -78,7 +77,7 @@
           <div class="hero-copy">
             <p class="eyebrow">Private background agent</p>
             <h1 id="home-title">Good to see you.</h1>
-            <p><strong>Virtual Me</strong> is a personal, private background AI agent that runs completely locally on your computer, as you, without any GPUs or AI bills.</p>
+            <p><strong>Virtual Me</strong> is a personal, private background AI agent that runs completely locally on your computer, as you, without any GPUs, data centers, or AI bills.</p>
             <p class="hero-health"><span id="home-health" class="health-pill pending">Waiting for controller</span></p>
           </div>
           <figure class="hero-media" aria-hidden="true">
@@ -193,10 +192,27 @@
 
       <section data-page="data" hidden class="data-page" aria-labelledby="data-title">
         <div class="page-heading">
-          <div><h1 id="data-title">Data</h1><p class="page-caption">Read-only explorer of the persistent data volume.</p></div>
+          <div><h1 id="data-title">Data</h1><p class="page-caption">Browse your data. Stored on your machine, not in a data center.</p></div>
         </div>
         <div class="data-grid">
-          <nav id="data-tree" class="data-tree tree" aria-label="Data volume"></nav>
+          <section class="data-browser" aria-label="Data volume">
+            <div class="data-toolbar">
+              <nav id="data-breadcrumbs" class="data-breadcrumbs" aria-label="Current path"></nav>
+              <div class="data-toolbar-actions">
+                <div class="data-segments" aria-label="Sort files">
+                  <button type="button" data-data-sort="name">Name</button>
+                  <button type="button" data-data-sort="size">Size</button>
+                  <button type="button" data-data-sort="mtime">Modified</button>
+                </div>
+                <div class="data-segments data-view-switch" aria-label="View">
+                  <button type="button" data-data-view="icons" aria-label="Icon view"><svg class="icon"><use href="/icons.svg#i-layout-grid"/></svg></button>
+                  <button type="button" data-data-view="list" aria-label="List view"><svg class="icon"><use href="/icons.svg#i-list"/></svg></button>
+                </div>
+              </div>
+            </div>
+            <div id="data-tree" class="data-entries" role="region"></div>
+          </section>
+          <div id="data-splitter" class="data-splitter" role="separator" aria-label="Resize file explorer" aria-orientation="vertical" aria-valuemin="20" aria-valuemax="80" tabindex="0"><svg class="icon"><use href="/icons.svg#i-grip-vertical"/></svg></div>
           <aside id="data-viewer" class="data-viewer">
             <p class="data-empty">Select a file to inspect it.</p>
           </aside>

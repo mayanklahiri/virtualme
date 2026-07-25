@@ -41,7 +41,7 @@ also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 - `http://localhost:8080/projects/<id>` — project task, runs, and scratch details
 - `http://localhost:8080/jobs` — queue, filterable machine activity, and details
 - `http://localhost:8080/tools` — agent definitions, queue-backed manual invocation, and structured results
-- `http://localhost:8080/data` — read-only explorer of the persistent data volume
+- `http://localhost:8080/data` — read-only icon/list explorer with sortable sizes, deep links, and typed previews
 - `http://localhost:8080/status` — service/GPU status, LLM token and browser-action charts, active time selectors, Quick Options toggles, and tiered metrics
 - `http://localhost:8080/chat` — shared local-model chat
 - `http://localhost:8080/speech` — streaming local text-to-speech
@@ -87,10 +87,12 @@ screenshots have no coordinate grid. The page can run
 `bash` and browser-input tools; it has no additional authentication under the
 v1 trust model, so use it only on a trusted private network.
 
-Use `/data` when troubleshooting: it browses `$VM_DATA_DIR` read-only without
-`docker exec`. Inspect agent step logs and screenshots under `agent/`, the
-mail spool under `mail/`, cached speech WAVs under `tts-cache/`, and metrics
-tiers under `metrics/`; every file offers a raw download.
+Use `/data` when troubleshooting: its icon/list explorer browses
+`$VM_DATA_DIR` read-only without `docker exec`, with sortable recursive sizes,
+`?path=` deep links, typed previews, and raw downloads. Inspect agent step logs
+and screenshots under `agent/` or cached speech WAVs under `tts-cache/`. The
+root UI omits `chromium`, `mail`, `metrics`, `valkey`, and `xdg`; use
+`/data?path=…` or the read-only API to reach them.
 
 The Quick Options panel on `/status` is a row of fixed-size cockpit-style lit
 buttons with labels beneath; hover or focus a button (or tap its label) for
@@ -197,10 +199,11 @@ private key mode at 0600.
 8. Browser profile: settings persist under `~/.virtualme/chromium/`.
 9. Browser sandbox: namespace sandboxing is automatic when supported; use `--no-browser-sandbox` to force the warning-suppressed fallback.
 10. Data location: all persistent state is under `~/.virtualme/`; see `specs/007-persistence-locality.md` §1a plus its amendments.
-11. Agent artifacts: inspect `~/.virtualme/agent/<taskId>/steps.jsonl` and `step-*.jpg`; Stop cancels the current task.
-12. Speech: check the `tts` entry in `/healthz`; `ttsd` listens only on container loopback port 8082. Its startup log lists the found voice directories (Lessac only); cache files are under `~/.virtualme/tts-cache/`.
-13. Mail not arriving: check the `mail` health entry, queue row's last error and next-flush countdown, and `~/.virtualme/mail/flush.log`; confirm relay credentials/port or direct-path outbound port 25, publish the displayed DKIM TXT record and SPF, and verify sending-IP PTR/reputation. Residential/dynamic IPs should use a smarthost.
-14. Job queue: `queue-peek` on `/ws` returns upcoming, running, and finished jobs; durable queue keys are in the Valkey AOF under `~/.virtualme/valkey/`.
-15. Projects: records and run summaries are in the Valkey AOF; scratch files are under `~/.virtualme/projects/<id>/` and survive project deletion.
-16. Activity ledger: `/jobs` replays the newest 100 entries from the bounded `virtualme:activity` Valkey list; queue rows are separate envelope state.
-17. GPU absent: this is normal. NVIDIA is auto-passed through when detected (or use `--gpus <spec>`); if `docker run` fails on a host without the NVIDIA Container Toolkit, restart with `--no-gpu`. AMD/Intel require host-specific `/dev/dri` device passthrough. GPU absence never changes `/healthz`.
+11. Data explorer: use `/data` to inspect agent steps, project scratch space, and TTS cache files without `docker exec`; `?path=` URLs deep-link to a directory or file. Root-hidden `chromium`, `mail`, `metrics`, `valkey`, and `xdg` remain reachable via `/data?path=…` or the read-only API under the v1 trust model.
+12. Agent artifacts: inspect `~/.virtualme/agent/<taskId>/steps.jsonl` and `step-*.jpg`; Stop cancels the current task.
+13. Speech: check the `tts` entry in `/healthz`; `ttsd` listens only on container loopback port 8082. Its startup log lists the found voice directories (Lessac only); cache files are under `~/.virtualme/tts-cache/`.
+14. Mail not arriving: check the `mail` health entry, queue row's last error and next-flush countdown, and `~/.virtualme/mail/flush.log`; confirm relay credentials/port or direct-path outbound port 25, publish the displayed DKIM TXT record and SPF, and verify sending-IP PTR/reputation. Residential/dynamic IPs should use a smarthost.
+15. Job queue: `queue-peek` on `/ws` returns upcoming, running, and finished jobs; durable queue keys are in the Valkey AOF under `~/.virtualme/valkey/`.
+16. Projects: records and run summaries are in the Valkey AOF; scratch files are under `~/.virtualme/projects/<id>/` and survive project deletion.
+17. Activity ledger: `/jobs` replays the newest 100 entries from the bounded `virtualme:activity` Valkey list; queue rows are separate envelope state.
+18. GPU absent: this is normal. NVIDIA is auto-passed through when detected (or use `--gpus <spec>`); if `docker run` fails on a host without the NVIDIA Container Toolkit, restart with `--no-gpu`. AMD/Intel require host-specific `/dev/dri` device passthrough. GPU absence never changes `/healthz`.

@@ -142,7 +142,7 @@ func newMuxWithActivity(cfg health.Config, hub *ws.Hub, desktopURL *url.URL, act
 	mux.HandleFunc("/desktop", redirectDesktop)
 	mux.HandleFunc("/desktop/", redirectDesktop)
 	if dataDir != "" {
-		datafs.Mount(mux, dataDir)
+		datafs.Mount(mux, dataDir, valkey.New(cfg.ValkeyAddr))
 	}
 	staticFS, err := fs.Sub(assets.WebFS, "web/dist")
 	if err != nil {

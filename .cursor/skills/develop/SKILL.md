@@ -90,12 +90,12 @@ requires a new spec.
 | `controller/internal/jiggler` | Default-on humanlike mouse trajectories, Valkey state, and burst lifecycle |
 | `controller/cmd/ttsd`, `controller/internal/tts` | Single-voice (Lessac) synthesis with unknown-voice fallback, sentence WAV cache, Valkey speech log, NDJSON client, and streaming helpers |
 | `controller/internal/mail` | Stdlib MIME/CID composition, DKIM signing, dma submission, and defensive spool transparency |
-| `controller/internal/datafs` | Read-only, GET-only, path-contained HTTP view of `$VM_DATA_DIR` (no write endpoints — adding one requires a new spec) |
+| `controller/internal/datafs` | Read-only, GET-only, path-contained list/file/recursive-size HTTP view of `$VM_DATA_DIR`; directory sizes use five-minute Valkey caching (no write endpoints — adding one requires a new spec) |
 | `controller/prompts` | Embedded plain-text agent and fallback-chat system prompts |
 | `controller/web/static` | Hand-written multi-page SPA, themes, charts, markdown, agent hooks |
 | `controller/web/static/js/jobs.js` | Queue, filtered live activity with durations, and type-specific job details |
 | `controller/web/static/js/tools.js` | Server-manifest tool list, schema-generated forms, and shape-rendered manual results |
-| `controller/web/static/js/data.js` | Lazy data-volume tree and typed file viewers over `/api/data/*` (`innerHTML` forbidden) |
+| `controller/web/static/js/data.js` | Sortable icon/list data explorer, `?path=` deep links, persisted pane/view preferences, and typed file viewers over `/api/data/*` (`innerHTML` forbidden) |
 | `controller/web/static/js/tree.js` | Shared collapsible-tree widget for YAML/JSON values |
 | DOM-free SPA modules | `markdown-table.js`, `chart-data.js`, `duration.js`, `tts-stream.js`, `tools-render.js`, `yaml-lite.js` carry pure logic covered by Node unit tests |
 | `controller/web/dist` | Gitignored minified SPA + generated icon sprite |
@@ -109,7 +109,7 @@ Console themes define two complete light/dark token blocks in `app.css`,
 including `--brand-a`, `--brand-b`, `--font-scale`, and `--p1` through `--p8`.
 Adding a theme also requires entries in the `theme.js` registry, the
 `index.html` boot registry, and the CSS swatch registry. Pinned web fonts and
-Pinned web fonts and Lucide icons are declared in
+Lucide icons are declared in
 `controller/tools/fetch-assets.sh` (build-time, not committed). Committed brand
 assets live under `controller/web/static/brand/`. The raster logo source of
 truth is repo-root `LOGO.png`; re-run `bash scripts/update-logo.sh` to

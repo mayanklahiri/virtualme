@@ -11,13 +11,36 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 )
 
-const textCap = 262144
+const (
+	textCap   = 262144
+	duTTL     = 300
+	duKeyBase = "vm:datafs:du:"
+)
+
+// Cache is the subset of Valkey used for directory-size summaries.
+type Cache interface {
+	Get(key string) (*string, error)
+	SetEx(key, value string, seconds int) error
+}
 
 // FS is a read-only explorer rooted at Root.
 type FS struct {
-	Root string
+	Root  string
+	Cache Cache
+
+	duMu      sync.Mutex
+	duPending map[string]*duCall
+	walk      func(string) (int64, error)
+	onDUWait  func()
+}
+
+type duCall struct {
+	done chan struct{}
+	size int64
+	err  error
 }
 
 type entry struct {
@@ -188,6 +211,131 @@ func (f *FS) File(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, filepath.Base(target), info.ModTime(), file)
 }
 
+// DU handles GET /api/data/du?path= and returns recursive sizes for child dirs.
+func (f *FS) DU(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	rel := r.URL.Query().Get("path")
+	target, err := f.resolve(rel)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if !info.IsDir() {
+		http.Error(w, "not a directory", http.StatusBadRequest)
+		return
+	}
+	dirents, err := os.ReadDir(target)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	sizes := make(map[string]int64)
+	for _, dirent := range dirents {
+		childRel := dirent.Name()
+		if rel != "" && rel != "." {
+			childRel = filepath.Join(rel, dirent.Name())
+		}
+		if dirent.Type()&os.ModeSymlink != 0 {
+			resolved, resolveErr := f.resolve(childRel)
+			if resolveErr != nil {
+				continue
+			}
+			resolvedInfo, statErr := os.Stat(resolved)
+			if statErr == nil && resolvedInfo.IsDir() {
+				sizes[dirent.Name()] = 0
+			}
+			continue
+		}
+		if !dirent.IsDir() {
+			continue
+		}
+		size, sizeErr := f.directorySize(childRel, filepath.Join(target, dirent.Name()))
+		if sizeErr != nil {
+			continue
+		}
+		sizes[dirent.Name()] = size
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"path": rel, "sizes": sizes})
+}
+
+func (f *FS) directorySize(rel, target string) (int64, error) {
+	key := duKeyBase + filepath.ToSlash(rel)
+	if f.Cache != nil {
+		if cached, err := f.Cache.Get(key); err == nil && cached != nil {
+			if size, parseErr := strconv.ParseInt(*cached, 10, 64); parseErr == nil {
+				return size, nil
+			}
+		}
+	}
+
+	f.duMu.Lock()
+	if f.duPending == nil {
+		f.duPending = make(map[string]*duCall)
+	}
+	if pending := f.duPending[key]; pending != nil {
+		if f.onDUWait != nil {
+			f.onDUWait()
+		}
+		f.duMu.Unlock()
+		<-pending.done
+		return pending.size, pending.err
+	}
+	call := &duCall{done: make(chan struct{})}
+	f.duPending[key] = call
+	f.duMu.Unlock()
+
+	walk := f.walk
+	if walk == nil {
+		walk = walkSize
+	}
+	call.size, call.err = walk(target)
+	if call.err == nil && f.Cache != nil {
+		_ = f.Cache.SetEx(key, strconv.FormatInt(call.size, 10), duTTL)
+	}
+
+	f.duMu.Lock()
+	delete(f.duPending, key)
+	close(call.done)
+	f.duMu.Unlock()
+	return call.size, call.err
+}
+
+func walkSize(root string) (int64, error) {
+	var total int64
+	err := filepath.WalkDir(root, func(path string, dirent os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path != root && dirent.Type()&os.ModeSymlink != 0 {
+			if dirent.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if dirent.IsDir() {
+			return nil
+		}
+		info, infoErr := dirent.Info()
+		if infoErr != nil {
+			return infoErr
+		}
+		if info.Mode().IsRegular() {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total, err
+}
+
 func contentTypeFor(path string, file *os.File) string {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
@@ -231,8 +379,9 @@ func isTextual(contentType string) bool {
 }
 
 // Mount registers the list/file handlers on mux.
-func Mount(mux *http.ServeMux, root string) {
-	fs := &FS{Root: root}
+func Mount(mux *http.ServeMux, root string, cache Cache) {
+	fs := &FS{Root: root, Cache: cache}
 	mux.HandleFunc("/api/data/list", fs.List)
 	mux.HandleFunc("/api/data/file", fs.File)
+	mux.HandleFunc("/api/data/du", fs.DU)
 }

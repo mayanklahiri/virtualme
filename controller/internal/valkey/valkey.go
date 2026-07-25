@@ -254,6 +254,12 @@ func (v *Client) Set(key, value string) error {
 	return err
 }
 
+// SetEx stores one string value with a TTL in seconds.
+func (v *Client) SetEx(key, value string, seconds int) error {
+	_, err := v.do("SET", key, value, "EX", strconv.Itoa(seconds))
+	return err
+}
+
 // Get reads one string value.
 func (v *Client) Get(key string) (*string, error) {
 	reply, err := v.do("GET", key)

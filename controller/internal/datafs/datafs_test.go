@@ -7,8 +7,38 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
+
+type testCache struct {
+	mu      sync.Mutex
+	values  map[string]string
+	setTTL  int
+	setHits int
+}
+
+func (c *testCache) Get(key string) (*string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	value, ok := c.values[key]
+	if !ok {
+		return nil, nil
+	}
+	return &value, nil
+}
+
+func (c *testCache) SetEx(key, value string, seconds int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.values == nil {
+		c.values = make(map[string]string)
+	}
+	c.values[key] = value
+	c.setTTL = seconds
+	c.setHits++
+	return nil
+}
 
 func TestListAndFileContainment(t *testing.T) {
 	root := t.TempDir()
@@ -33,7 +63,7 @@ func TestListAndFileContainment(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	Mount(mux, root)
+	Mount(mux, root, nil)
 
 	t.Run("list root", func(t *testing.T) {
 		response := httptest.NewRecorder()
@@ -73,6 +103,7 @@ func TestListAndFileContainment(t *testing.T) {
 			"/api/data/file?path=%2e%2e%2f%2e%2e%2fetc%2fpasswd",
 			"/api/data/file?path=/etc/passwd",
 			"/api/data/file?path=escape",
+			"/api/data/du?path=../../etc",
 		} {
 			response := httptest.NewRecorder()
 			mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
@@ -126,5 +157,104 @@ func TestListAndFileContainment(t *testing.T) {
 		if response.Code != 400 {
 			t.Fatalf("list on file = %d", response.Code)
 		}
+		response = httptest.NewRecorder()
+		mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/data/du?path=readme.txt", nil))
+		if response.Code != 400 {
+			t.Fatalf("du on file = %d", response.Code)
+		}
+		response = httptest.NewRecorder()
+		mux.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/data/du", nil))
+		if response.Code != 405 {
+			t.Fatalf("POST du = %d", response.Code)
+		}
 	})
+}
+
+func TestDURecursiveSizesAndCache(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "one", "nested")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "one", "a"), []byte("abc"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "b"), []byte("1234"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "one", "a"), filepath.Join(nested, "link")); err != nil {
+		t.Fatal(err)
+	}
+	cache := &testCache{values: make(map[string]string)}
+	mux := http.NewServeMux()
+	Mount(mux, root, cache)
+
+	readSize := func() int64 {
+		t.Helper()
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/data/du", nil))
+		if response.Code != 200 {
+			t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+		}
+		var body struct {
+			Sizes map[string]int64 `json:"sizes"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		return body.Sizes["one"]
+	}
+
+	if got := readSize(); got != 7 {
+		t.Fatalf("size = %d, want 7", got)
+	}
+	if cache.setHits != 1 || cache.setTTL != duTTL {
+		t.Fatalf("cache writes = %d, ttl = %d", cache.setHits, cache.setTTL)
+	}
+	if err := os.WriteFile(filepath.Join(root, "one", "a"), []byte("changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := readSize(); got != 7 {
+		t.Fatalf("cached size = %d, want 7", got)
+	}
+	if cache.setHits != 1 {
+		t.Fatalf("cache writes after hit = %d", cache.setHits)
+	}
+}
+
+func TestDirectorySizeCoalescesConcurrentWalks(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	joined := make(chan struct{}, 1)
+	var calls int
+	fs := &FS{
+		Root: t.TempDir(),
+		walk: func(string) (int64, error) {
+			calls++
+			close(started)
+			<-release
+			return 42, nil
+		},
+		onDUWait: func() { joined <- struct{}{} },
+	}
+	results := make(chan int64, 2)
+	go func() {
+		size, _ := fs.directorySize("one", filepath.Join(fs.Root, "one"))
+		results <- size
+	}()
+	<-started
+	go func() {
+		size, _ := fs.directorySize("one", filepath.Join(fs.Root, "one"))
+		results <- size
+	}()
+	<-joined
+	close(release)
+	for range 2 {
+		if got := <-results; got != 42 {
+			t.Fatalf("size = %d, want 42", got)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("walk calls = %d, want 1", calls)
+	}
 }

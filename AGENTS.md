@@ -67,11 +67,15 @@ manual results and timings enter the persistent activity ledger. Tool results
 render by shape: page-shaped JSON becomes a linked title plus plain text,
 KEY=value runs become sorted tables, and `read_page` YAML digests become
 collapsible trees.
-The read-only `/data` console tab explores `$VM_DATA_DIR` through GET-only
-`/api/data/list` and `/api/data/file` endpoints with strict path containment;
-typed viewers render images (lightbox), JSON/YAML trees, JSONL rows, WAV
-audio, and 256 KiB-capped text, with raw downloads for everything. Under the
-v1 trust model the whole volume is visible by design.
+The read-only `/data` console tab provides icon/list single-directory browsing,
+sortable columns and recursive size bars, `?path=` deep links, a remembered
+drag-resizable 66/34 desktop split, and a mobile preview slide-over. GET-only
+`/api/data/list`, `/api/data/file`, and five-minute Valkey-cached
+`/api/data/du` endpoints enforce strict path containment; typed viewers render
+images (lightbox), JSON/YAML trees, JSONL rows, WAV audio, and 256 KiB-capped
+text, with raw downloads for everything. The root UI omits `chromium`, `mail`,
+`metrics`, `valkey`, and `xdg`, but direct links and the API expose the whole
+volume by design under the v1 trust model.
 Chat renders GFM pipe tables, buffers the latest task's agent steps
 server-side for websocket-reconnect replay, and declares no live regions.
 The loopback-only `ttsd` service wraps pinned sherpa-onnx and Piper Lessac

@@ -213,4 +213,4 @@ two-face lockup returns, with hierarchy flipped toward "me":
 Supersedes the §3 hero body sentence. The home hero body is now:
 
 > **Virtual Me** is a personal, private background AI agent that runs
-> completely locally on your computer, as you, without any GPUs or AI bills.
+> completely locally on your computer, as you, without any GPUs, data centers, or AI bills.

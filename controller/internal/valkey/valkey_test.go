@@ -79,6 +79,7 @@ func TestCommandWireFormats(t *testing.T) {
 		{"hget", []string{"HGET", "h", "f"}, "$1\r\nv\r\n", func(c *Client) error { _, err := c.HGet("h", "f"); return err }},
 		{"hdel", []string{"HDEL", "h", "f"}, ":1\r\n", func(c *Client) error { _, err := c.HDel("h", "f"); return err }},
 		{"set", []string{"SET", "k", "v"}, "+OK\r\n", func(c *Client) error { return c.Set("k", "v") }},
+		{"setex", []string{"SET", "k", "v", "EX", "300"}, "+OK\r\n", func(c *Client) error { return c.SetEx("k", "v", 300) }},
 		{"get", []string{"GET", "k"}, "$1\r\nv\r\n", func(c *Client) error { _, err := c.Get("k"); return err }},
 	}
 	for _, test := range tests {

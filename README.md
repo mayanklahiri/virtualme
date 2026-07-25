@@ -152,10 +152,10 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/projects/<id>` | Project task, schedule, status, run history, and scratch-directory details |
 | `/jobs` | Queue, filterable machine activity with durations, and type-specific details in three panes |
 | `/tools` | Authoritative agent-tool list, schema-generated forms, queue-backed manual invocation, and structured result rendering |
-| `/data` | Read-only explorer of `$VM_DATA_DIR` (tree + typed viewers; trust-model visible) |
+| `/data` | Read-only icon/list explorer of `$VM_DATA_DIR` with sortable size summaries, deep links, a resizable preview pane, and typed viewers |
 | `/status` | Service health, system/GPU meters, LLM token/throughput and browser-action charts, active time selectors, Quick Options (jiggler and scheduler pause), and persistent per-process/GPU metrics |
 | `/chat` | Markdown chat, generation controls, LLM progress, and conversation totals |
-| `/speech` | Two-voice streaming local speech with seeds, persistent history/replay, and disk cache |
+| `/speech` | Single-voice streaming local speech with seeds, persistent history/replay, and disk cache |
 | `/mail` | Outbound-mail composer, durable outbox with per-message status, queue contents/errors/next-flush timing, queue clearing, and DKIM DNS record |
 | `/desktop-view` | Embedded private noVNC desktop |
 | `/healthz` | Aggregate JSON health for all eight services |
@@ -163,6 +163,7 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `POST /v1/audio/speech` | OpenAI-compatible local speech API (`wav` or raw `pcm`) |
 | `GET /api/data/list` | Read-only directory listing under `$VM_DATA_DIR` (path-contained; trust model) |
 | `GET /api/data/file` | Read-only file stream under `$VM_DATA_DIR` (text capped at 256 KiB unless `download=1`) |
+| `GET /api/data/du` | Recursive sizes of immediate child directories, cached in Valkey for five minutes |
 | `/desktop/` | Redirect to the noVNC client; child paths reverse-proxy noVNC and websockify |
 
 History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status charts offer synchronized `15m` through `30d` lookbacks, boundary-aligned locale-aware time ticks, responsive titles and controls, and theme-consistent series colors; every chart downsamples client-side to at most 120 bars, CPU load and memory plus GPU utilization and memory (in GB) draw side by side, and dedicated charts track LLM tokens in/out, effective token throughput, and browser actions by category. The Status top banner carries overall health, the server-local scheduler clock with active selector tokens, and uptime. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, the browser-reachable address, up to two container-interface addresses, uptime, CPU/load, memory, disk capacity, build version, and a detected GPU beside a theme-tinted logo hero image.
@@ -216,12 +217,15 @@ collapsible tree. This can invoke `bash` and browser actuation;
 under the current trust model it has no additional authentication, so expose the
 console only on a trusted private network.
 
-Use `/data` to browse the persistent volume without `docker exec`: a lazy
-directory tree over read-only `GET /api/data/*` endpoints with strict path
-containment, typed viewers (image lightbox, JSON/YAML trees, JSONL rows, WAV
-playback, capped text), and a raw download for every file. The whole volume,
-including the DKIM key and Chromium profile, is visible by design under the
-current trust model.
+Use `/data` to browse the persistent volume without `docker exec`. Its
+full-height explorer provides icon and list views, sortable columns, recursive
+size bars, clickable breadcrumbs, `?path=` deep links, a remembered resizable
+preview pane, and a full-screen mobile preview. Typed viewers handle image
+lightboxes, JSON/YAML trees, JSONL rows, WAV playback, and capped text; every
+file has a raw download. The root UI omits internal `chromium`, `mail`,
+`metrics`, `valkey`, and `xdg` directories, but direct deep links and the
+strictly path-contained read-only API expose the whole volume by design under
+the current trust model.
 
 All LLM work runs through a Valkey-backed sequential queue with interactive
 priority, retries, visibility recovery, and a dead-letter list. Chat messages
