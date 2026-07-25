@@ -12,6 +12,7 @@
 //      SOAK_FLOW    regex selecting flows by name (default: all)
 
 import { randomUUID } from "node:crypto";
+import { parseYamlLite } from "../controller/web/static/js/yaml-lite.js";
 
 const URL_WS = process.env.SOAK_URL ?? "ws://127.0.0.1:8080/ws";
 const FLOW_TIMEOUT_MS = Number(process.env.SOAK_TIMEOUT ?? 600) * 1000;
@@ -157,6 +158,217 @@ const flows = [
           }
         };
         ws.send(JSON.stringify({ type: "tools-list-req" }));
+      });
+    },
+    hard(r) {
+      return r.probeProblems ?? [];
+    },
+    soft() {
+      return [];
+    },
+  },
+  {
+    name: "tools-live-lahiri",
+    run(ws, flowLog) {
+      return new Promise((resolve, reject) => {
+        /** @type {string[]} */
+        const problems = [];
+        /** @type {Array<{tool: string, args?: Record<string, unknown>, check: (frame: any) => void}>} */
+        const queue = [
+          {
+            tool: "navigate",
+            args: { url: "https://www.lahiri.me" },
+            check(frame) {
+              const text = String(frame.text ?? "");
+              if (frame.ok !== true) problems.push(`navigate failed: ${frame.error || "unknown"}`);
+              if (!/lahiri\.me/i.test(text)) problems.push(`navigate text lacks lahiri.me: ${excerpt(text)}`);
+              if (!text.includes('"ready":true') && !text.includes('"ready": true')) {
+                problems.push(`navigate not settled: ${excerpt(text)}`);
+              }
+            },
+          },
+          {
+            tool: "read_page",
+            check(frame) {
+              const text = String(frame.text ?? "");
+              if (frame.ok !== true) problems.push(`read_page failed: ${frame.error || "unknown"}`);
+              if (text.length > 16000) problems.push(`read_page length ${text.length} > 16000`);
+              let digest;
+              try {
+                digest = parseYamlLite(text);
+              } catch (error) {
+                problems.push(`read_page YAML parse failed: ${error}`);
+                return;
+              }
+              if (!digest?.title) problems.push("read_page title empty");
+              if (!/lahiri\.me/i.test(String(digest?.url ?? ""))) {
+                problems.push(`read_page url = ${digest?.url}`);
+              }
+              let links = 0;
+              let headings = 0;
+              /** @param {any[]} nodes */
+              const walk = (nodes) => {
+                for (const node of nodes ?? []) {
+                  if (node?.href) links++;
+                  if (/^h[1-6]$/.test(String(node?.tag ?? ""))) headings++;
+                  walk(node?.children ?? []);
+                  walk(node?.items ?? []);
+                }
+              };
+              walk(/** @type {any[]} */ (digest?.body ?? []));
+              if (links < 1) problems.push("read_page body has no links");
+              if (headings < 1) problems.push("read_page body has no headings");
+            },
+          },
+          {
+            tool: "dom",
+            check(frame) {
+              const text = String(frame.text ?? "");
+              if (frame.ok !== true) problems.push(`dom failed: ${frame.error || "unknown"}`);
+              if (!/lahiri\.me/i.test(text)) problems.push(`dom lacks lahiri.me: ${excerpt(text)}`);
+              const elements = (text.match(/"tag"/g) ?? []).length;
+              if (elements < 10) problems.push(`dom has ${elements} elements, want >= 10`);
+            },
+          },
+          {
+            tool: "dom_query",
+            args: { selector: "a" },
+            check(frame) {
+              if (frame.ok !== true) problems.push(`dom_query(a) failed: ${frame.error || "unknown"}`);
+              let parsed;
+              try {
+                parsed = JSON.parse(String(frame.text ?? "[]"));
+              } catch {
+                problems.push(`dom_query(a) not JSON: ${excerpt(String(frame.text ?? ""))}`);
+                return;
+              }
+              if (!Array.isArray(parsed) || parsed.length === 0) {
+                problems.push("dom_query(a) without attributes returned empty");
+              }
+            },
+          },
+          {
+            tool: "dom_query",
+            args: { selector: "a", attributes: ["href"] },
+            check(frame) {
+              if (frame.ok !== true) problems.push(`dom_query(a,href) failed: ${frame.error || "unknown"}`);
+              let parsed;
+              try {
+                parsed = JSON.parse(String(frame.text ?? "[]"));
+              } catch {
+                problems.push(`dom_query(a,href) not JSON: ${excerpt(String(frame.text ?? ""))}`);
+                return;
+              }
+              if (!Array.isArray(parsed) || parsed.length === 0) {
+                problems.push("dom_query(a,href) returned empty");
+                return;
+              }
+              if (!parsed.every((entry) => entry?.attrs?.href)) {
+                problems.push("dom_query(a,href) missing attrs.href on an entry");
+              }
+            },
+          },
+          {
+            tool: "dom_validate",
+            args: { assertions: [{ selector: "body", exists: true, minCount: 1 }] },
+            check(frame) {
+              if (frame.ok !== true) problems.push(`dom_validate failed: ${frame.error || "unknown"}`);
+              if (!String(frame.text ?? "").includes('"pass":true') &&
+                  !String(frame.text ?? "").includes('"pass": true')) {
+                problems.push(`dom_validate did not pass: ${excerpt(String(frame.text ?? ""))}`);
+              }
+            },
+          },
+          {
+            tool: "page_eval",
+            args: { expression: "document.title" },
+            check(frame) {
+              if (frame.ok !== true) problems.push(`page_eval failed: ${frame.error || "unknown"}`);
+              if (!String(frame.text ?? "").trim()) problems.push("page_eval empty");
+            },
+          },
+          {
+            tool: "layout_debug",
+            args: { selector: "body" },
+            check(frame) {
+              if (frame.ok !== true) problems.push(`layout_debug failed: ${frame.error || "unknown"}`);
+            },
+          },
+          {
+            tool: "screenshot",
+            check(frame) {
+              if (frame.ok !== true) problems.push(`screenshot failed: ${frame.error || "unknown"}`);
+              if (frame.image && dataURLBytes(String(frame.image)) > 32 * 1024) {
+                problems.push(`screenshot thumbnail exceeds 32 KiB`);
+              }
+            },
+          },
+          {
+            tool: "system_info",
+            args: { topic: "os" },
+            check(frame) {
+              if (frame.ok !== true) problems.push(`system_info failed: ${frame.error || "unknown"}`);
+              if (!String(frame.text ?? "").trim()) problems.push("system_info empty");
+            },
+          },
+          {
+            tool: "scroll",
+            args: { dir: "down", amount: 2 },
+            check(frame) {
+              if (frame.ok !== true) problems.push(`scroll down failed: ${frame.error || "unknown"}`);
+            },
+          },
+          {
+            tool: "scroll",
+            args: { dir: "up", amount: 2 },
+            check(frame) {
+              if (frame.ok !== true) problems.push(`scroll up failed: ${frame.error || "unknown"}`);
+            },
+          },
+          {
+            tool: "key",
+            args: { keys: "End" },
+            check(frame) {
+              if (frame.ok !== true) problems.push(`key End failed: ${frame.error || "unknown"}`);
+            },
+          },
+          {
+            tool: "key",
+            args: { keys: "Home" },
+            check(frame) {
+              if (frame.ok !== true) problems.push(`key Home failed: ${frame.error || "unknown"}`);
+            },
+          },
+        ];
+        let index = 0;
+        let id = "";
+        const timer = setTimeout(() => reject(new Error("tools-live-lahiri timed out after 180s")), 180000);
+
+        const invokeNext = () => {
+          if (index >= queue.length) {
+            clearTimeout(timer);
+            resolve({ steps: [], reply: "", chatError: "", probeProblems: problems });
+            return;
+          }
+          const step = queue[index];
+          id = randomUUID();
+          flowLog(`invoke ${step.tool}`);
+          ws.send(JSON.stringify({
+            type: "tool-invoke", id, tool: step.tool, args: step.args ?? {},
+          }));
+        };
+
+        onFrame = (frame) => {
+          if (frame.type !== "tool-result" || frame.id !== id) return;
+          try {
+            queue[index].check(frame);
+          } catch (error) {
+            problems.push(`${queue[index].tool} check threw: ${error}`);
+          }
+          index++;
+          invokeNext();
+        };
+        invokeNext();
       });
     },
     hard(r) {

@@ -21,6 +21,7 @@ export function createDOMStub(fixture) {
       parentElement: parent,
       childNodes: [],
       children: [],
+      innerText: node.text ?? "",
       getAttribute(name) {
         return node.attrs?.[name] ?? null;
       },

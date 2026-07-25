@@ -21,6 +21,11 @@
           "text": "Works at Oracle"
         },
         {
+          "tag": "img",
+          "visible": true,
+          "attrs": { "src": "https://www.lahiri.me/photo.jpg", "alt": "Portrait" }
+        },
+        {
           "tag": "ul",
           "visible": true,
           "children": [

@@ -1,0 +1,1 @@
+JSON.stringify([...document.querySelectorAll("img")].slice(0,10).map(n=>({tag:n.tagName.toLowerCase(),text:(n.innerText||"").slice(0,200),attrs:Object.fromEntries([].map(a=>[a,n.getAttribute(a)]).filter(([,v])=>v!=null))})))

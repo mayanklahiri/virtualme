@@ -384,6 +384,18 @@ func capToolText(text string, limit int) string {
 	return text[:limit-len(suffix)] + suffix
 }
 
+// domQueryExpression builds the Runtime.evaluate expression for dom_query.
+// Nil attributes must marshal as [] so the page never sees null.map(...).
+func domQueryExpression(selector string, attributes []string, limit int) string {
+	if attributes == nil {
+		attributes = []string{}
+	}
+	quotedSelector, _ := json.Marshal(selector)
+	quotedAttributes, _ := json.Marshal(attributes)
+	return fmt.Sprintf(`JSON.stringify([...document.querySelectorAll(%s)].slice(0,%d).map(n=>({tag:n.tagName.toLowerCase(),text:(n.innerText||"").slice(0,200),attrs:Object.fromEntries(%s.map(a=>[a,n.getAttribute(a)]).filter(([,v])=>v!=null))})))`,
+		quotedSelector, limit, quotedAttributes)
+}
+
 func (t *localTools) domQuery(ctx context.Context, raw json.RawMessage) (ToolResult, error) {
 	var args struct {
 		Selector   string   `json:"selector"`
@@ -402,10 +414,7 @@ func (t *localTools) domQuery(ctx context.Context, raw json.RawMessage) (ToolRes
 	if args.Limit < 1 || args.Limit > 50 {
 		return ToolResult{}, errors.New("limit must be between 1 and 50")
 	}
-	selector, _ := json.Marshal(args.Selector)
-	attributes, _ := json.Marshal(args.Attributes)
-	expression := fmt.Sprintf(`JSON.stringify([...document.querySelectorAll(%s)].slice(0,%d).map(n=>({tag:n.tagName.toLowerCase(),text:(n.innerText||"").slice(0,200),attrs:Object.fromEntries(%s.map(a=>[a,n.getAttribute(a)]).filter(([,v])=>v!=null))})))`,
-		selector, args.Limit, attributes)
+	expression := domQueryExpression(args.Selector, args.Attributes, args.Limit)
 	value, err := t.cdp.evaluate(ctx, expression, false)
 	if err != nil {
 		return ToolResult{}, err
