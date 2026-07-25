@@ -1,0 +1,29 @@
+---
+description: Prefer GitHub-flavored Markdown; never embed base64 data-URL images in Markdown
+alwaysApply: true
+---
+
+# Markdown output conventions
+
+- Prefer GitHub-flavored Markdown (GFM) for all formatted output: docs,
+  READMEs, chat responses, generated reports.
+- Never embed images as base64 data URLs in Markdown files. GitHub's
+  renderer strips `data:` image URIs, and multi-hundred-KB single-line
+  embeds break other previewers. Use committed relative-path files
+  instead (e.g. `docs/src/screenshots/*.jpg`).
+
+```markdown
+<!-- ❌ BAD: stripped by GitHub, breaks previewers -->
+![home](data:image/jpeg;base64,/9j/4AAQ...)
+
+<!-- ✅ GOOD: relative path to a committed asset -->
+![home](docs/src/screenshots/home-route.jpg)
+
+<!-- ✅ GOOD: HTML img when a display width is needed -->
+<img src="docs/src/screenshots/home-route.jpg" alt="home" width="480">
+```
+
+- Exception: tiny icons inside SVG/HTML assets (not Markdown) may use
+  data URLs, as `scripts/update-logo.sh` does for generated SVGs.
+- Markdown pipe tables render a horizontal rule from the header row; for
+  header-less layout grids (like the README hero), use an HTML `<table>`.

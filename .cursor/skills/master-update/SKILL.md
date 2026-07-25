@@ -45,10 +45,10 @@ bash scripts/update-doc-images.sh
 `refresh-doc-screenshots.sh` captures each console route at 1280×720 and
 writes multi-width JPEGs under `docs/src/screenshots/` (`{slug}.jpg` at
 480px wide, plus `{slug}-960.jpg` and `{slug}-1280.jpg`).
-`update-doc-images.sh` rewires README image markers (Quick start
-`home-route`) to those paths. Do not skip either step when UI-visible
-surfaces changed; if :8080 is down, start the container and retry rather
-than leaving stale screenshots.
+`update-doc-images.sh` rewires README screenshot-strip markers
+(`home-route`, `chat`, `desktop`) to those paths at display width 480.
+Do not skip either step when UI-visible surfaces changed; if :8080 is
+down, start the container and retry rather than leaving stale screenshots.
 
 ## 5. Validate
 

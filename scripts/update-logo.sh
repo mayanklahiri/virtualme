@@ -214,9 +214,10 @@ pat = re.compile(
     re.S,
 )
 if not pat.search(text):
-    raise SystemExit("update-logo: README logo anchor not found")
-readme.write_text(pat.sub(block, text, count=1), encoding="utf-8")
-print("update-logo: README icon embed replaced")
+    print("update-logo: README logo anchor not found; skip README icon embed")
+else:
+    readme.write_text(pat.sub(block, text, count=1), encoding="utf-8")
+    print("update-logo: README icon embed replaced")
 PY
 
 # --- 5) optional GitHub social preview upload (no public API) ---------------

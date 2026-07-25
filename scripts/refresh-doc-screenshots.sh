@@ -32,7 +32,7 @@ code="$(curl -sS -o /tmp/vm-doc-healthz.json -w "%{http_code}" --max-time 5 "${B
   exit 1
 }
 
-# slug|path  (home-route is the README Quick start asset)
+# slug|path  (home-route, chat, desktop feed the README screenshot strip at 480px)
 ROUTES=(
   "home-route|/"
   "projects|/projects"
@@ -43,6 +43,7 @@ ROUTES=(
   "chat|/chat"
   "speech|/speech"
   "mail|/mail"
+  "desktop|/desktop-view"
 )
 
 python3 - "$OUT" "$BASE_URL" "$VIEW_W" "$VIEW_H" "${ROUTES[@]}" <<'PY'
@@ -200,7 +201,8 @@ try:
             time.sleep(0.2)
         if not ready:
             print(f"refresh-doc-screenshots: warning: {slug} may not be fully live", flush=True)
-        time.sleep(0.5)
+        # Settle delay: lets websocket-fed panes (and the noVNC desktop) connect.
+        time.sleep(2)
         shot = cdp("Page.captureScreenshot", {"format": "png", "fromSurface": True}, timeout=60)
         png = base64.b64decode(shot["data"])
         raw = out_dir / f".{slug}-raw.png"
