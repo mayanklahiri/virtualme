@@ -55,6 +55,8 @@ type Network struct {
 type Runtime struct {
 	Version  string
 	HTTPAddr string
+	DataDir  string
+	Timezone string
 }
 
 // Snapshot is the websocket state message consumed by the SPA.
@@ -78,8 +80,11 @@ type Snapshot struct {
 	Counters metrics.CounterSnapshot `json:"counters"`
 }
 
-func schedulerState(now time.Time) Scheduler {
-	zone := os.Getenv("TZ")
+func schedulerState(now time.Time, zones ...string) Scheduler {
+	zone := ""
+	if len(zones) > 0 {
+		zone = zones[0]
+	}
 	if zone == "" {
 		zone = now.Location().String()
 	}
@@ -110,6 +115,7 @@ type Collector struct {
 	version   string
 	network   Network
 	dataDir   string
+	timezone  string
 	jiggler   func() bool
 	gpu       gpu.Info
 
@@ -166,10 +172,8 @@ func ReadDisk(path string) (freeMB, totalMB int) {
 // NewCollector creates a two-second state collector sampling procRoot.
 func NewCollector(cfg health.Config, procRoot string, store *metrics.Store, broadcast func([]byte), gpuInfo gpu.Info, jiggler func() bool, runtime ...Runtime) *Collector {
 	hostname, _ := os.Hostname()
-	dataDir := os.Getenv("VM_DATA_DIR")
-	if dataDir == "" {
-		dataDir = "/home/virtualme/.virtualme"
-	}
+	dataDir := "/home/virtualme/.virtualme"
+	timezone := "UTC"
 	buildVersion := "dev"
 	httpAddr := ":8080"
 	if len(runtime) > 0 {
@@ -178,6 +182,12 @@ func NewCollector(cfg health.Config, procRoot string, store *metrics.Store, broa
 		}
 		if runtime[0].HTTPAddr != "" {
 			httpAddr = runtime[0].HTTPAddr
+		}
+		if runtime[0].DataDir != "" {
+			dataDir = runtime[0].DataDir
+		}
+		if runtime[0].Timezone != "" {
+			timezone = runtime[0].Timezone
 		}
 	}
 	collector := &Collector{
@@ -192,6 +202,7 @@ func NewCollector(cfg health.Config, procRoot string, store *metrics.Store, broa
 		version:   buildVersion,
 		network:   discoverNetwork(httpAddr),
 		dataDir:   dataDir,
+		timezone:  timezone,
 		jiggler:   jiggler,
 		gpu:       gpuInfo,
 	}
@@ -287,7 +298,7 @@ func (c *Collector) collect() {
 		System:    system,
 		Processes: processes,
 		Cores:     cores,
-		Scheduler: schedulerState(now),
+		Scheduler: schedulerState(now, c.timezone),
 		GPU:       c.gpu,
 	}
 	if c.jiggler != nil {

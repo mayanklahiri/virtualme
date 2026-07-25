@@ -1,4 +1,5 @@
 #!/command/with-contenv bash
+source /run/virtualme/config.env
 # Runtime selection (spec 018 amendment 2026-07-24): use the Vulkan build with
 # full GPU offload when the CLI passed a GPU through (VM_LLAMA_GPU=1) and an
 # NVIDIA device node is actually injected; otherwise the CPU build.
@@ -17,12 +18,14 @@ export LD_LIBRARY_PATH="$LLAMA_DIR"
 if [ "${#GPU_FLAGS[@]}" -gt 0 ]; then
   "$LLAMA_DIR/llama-server" --list-devices 2>/dev/null | sed 's/^/svc-llama: /'
 fi
+LLAMA_THREADS="$VM_EFFECTIVE_LLAMA_THREADS"
+if [ "$LLAMA_THREADS" = 0 ]; then LLAMA_THREADS="$(nproc)"; fi
 exec "$LLAMA_DIR/llama-server" \
-  --model "$VM_MODEL_PATH" \
-  --mmproj "$VM_MMPROJ_PATH" \
-  --host 127.0.0.1 --port "$VM_LLAMA_PORT" \
-  --ctx-size "$VM_LLAMA_CTX" \
-  --threads "${VM_THREADS:-$(nproc)}" \
+  --model "$VM_EFFECTIVE_MODEL_PATH" \
+  --mmproj "$VM_EFFECTIVE_PROJECTOR_PATH" \
+  --host "${VM_EFFECTIVE_LLAMA_ADDRESS%:*}" --port "${VM_EFFECTIVE_LLAMA_ADDRESS##*:}" \
+  --ctx-size "$VM_EFFECTIVE_LLAMA_CONTEXT" \
+  --threads "$LLAMA_THREADS" \
   --slots \
   --no-webui \
   "${GPU_FLAGS[@]}"

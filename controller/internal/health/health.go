@@ -42,32 +42,6 @@ type Health struct {
 
 const probeTimeout = 2 * time.Second
 
-func env(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return fallback
-}
-
-// FromEnv returns the container's configured service endpoints.
-func FromEnv() Config {
-	llamaPort := env("VM_LLAMA_PORT", "8081")
-	ttsPort := env("VM_TTS_PORT", "8082")
-	dataDir := env("VM_DATA_DIR", "/home/virtualme/.virtualme")
-	return Config{
-		Display:        env("VM_DISPLAY", ":99"),
-		X11SocketDir:   env("VM_X11_SOCKET_DIR", "/tmp/.X11-unix"),
-		VNCAddr:        env("VM_VNC_ADDR", "127.0.0.1:5900"),
-		NoVNCURL:       env("VM_NOVNC_URL", "http://127.0.0.1:6080/vnc.html"),
-		ValkeyAddr:     env("VM_VALKEY_ADDR", "127.0.0.1:6379"),
-		LlamaHealthURL: env("VM_LLAMA_HEALTH_URL", "http://127.0.0.1:"+llamaPort+"/health"),
-		TTSHealthURL:   env("VM_TTS_HEALTH_URL", "http://127.0.0.1:"+ttsPort+"/healthz"),
-		Xdotool:        env("VM_XDOTOOL", "xdotool"),
-		SendmailPath:   env("VM_SENDMAIL_PATH", "/usr/sbin/sendmail"),
-		MailSpoolDir:   env("VM_MAIL_SPOOL_DIR", filepath.Join(dataDir, "mail", "spool")),
-	}
-}
-
 func checkX11Socket(cfg Config) Service {
 	display := strings.TrimPrefix(cfg.Display, ":")
 	display = strings.SplitN(display, ".", 2)[0]

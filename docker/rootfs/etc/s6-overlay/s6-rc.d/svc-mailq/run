@@ -1,6 +1,7 @@
 #!/command/with-contenv bash
 # dma submits immediately; retry deferred messages forever.
 set -euo pipefail
+source /run/virtualme/config.env
 umask 077
 mail_dir="$VM_DATA_DIR/mail"
 log="$mail_dir/flush.log"
@@ -10,5 +11,5 @@ while :; do
   mv "$log.tmp" "$log"
   date +%s > "$mail_dir/last-flush.tmp"
   mv "$mail_dir/last-flush.tmp" "$mail_dir/last-flush"
-  sleep "${VM_MAIL_FLUSH_SEC:-60}"
+  sleep "$VM_EFFECTIVE_MAIL_FLUSH_SECONDS"
 done

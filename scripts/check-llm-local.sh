@@ -119,6 +119,14 @@ for path in "${required_paths[@]}"; do
     rc=1
   fi
 done
+grep -Fq 'virtualme.config.yaml' controller/internal/config/load.go || {
+  echo "locality: master config is missing from internal/config" >&2
+  rc=1
+}
+grep -Fq 'configctl preflight' docker/rootfs/etc/cont-init.d/15-config.sh || {
+  echo "locality: config preflight is missing from container init" >&2
+  rc=1
+}
 
 if [[ "$rc" -eq 0 ]]; then
   echo "locality: OK"

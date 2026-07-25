@@ -28,7 +28,8 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `docs/` | Isolated static Astro documentation/marketing site, authored content/assets, committed generated inputs, and browser tests |
 | `common/themes/` | Canonical validated theme-token source shared by controller and docs |
 | `docker/` | Container image and supervised services (spec 002) |
-| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached local TTS, outbound mail, read-only data explorer, and multi-page console (specs 002–029) |
+| `controller/` | Go control plane, master configuration, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached local TTS, outbound mail, read-only data explorer, and multi-page console |
+| `controller/internal/config`, `controller/cmd/configctl` | Embedded schema, strict YAML loader, atomic persistence, preflight exports, and deterministic docs reference |
 | `controller/prompts/` | Embedded plain-text agent and fallback-chat system prompts |
 
 ## Commands
@@ -53,6 +54,7 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `./cli.sh docs dev [--host <host>] [--port <port>]` | Serve the documentation site from a source checkout |
 | `./cli.sh docs build` | Build and verify the static documentation site offline |
 | `node scripts/generate-themes.mjs --check` | Verify controller/docs theme outputs match `common/themes/themes.json` |
+| `(cd controller && go run ./cmd/configctl docs --check --output ../docs/src/generated/config-reference.json)` | Verify generated configuration reference |
 
 The controller's browser agent combines vision screenshots, dense rendered
 DOM and read-only CDP observations, OS-level `xdotool` mouse/keyboard
@@ -95,6 +97,15 @@ images (lightbox), JSON/YAML trees, JSONL rows, WAV audio, and 256 KiB-capped
 text, with raw downloads for everything. The root UI omits `chromium`, `mail`,
 `metrics`, `valkey`, and `xdg`, but direct links and the API expose the whole
 volume by design under the v1 trust model.
+The mode-0600 `$VM_DATA_DIR/virtualme.config.yaml` is the sole runtime master
+configuration. Its embedded JSON Schema owns defaults, docs, UI metadata,
+legacy environment mappings, restart ownership, and secret policy. The strict
+stdlib-only loader seeds canonical commented YAML, applies legacy-env > YAML >
+default precedence, resolves whole-scalar environment and secret references,
+and rejects invalid present files before services start. `configctl preflight`
+exports non-secret supervisor settings and dma files before longruns.
+`/config` provides schema-driven read/edit views, optimistic atomic saves,
+redacted state, explicit secret refresh, and deliberate service restart.
 Chat renders GFM pipe tables, buffers the latest task's agent steps
 server-side for websocket-reconnect replay, and declares no live regions.
 The loopback-only `ttsd` service wraps pinned sherpa-onnx and Piper Lessac
@@ -204,7 +215,7 @@ checked generated files under `docs/src/generated/` or `docs/src/styles/`.
 | [028](specs/028-data-explorer.md) | Read-only Data explorer tab and `/api/data/*` volume API |
 | [029](specs/029-readpage-goldens.md) | `read_page` DOM goldens, layout-table fidelity, 32K context, and proportionate caps |
 | [030](specs/030-docs-site.md) | Static Astro docs/marketing site, shared themes, source-checkout CLI, and Pages publication |
-| [031](specs/031-master-config.md) | Accepted master configuration schema/exporter follow-up; not yet implemented |
+| [031](specs/031-master-config.md) | Master configuration schema, strict loader, preflight/runtime migration, console, restart flow, and docs export |
 | [032](specs/032-assistant-notifications.md) | Accepted durable assistant-notifications follow-up; not yet implemented |
 | [033](specs/033-telegram.md) | Accepted authorized Telegram integration follow-up; not yet implemented |
 | [034](specs/034-agent-context-budget.md) | Preflight agent context budgeting, scaled observations, adaptive completions, and graduated recovery |

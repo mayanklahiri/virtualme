@@ -79,7 +79,8 @@ check_chromium_posture() {
   local resolution window_ids windows geometry active page_count blank_title_count
   local attempt
 
-  resolution=$(docker exec "$NAME" printenv VM_RESOLUTION)
+  resolution=$(docker exec "$NAME" bash -c \
+    'source /run/virtualme/config.env; printf "%s\n" "$VM_EFFECTIVE_RESOLUTION"')
   resolution="${resolution%x*}"
 
   window_ids=$(docker exec -e DISPLAY=:99 "$NAME" \
@@ -245,7 +246,7 @@ compgen -G "$DATA_DIR/valkey/appendonly*" >/dev/null \
 for entry in "$DATA_DIR"/*; do
   [ -e "$entry" ] || continue
   case "$(basename "$entry")" in
-    valkey|chromium|xdg|metrics|agent|mail|projects|tts-cache) ;;
+    valkey|chromium|xdg|metrics|agent|mail|projects|tts-cache|virtualme.config.yaml|virtualme.config.yaml.lock|.virtualme.config.yaml.tmp-*) ;;
     *) fail "unexpected top-level data entry: $(basename "$entry")" ;;
   esac
 done

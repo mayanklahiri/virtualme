@@ -1,6 +1,1554 @@
 {
-  "_generated": "placeholder for spec 031; DO NOT EDIT",
   "schemaVersion": 1,
-  "status": "pending-spec-031",
-  "sections": []
+  "schemaSha256": "27cb7181ecdb9837f9939f0f7b0c6fa793f86b14956514755c734bc66f79b9b3",
+  "sections": [
+    {
+      "id": "system",
+      "title": "System",
+      "anchor": "system",
+      "consoleDeepLink": "/config#system",
+      "overview": "Process-wide operating-system behavior.",
+      "details": [
+        "The timezone is exported before supervised services start."
+      ],
+      "exemplarYaml": "system:\n  timezone: UTC\n",
+      "tradeoffs": [],
+      "examples": [
+        {
+          "label": "UTC",
+          "yaml": "system:\n  timezone: UTC\n"
+        }
+      ],
+      "links": [],
+      "ui": {
+        "advanced": false,
+        "order": 10,
+        "section": "System",
+        "sectionRenderer": "vm-config-system-section"
+      },
+      "settings": [
+        {
+          "path": "system.timezone",
+          "anchor": "system-timezone",
+          "consoleDeepLink": "/config#system-timezone",
+          "type": "string",
+          "default": "UTC",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 128,
+            "minLength": 1
+          },
+          "restart": "all",
+          "legacyEnv": "TZ",
+          "secret": false,
+          "overview": "Controls scheduler and display wall-clock time.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-text-field",
+            "control": "text",
+            "order": 10,
+            "section": "System"
+          }
+        }
+      ]
+    },
+    {
+      "id": "server",
+      "title": "Network",
+      "anchor": "server",
+      "consoleDeepLink": "/config#server",
+      "overview": "Controller network listeners and proxies.",
+      "details": [
+        "Only the console listener may bind beyond loopback."
+      ],
+      "exemplarYaml": "server:\n  httpAddress: \":8080\"\n",
+      "tradeoffs": [],
+      "examples": [
+        {
+          "label": "Default console",
+          "yaml": "server:\n  httpAddress: \":8080\"\n"
+        }
+      ],
+      "links": [],
+      "ui": {
+        "advanced": false,
+        "order": 20,
+        "section": "Network",
+        "sectionRenderer": "vm-config-network-section"
+      },
+      "settings": [
+        {
+          "path": "server.httpAddress",
+          "anchor": "server-http-address",
+          "consoleDeepLink": "/config#server-http-address",
+          "type": "string",
+          "default": ":8080",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 255,
+            "minLength": 1
+          },
+          "restart": "controller",
+          "legacyEnv": "VM_HTTP_ADDR",
+          "secret": false,
+          "overview": "Exposes the management console.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-address-field",
+            "control": "address",
+            "order": 10,
+            "section": "Network"
+          }
+        },
+        {
+          "path": "server.desktopProxyURL",
+          "anchor": "server-desktop-proxy-u-r-l",
+          "consoleDeepLink": "/config#server-desktop-proxy-u-r-l",
+          "type": "string",
+          "default": "http://127.0.0.1:6080",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 2048,
+            "minLength": 1
+          },
+          "restart": "controller",
+          "secret": false,
+          "overview": "Connects the controller to noVNC.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-address-field",
+            "control": "address",
+            "order": 20,
+            "section": "Network"
+          }
+        }
+      ]
+    },
+    {
+      "id": "desktop",
+      "title": "Desktop",
+      "anchor": "desktop",
+      "consoleDeepLink": "/config#desktop",
+      "overview": "Virtual desktop, browser, VNC, and CDP settings.",
+      "details": [
+        "All desktop service endpoints remain loopback-only."
+      ],
+      "exemplarYaml": "desktop:\n  resolution: 1600x900x24\n",
+      "tradeoffs": [],
+      "examples": [
+        {
+          "label": "HD desktop",
+          "yaml": "desktop:\n  resolution: 1600x900x24\n"
+        }
+      ],
+      "links": [],
+      "ui": {
+        "advanced": false,
+        "order": 30,
+        "section": "Desktop",
+        "sectionRenderer": "vm-config-service-section"
+      },
+      "settings": [
+        {
+          "path": "desktop.display",
+          "anchor": "desktop-display",
+          "consoleDeepLink": "/config#desktop-display",
+          "type": "string",
+          "default": ":99",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "pattern": "^:[0-9]+$"
+          },
+          "restart": "desktop",
+          "legacyEnv": "VM_DISPLAY",
+          "secret": false,
+          "overview": "Selects the virtual X display.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-text-field",
+            "control": "text",
+            "order": 10,
+            "section": "Desktop"
+          }
+        },
+        {
+          "path": "desktop.resolution",
+          "anchor": "desktop-resolution",
+          "consoleDeepLink": "/config#desktop-resolution",
+          "type": "string",
+          "default": "1600x900x24",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "pattern": "^[0-9]+x[0-9]+x(16|24|32)$"
+          },
+          "restart": "desktop",
+          "legacyEnv": "VM_RESOLUTION",
+          "secret": false,
+          "overview": "Sizes the Xvfb desktop.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-text-field",
+            "control": "text",
+            "order": 20,
+            "section": "Desktop"
+          }
+        },
+        {
+          "path": "desktop.x11SocketDirectory",
+          "anchor": "desktop-x11-socket-directory",
+          "consoleDeepLink": "/config#desktop-x11-socket-directory",
+          "type": "string",
+          "default": "/tmp/.X11-unix",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 1
+          },
+          "restart": "desktop",
+          "legacyEnv": "VM_X11_SOCKET_DIR",
+          "secret": false,
+          "overview": "Locates X11 Unix sockets.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-path-field",
+            "control": "path",
+            "order": 30,
+            "section": "Desktop"
+          }
+        },
+        {
+          "path": "desktop.vncAddress",
+          "anchor": "desktop-vnc-address",
+          "consoleDeepLink": "/config#desktop-vnc-address",
+          "type": "string",
+          "default": "127.0.0.1:5900",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 255,
+            "minLength": 1
+          },
+          "restart": "desktop",
+          "legacyEnv": "VM_VNC_ADDR",
+          "secret": false,
+          "overview": "Carries the private VNC stream.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-address-field",
+            "control": "address",
+            "order": 40,
+            "section": "Desktop"
+          }
+        },
+        {
+          "path": "desktop.noVNCAddress",
+          "anchor": "desktop-no-v-n-c-address",
+          "consoleDeepLink": "/config#desktop-no-v-n-c-address",
+          "type": "string",
+          "default": "127.0.0.1:6080",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 255,
+            "minLength": 1
+          },
+          "restart": "desktop",
+          "secret": false,
+          "overview": "Serves browser-based desktop access.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-address-field",
+            "control": "address",
+            "order": 50,
+            "section": "Desktop"
+          }
+        },
+        {
+          "path": "desktop.noVNCUpstreamAddress",
+          "anchor": "desktop-no-v-n-c-upstream-address",
+          "consoleDeepLink": "/config#desktop-no-v-n-c-upstream-address",
+          "type": "string",
+          "default": "127.0.0.1:5900",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 255,
+            "minLength": 1
+          },
+          "restart": "desktop",
+          "secret": false,
+          "overview": "Connects noVNC to x11vnc.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-address-field",
+            "control": "address",
+            "order": 60,
+            "section": "Desktop"
+          }
+        },
+        {
+          "path": "desktop.noVNCHealthURL",
+          "anchor": "desktop-no-v-n-c-health-u-r-l",
+          "consoleDeepLink": "/config#desktop-no-v-n-c-health-u-r-l",
+          "type": "string",
+          "default": "http://127.0.0.1:6080/vnc.html",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 2048,
+            "minLength": 1
+          },
+          "restart": "controller",
+          "legacyEnv": "VM_NOVNC_URL",
+          "secret": false,
+          "overview": "Checks noVNC readiness.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-address-field",
+            "control": "address",
+            "order": 70,
+            "section": "Desktop"
+          }
+        },
+        {
+          "path": "desktop.cdpURL",
+          "anchor": "desktop-cdp-u-r-l",
+          "consoleDeepLink": "/config#desktop-cdp-u-r-l",
+          "type": "string",
+          "default": "http://127.0.0.1:9222",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 2048,
+            "minLength": 1
+          },
+          "restart": "desktop",
+          "secret": false,
+          "overview": "Provides read-only browser observations.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-address-field",
+            "control": "address",
+            "order": 80,
+            "section": "Desktop"
+          }
+        },
+        {
+          "path": "desktop.chromiumWatchdogGrace",
+          "anchor": "desktop-chromium-watchdog-grace",
+          "consoleDeepLink": "/config#desktop-chromium-watchdog-grace",
+          "type": "integer",
+          "default": 3,
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maximum": 30,
+            "minimum": 1
+          },
+          "restart": "desktop",
+          "legacyEnv": "VM_CHROMIUM_WATCHDOG_GRACE",
+          "secret": false,
+          "overview": "Controls browser restart grace.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-number-field",
+            "control": "number",
+            "order": 90,
+            "section": "Desktop"
+          }
+        }
+      ]
+    },
+    {
+      "id": "valkey",
+      "title": "Services",
+      "anchor": "valkey",
+      "consoleDeepLink": "/config#valkey",
+      "overview": "Persistent queue and state service.",
+      "details": [],
+      "exemplarYaml": "valkey:\n  address: 127.0.0.1:6379\n",
+      "tradeoffs": [],
+      "examples": [
+        {
+          "label": "Default",
+          "yaml": "valkey:\n  address: 127.0.0.1:6379\n"
+        }
+      ],
+      "links": [],
+      "ui": {
+        "advanced": false,
+        "order": 40,
+        "section": "Services",
+        "sectionRenderer": "vm-config-service-section"
+      },
+      "settings": [
+        {
+          "path": "valkey.address",
+          "anchor": "valkey-address",
+          "consoleDeepLink": "/config#valkey-address",
+          "type": "string",
+          "default": "127.0.0.1:6379",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 255,
+            "minLength": 1
+          },
+          "restart": "valkey",
+          "legacyEnv": "VM_VALKEY_ADDR",
+          "secret": false,
+          "overview": "Locates the local Valkey service.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-address-field",
+            "control": "address",
+            "order": 10,
+            "section": "Services"
+          }
+        }
+      ]
+    },
+    {
+      "id": "llama",
+      "title": "Inference",
+      "anchor": "llama",
+      "consoleDeepLink": "/config#llama",
+      "overview": "Local language and vision inference.",
+      "details": [
+        "Context size trades memory for retained task history."
+      ],
+      "exemplarYaml": "llama:\n  contextTokens: 32768\n  threads: 8\n",
+      "tradeoffs": [
+        {
+          "benefit": "Retains more observations.",
+          "choice": "Larger context",
+          "cost": "Uses more memory."
+        }
+      ],
+      "examples": [
+        {
+          "label": "Local CPU",
+          "yaml": "llama:\n  contextTokens: 32768\n  threads: 8\n"
+        }
+      ],
+      "links": [],
+      "ui": {
+        "advanced": false,
+        "order": 50,
+        "section": "Inference",
+        "sectionRenderer": "vm-config-inference-section"
+      },
+      "settings": [
+        {
+          "path": "llama.address",
+          "anchor": "llama-address",
+          "consoleDeepLink": "/config#llama-address",
+          "type": "string",
+          "default": "127.0.0.1:8081",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 255,
+            "minLength": 1
+          },
+          "restart": "llama",
+          "legacyEnv": "VM_LLAMA_PORT",
+          "secret": false,
+          "overview": "Locates the local inference server.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-address-field",
+            "control": "address",
+            "order": 10,
+            "section": "Inference"
+          }
+        },
+        {
+          "path": "llama.contextTokens",
+          "anchor": "llama-context-tokens",
+          "consoleDeepLink": "/config#llama-context-tokens",
+          "type": "integer",
+          "default": 32768,
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maximum": 131072,
+            "minimum": 2048
+          },
+          "restart": "llama",
+          "legacyEnv": "VM_LLAMA_CTX",
+          "secret": false,
+          "overview": "Sets the model context window.",
+          "details": [
+            "Higher values preserve more task context."
+          ],
+          "tradeoffs": [
+            {
+              "benefit": "Balances task depth and memory.",
+              "choice": "32768",
+              "cost": "Consumes more KV cache than small contexts."
+            }
+          ],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-number-field",
+            "control": "number",
+            "order": 20,
+            "section": "Inference"
+          }
+        },
+        {
+          "path": "llama.modelPath",
+          "anchor": "llama-model-path",
+          "consoleDeepLink": "/config#llama-model-path",
+          "type": "string",
+          "default": "/opt/models/gemma-4-E2B-it-Q4_0.gguf",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 1
+          },
+          "restart": "llama",
+          "legacyEnv": "VM_MODEL_PATH",
+          "secret": false,
+          "overview": "Selects the pinned local model.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-path-field",
+            "control": "path",
+            "order": 30,
+            "section": "Inference"
+          }
+        },
+        {
+          "path": "llama.projectorPath",
+          "anchor": "llama-projector-path",
+          "consoleDeepLink": "/config#llama-projector-path",
+          "type": "string",
+          "default": "/opt/models/mmproj-gemma-4-E2B-F16.gguf",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 1
+          },
+          "restart": "llama",
+          "legacyEnv": "VM_MMPROJ_PATH",
+          "secret": false,
+          "overview": "Selects the model's vision projector.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-path-field",
+            "control": "path",
+            "order": 40,
+            "section": "Inference"
+          }
+        },
+        {
+          "path": "llama.threads",
+          "anchor": "llama-threads",
+          "consoleDeepLink": "/config#llama-threads",
+          "type": "integer",
+          "default": 0,
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maximum": 1024,
+            "minimum": 0
+          },
+          "restart": "llama",
+          "legacyEnv": "VM_THREADS",
+          "secret": false,
+          "overview": "Controls CPU inference parallelism.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-number-field",
+            "control": "number",
+            "order": 50,
+            "section": "Inference"
+          }
+        },
+        {
+          "path": "llama.chatCompletionsURL",
+          "anchor": "llama-chat-completions-u-r-l",
+          "consoleDeepLink": "/config#llama-chat-completions-u-r-l",
+          "type": "string",
+          "default": "http://127.0.0.1:8081/v1/chat/completions",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 2048,
+            "minLength": 1
+          },
+          "restart": "controller",
+          "secret": false,
+          "overview": "Connects the controller to llama.cpp chat.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-address-field",
+            "control": "address",
+            "order": 60,
+            "section": "Inference"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tts",
+      "title": "Speech",
+      "anchor": "tts",
+      "consoleDeepLink": "/config#tts",
+      "overview": "Offline text-to-speech service.",
+      "details": [],
+      "exemplarYaml": "tts:\n  cacheMaxMiB: 256\n",
+      "tradeoffs": [],
+      "examples": [
+        {
+          "label": "Default cache",
+          "yaml": "tts:\n  cacheMaxMiB: 256\n"
+        }
+      ],
+      "links": [],
+      "ui": {
+        "advanced": false,
+        "order": 60,
+        "section": "Speech",
+        "sectionRenderer": "vm-config-service-section"
+      },
+      "settings": [
+        {
+          "path": "tts.address",
+          "anchor": "tts-address",
+          "consoleDeepLink": "/config#tts-address",
+          "type": "string",
+          "default": "127.0.0.1:8082",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 255,
+            "minLength": 1
+          },
+          "restart": "ttsd",
+          "legacyEnv": "VM_TTS_PORT",
+          "secret": false,
+          "overview": "Locates the local TTS daemon.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-address-field",
+            "control": "address",
+            "order": 10,
+            "section": "Speech"
+          }
+        },
+        {
+          "path": "tts.healthURL",
+          "anchor": "tts-health-u-r-l",
+          "consoleDeepLink": "/config#tts-health-u-r-l",
+          "type": "string",
+          "default": "http://127.0.0.1:8082/healthz",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 2048,
+            "minLength": 1
+          },
+          "restart": "controller",
+          "legacyEnv": "VM_TTS_HEALTH_URL",
+          "secret": false,
+          "overview": "Checks TTS readiness.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-address-field",
+            "control": "address",
+            "order": 20,
+            "section": "Speech"
+          }
+        },
+        {
+          "path": "tts.sherpaDirectory",
+          "anchor": "tts-sherpa-directory",
+          "consoleDeepLink": "/config#tts-sherpa-directory",
+          "type": "string",
+          "default": "/opt/sherpa-onnx",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 1
+          },
+          "restart": "ttsd",
+          "legacyEnv": "VM_SHERPA_DIR",
+          "secret": false,
+          "overview": "Locates the speech runtime.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-path-field",
+            "control": "path",
+            "order": 30,
+            "section": "Speech"
+          }
+        },
+        {
+          "path": "tts.modelDirectory",
+          "anchor": "tts-model-directory",
+          "consoleDeepLink": "/config#tts-model-directory",
+          "type": "string",
+          "default": "/opt/models/tts",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 1
+          },
+          "restart": "ttsd",
+          "legacyEnv": "VM_TTS_MODEL_DIR",
+          "secret": false,
+          "overview": "Locates the pinned voice model.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-path-field",
+            "control": "path",
+            "order": 40,
+            "section": "Speech"
+          }
+        },
+        {
+          "path": "tts.cacheDirectory",
+          "anchor": "tts-cache-directory",
+          "consoleDeepLink": "/config#tts-cache-directory",
+          "type": "string",
+          "default": "${data}/tts-cache",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 1
+          },
+          "restart": "ttsd",
+          "legacyEnv": "VM_TTS_CACHE_DIR",
+          "secret": false,
+          "overview": "Stores disposable rendered sentences.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-path-field",
+            "control": "path",
+            "order": 50,
+            "section": "Speech"
+          }
+        },
+        {
+          "path": "tts.cacheMaxMiB",
+          "anchor": "tts-cache-max-mi-b",
+          "consoleDeepLink": "/config#tts-cache-max-mi-b",
+          "type": "integer",
+          "default": 256,
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maximum": 65536,
+            "minimum": 1
+          },
+          "restart": "ttsd",
+          "legacyEnv": "VM_TTS_CACHE_MAX_MB",
+          "secret": false,
+          "overview": "Bounds disposable speech cache storage.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-number-field",
+            "control": "number",
+            "order": 60,
+            "section": "Speech"
+          }
+        },
+        {
+          "path": "tts.maxCharacters",
+          "anchor": "tts-max-characters",
+          "consoleDeepLink": "/config#tts-max-characters",
+          "type": "integer",
+          "default": 4096,
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maximum": 65536,
+            "minimum": 1
+          },
+          "restart": "ttsd",
+          "legacyEnv": "VM_TTS_MAX_CHARS",
+          "secret": false,
+          "overview": "Bounds individual synthesis requests.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-number-field",
+            "control": "number",
+            "order": 70,
+            "section": "Speech"
+          }
+        }
+      ]
+    },
+    {
+      "id": "agent",
+      "title": "Agent",
+      "anchor": "agent",
+      "consoleDeepLink": "/config#agent",
+      "overview": "Browser-agent execution limits and tools.",
+      "details": [],
+      "exemplarYaml": "agent:\n  maxSteps: 100\n",
+      "tradeoffs": [],
+      "examples": [
+        {
+          "label": "Short tasks",
+          "yaml": "agent:\n  maxSteps: 100\n"
+        }
+      ],
+      "links": [],
+      "ui": {
+        "advanced": false,
+        "order": 70,
+        "section": "Agent",
+        "sectionRenderer": "vm-config-agent-section"
+      },
+      "settings": [
+        {
+          "path": "agent.maxSteps",
+          "anchor": "agent-max-steps",
+          "consoleDeepLink": "/config#agent-max-steps",
+          "type": "integer",
+          "default": 500,
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maximum": 5000,
+            "minimum": 1
+          },
+          "restart": "controller",
+          "legacyEnv": "VM_AGENT_MAX_STEPS",
+          "secret": false,
+          "overview": "Bounds autonomous task length.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-number-field",
+            "control": "number",
+            "order": 10,
+            "section": "Agent"
+          }
+        },
+        {
+          "path": "agent.keepTasks",
+          "anchor": "agent-keep-tasks",
+          "consoleDeepLink": "/config#agent-keep-tasks",
+          "type": "integer",
+          "default": 20,
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maximum": 1000,
+            "minimum": 1
+          },
+          "restart": "controller",
+          "legacyEnv": "VM_AGENT_KEEP_TASKS",
+          "secret": false,
+          "overview": "Bounds retained task artifacts.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-number-field",
+            "control": "number",
+            "order": 20,
+            "section": "Agent"
+          }
+        },
+        {
+          "path": "agent.xdotoolPath",
+          "anchor": "agent-xdotool-path",
+          "consoleDeepLink": "/config#agent-xdotool-path",
+          "type": "string",
+          "default": "xdotool",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 1
+          },
+          "restart": "controller",
+          "legacyEnv": "VM_XDOTOOL",
+          "secret": false,
+          "overview": "Provides OS-level browser input.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-path-field",
+            "control": "path",
+            "order": 30,
+            "section": "Agent"
+          }
+        },
+        {
+          "path": "agent.scrotPath",
+          "anchor": "agent-scrot-path",
+          "consoleDeepLink": "/config#agent-scrot-path",
+          "type": "string",
+          "default": "scrot",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 1
+          },
+          "restart": "controller",
+          "secret": false,
+          "overview": "Captures the virtual desktop.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-path-field",
+            "control": "path",
+            "order": 40,
+            "section": "Agent"
+          }
+        },
+        {
+          "path": "agent.convertPath",
+          "anchor": "agent-convert-path",
+          "consoleDeepLink": "/config#agent-convert-path",
+          "type": "string",
+          "default": "convert",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 1
+          },
+          "restart": "controller",
+          "secret": false,
+          "overview": "Prepares screenshots for vision.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-path-field",
+            "control": "path",
+            "order": 50,
+            "section": "Agent"
+          }
+        },
+        {
+          "path": "agent.bashPath",
+          "anchor": "agent-bash-path",
+          "consoleDeepLink": "/config#agent-bash-path",
+          "type": "string",
+          "default": "bash",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 1
+          },
+          "restart": "controller",
+          "secret": false,
+          "overview": "Runs bounded local shell tools.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-path-field",
+            "control": "path",
+            "order": 60,
+            "section": "Agent"
+          }
+        },
+        {
+          "path": "agent.systemManifestPath",
+          "anchor": "agent-system-manifest-path",
+          "consoleDeepLink": "/config#agent-system-manifest-path",
+          "type": "string",
+          "default": "/opt/agent/system-manifest.json",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 1
+          },
+          "restart": "controller",
+          "secret": false,
+          "overview": "Grounds the agent in installed capabilities.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-path-field",
+            "control": "path",
+            "order": 70,
+            "section": "Agent"
+          }
+        }
+      ]
+    },
+    {
+      "id": "mail",
+      "title": "Mail",
+      "anchor": "mail",
+      "consoleDeepLink": "/config#mail",
+      "overview": "Outbound mail identity, relay, and queue.",
+      "details": [
+        "Credentials are stored only as environment or file references."
+      ],
+      "exemplarYaml": "mail:\n  smarthost:\n    host: \"\"\n",
+      "tradeoffs": [],
+      "examples": [
+        {
+          "label": "Direct delivery",
+          "yaml": "mail:\n  smarthost:\n    host: \"\"\n"
+        }
+      ],
+      "links": [],
+      "ui": {
+        "advanced": false,
+        "order": 80,
+        "section": "Mail",
+        "sectionRenderer": "vm-config-mail-section"
+      },
+      "settings": [
+        {
+          "path": "mail.mailname",
+          "anchor": "mail-mailname",
+          "consoleDeepLink": "/config#mail-mailname",
+          "type": "string",
+          "default": "",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 255,
+            "minLength": 0
+          },
+          "restart": "mail",
+          "legacyEnv": "VM_MAIL_MAILNAME",
+          "secret": false,
+          "overview": "Sets the outbound mail hostname.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-text-field",
+            "control": "text",
+            "order": 10,
+            "section": "Identity"
+          }
+        },
+        {
+          "path": "mail.from",
+          "anchor": "mail-from",
+          "consoleDeepLink": "/config#mail-from",
+          "type": "string",
+          "default": "",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 320,
+            "minLength": 0
+          },
+          "restart": "controller",
+          "legacyEnv": "VM_MAIL_FROM",
+          "secret": false,
+          "overview": "Sets the default sender identity.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-text-field",
+            "control": "text",
+            "order": 20,
+            "section": "Identity"
+          }
+        },
+        {
+          "path": "mail.smarthost.host",
+          "anchor": "mail-smarthost-host",
+          "consoleDeepLink": "/config#mail-smarthost-host",
+          "type": "string",
+          "default": "",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 255,
+            "minLength": 0
+          },
+          "restart": "mail",
+          "legacyEnv": "VM_MAIL_SMARTHOST",
+          "secret": false,
+          "overview": "Selects direct or relay delivery.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-text-field",
+            "control": "text",
+            "order": 10,
+            "section": "Relay"
+          }
+        },
+        {
+          "path": "mail.smarthost.port",
+          "anchor": "mail-smarthost-port",
+          "consoleDeepLink": "/config#mail-smarthost-port",
+          "type": "integer",
+          "default": 587,
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maximum": 65535,
+            "minimum": 1
+          },
+          "restart": "mail",
+          "legacyEnv": "VM_MAIL_SMARTHOST_PORT",
+          "secret": false,
+          "overview": "Selects the relay submission port.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-number-field",
+            "control": "number",
+            "order": 20,
+            "section": "Relay"
+          }
+        },
+        {
+          "path": "mail.smarthost.username",
+          "anchor": "mail-smarthost-username",
+          "consoleDeepLink": "/config#mail-smarthost-username",
+          "type": "string",
+          "default": "",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 512,
+            "minLength": 0
+          },
+          "restart": "mail",
+          "legacyEnv": "VM_MAIL_SMARTHOST_USER",
+          "secret": false,
+          "overview": "Authenticates to the relay.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-text-field",
+            "control": "text",
+            "order": 30,
+            "section": "Relay"
+          }
+        },
+        {
+          "path": "mail.smarthost.password",
+          "anchor": "mail-smarthost-password",
+          "consoleDeepLink": "/config#mail-smarthost-password",
+          "type": "string",
+          "default": "",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 0
+          },
+          "restart": "mail",
+          "legacyEnv": "VM_MAIL_SMARTHOST_PASS",
+          "secret": true,
+          "overview": "References relay credentials without persisting bytes.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-secret-reference",
+            "control": "secret",
+            "order": 40,
+            "section": "Relay"
+          }
+        },
+        {
+          "path": "mail.dkimDomain",
+          "anchor": "mail-dkim-domain",
+          "consoleDeepLink": "/config#mail-dkim-domain",
+          "type": "string",
+          "default": "",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 255,
+            "minLength": 0
+          },
+          "restart": "controller",
+          "legacyEnv": "VM_MAIL_DKIM_DOMAIN",
+          "secret": false,
+          "overview": "Enables DKIM signing when non-empty.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-text-field",
+            "control": "text",
+            "order": 40,
+            "section": "DKIM"
+          }
+        },
+        {
+          "path": "mail.dkimSelector",
+          "anchor": "mail-dkim-selector",
+          "consoleDeepLink": "/config#mail-dkim-selector",
+          "type": "string",
+          "default": "virtualme",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 63,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          },
+          "restart": "controller",
+          "legacyEnv": "VM_MAIL_DKIM_SELECTOR",
+          "secret": false,
+          "overview": "Names the DKIM public key record.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-text-field",
+            "control": "text",
+            "order": 50,
+            "section": "DKIM"
+          }
+        },
+        {
+          "path": "mail.flushSeconds",
+          "anchor": "mail-flush-seconds",
+          "consoleDeepLink": "/config#mail-flush-seconds",
+          "type": "integer",
+          "default": 60,
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maximum": 86400,
+            "minimum": 5
+          },
+          "restart": "mail",
+          "legacyEnv": "VM_MAIL_FLUSH_SEC",
+          "secret": false,
+          "overview": "Controls deferred delivery retries.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-number-field",
+            "control": "number",
+            "order": 60,
+            "section": "Queue"
+          }
+        },
+        {
+          "path": "mail.sendmailPath",
+          "anchor": "mail-sendmail-path",
+          "consoleDeepLink": "/config#mail-sendmail-path",
+          "type": "string",
+          "default": "/usr/sbin/sendmail",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 1
+          },
+          "restart": "controller",
+          "legacyEnv": "VM_SENDMAIL_PATH",
+          "secret": false,
+          "overview": "Submits composed messages to dma.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-path-field",
+            "control": "path",
+            "order": 70,
+            "section": "Queue"
+          }
+        },
+        {
+          "path": "mail.spoolDirectory",
+          "anchor": "mail-spool-directory",
+          "consoleDeepLink": "/config#mail-spool-directory",
+          "type": "string",
+          "default": "${data}/mail/spool",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 1
+          },
+          "restart": "mail",
+          "legacyEnv": "VM_MAIL_SPOOL_DIR",
+          "secret": false,
+          "overview": "Stores queued outbound messages.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-path-field",
+            "control": "path",
+            "order": 80,
+            "section": "Queue"
+          }
+        }
+      ]
+    },
+    {
+      "id": "health",
+      "title": "Health",
+      "anchor": "health",
+      "consoleDeepLink": "/config#health",
+      "overview": "Controller health-probe targets.",
+      "details": [],
+      "exemplarYaml": "health:\n  xdotoolPath: xdotool\n",
+      "tradeoffs": [],
+      "examples": [
+        {
+          "label": "Defaults",
+          "yaml": "health:\n  xdotoolPath: xdotool\n"
+        }
+      ],
+      "links": [],
+      "ui": {
+        "advanced": true,
+        "order": 90,
+        "section": "Health",
+        "sectionRenderer": "vm-config-health-section"
+      },
+      "settings": [
+        {
+          "path": "health.llamaURL",
+          "anchor": "health-llama-u-r-l",
+          "consoleDeepLink": "/config#health-llama-u-r-l",
+          "type": "string",
+          "default": "http://127.0.0.1:8081/health",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 2048,
+            "minLength": 1
+          },
+          "restart": "controller",
+          "legacyEnv": "VM_LLAMA_HEALTH_URL",
+          "secret": false,
+          "overview": "Checks inference readiness.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-address-field",
+            "control": "address",
+            "order": 10,
+            "section": "Health"
+          }
+        },
+        {
+          "path": "health.xdotoolPath",
+          "anchor": "health-xdotool-path",
+          "consoleDeepLink": "/config#health-xdotool-path",
+          "type": "string",
+          "default": "xdotool",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 1
+          },
+          "restart": "controller",
+          "legacyEnv": "VM_XDOTOOL",
+          "secret": false,
+          "overview": "Checks desktop input capability.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-path-field",
+            "control": "path",
+            "order": 20,
+            "section": "Health"
+          }
+        }
+      ]
+    },
+    {
+      "id": "integrations",
+      "title": "Integrations",
+      "anchor": "integrations",
+      "consoleDeepLink": "/config#integrations",
+      "overview": "Extension point for optional external integrations.",
+      "details": [
+        "Core spec 031 defines no integrations."
+      ],
+      "exemplarYaml": "integrations: {}\n",
+      "tradeoffs": [],
+      "examples": [],
+      "links": [],
+      "ui": {
+        "advanced": false,
+        "order": 100,
+        "section": "Integrations",
+        "sectionRenderer": "vm-config-integrations-section"
+      },
+      "settings": []
+    }
+  ]
 }

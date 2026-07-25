@@ -78,7 +78,6 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
   mkdirSync(dataDir, { recursive: true });
   const uid = process.getuid?.() ?? 1000;
   const gid = process.getgid?.() ?? 1000;
-  const timezone = process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const dockerArgs = [
     "run", "-d", "--name", CONTAINER, "--restart", "unless-stopped",
     "--shm-size=1g",
@@ -87,7 +86,6 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
     "--tmpfs", "/tmp:mode=1777",
     "-p", `${PORT}:${PORT}`,
     "-v", `${dataDir}:${DATA_MOUNT}`,
-    "-e", `TZ=${timezone}`,
   ];
   if (flags["no-browser-sandbox"]) {
     dockerArgs.push("-e", "VM_CHROMIUM_NO_SANDBOX=1");
@@ -104,6 +102,13 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
     dockerArgs.push("--add-host", "vmhost:host-gateway");
   }
   for (const name of [
+    "TZ", "VM_HTTP_ADDR", "VM_DISPLAY", "VM_RESOLUTION", "VM_X11_SOCKET_DIR",
+    "VM_VNC_ADDR", "VM_NOVNC_URL", "VM_CHROMIUM_WATCHDOG_GRACE",
+    "VM_VALKEY_ADDR", "VM_LLAMA_PORT", "VM_LLAMA_CTX", "VM_MODEL_PATH",
+    "VM_MMPROJ_PATH", "VM_THREADS", "VM_LLAMA_HEALTH_URL",
+    "VM_TTS_PORT", "VM_TTS_HEALTH_URL", "VM_SHERPA_DIR", "VM_TTS_MODEL_DIR",
+    "VM_TTS_MAX_CHARS", "VM_AGENT_MAX_STEPS", "VM_AGENT_KEEP_TASKS",
+    "VM_XDOTOOL", "VM_SENDMAIL_PATH", "VM_MAIL_SPOOL_DIR",
     "VM_MAIL_MAILNAME", "VM_MAIL_FROM", "VM_MAIL_SMARTHOST",
     "VM_MAIL_SMARTHOST_PORT", "VM_MAIL_SMARTHOST_USER",
     "VM_MAIL_SMARTHOST_PASS", "VM_MAIL_DKIM_DOMAIN", "VM_MAIL_DKIM_SELECTOR",

@@ -988,4 +988,38 @@ The final implementation phase is `/master-update`, after all code/e2e tests:
 
 ## Amendments
 
-None.
+### 2026-07-25 — Execution record
+
+Spec 031 was implemented after spec 030 in C1-C5 order. Red-first evidence was
+observed before implementation:
+
+- Go config tests failed on the intentionally absent embedded schema, YAML
+  parser, loader, redactor, and documentation exporter symbols.
+- Node Config-page tests failed because `config-model.js` did not exist.
+- Container assertions failed because the master file, preflight renderer, and
+  Config API/UI did not exist.
+
+The executed implementation adds the embedded schema and typed model, strict
+YAML/default/precedence/secret pipeline, durable canonical persistence,
+`configctl` preflight and docs export, runtime/s6 migration, Config REST/UI
+surface, cumulative restart coordinator, no-op notification seam, generated
+reference, persistence-map updates, and reconciled operator/developer
+documentation. `controller/go.mod` remains free of `require` blocks. The
+notification integration remains intentionally conditional on spec 032; core
+031 uses the required no-op implementation.
+
+Final verification passed:
+
+- `go test -race ./internal/config ./internal/configapi`
+- `npm run check`
+- `bash test/smoke.sh`
+- `bash test/e2e.sh` (including invalid-config startup failures, YAML and
+  legacy service consumption, save/conflict/cumulative-plan behavior,
+  preflight-failure safety, websocket restart sequencing, service respawn,
+  convergence, and byte-stable restart)
+- `./cli.sh docs build`
+- `/master-update`, including refreshed `/config` and all console screenshots
+
+Optional hardware/slow probes (`E2E_GPU=1`, `E2E_AGENT=1`, and
+`E2E_JIGGLER=1`) were not enabled; their existing deterministic default skips
+are not spec-031 acceptance blockers.

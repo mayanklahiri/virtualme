@@ -48,6 +48,8 @@ if [[ -d controller && "${CHECK_SKIP_GO:-0}" != "1" ]]; then
   (cd controller && [[ -z "$(gofmt -l .)" ]]) || fail "gofmt -l"
   (cd controller && go vet ./...) || fail "go vet"
   (cd controller && go test ./...) || fail "go test"
+  (cd controller && go run ./cmd/configctl docs --check \
+    --output ../docs/src/generated/config-reference.json) || fail "generated config reference"
 fi
 
 echo "check: OK"

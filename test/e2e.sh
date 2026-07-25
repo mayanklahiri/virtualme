@@ -53,7 +53,67 @@ else
   ./cli.sh build >/dev/null || fail "cli build"
 fi
 
+expect_invalid_config() {
+  local label="$1"
+  local expected="$2"
+  local content="$3"
+  local invalid_root
+  invalid_root="$(mktemp -d)"
+  printf '%s' "$content" >"$invalid_root/virtualme.config.yaml"
+  chmod 600 "$invalid_root/virtualme.config.yaml"
+  VIRTUALME_DATA="$invalid_root" ./cli.sh start >/dev/null || true
+  local deadline=$(( $(date +%s) + 30 ))
+  local logs=""
+  until logs="$(docker logs "$NAME" 2>&1 || true)" && printf '%s' "$logs" | grep -q "$expected"; do
+    [ "$(date +%s)" -lt "$deadline" ] || fail "$label config did not fail with '$expected'"
+    sleep 1
+  done
+  docker exec "$NAME" pgrep -x controller >/dev/null 2>&1 \
+    && fail "$label config started controller despite preflight failure"
+  printf '%s' "$logs" | grep -q 'DO_NOT_LEAK_031' && fail "$label config leaked sentinel"
+  VIRTUALME_DATA="$invalid_root" ./cli.sh stop >/dev/null 2>&1 || true
+  rm -rf "$invalid_root"
+}
+
 ./cli.sh stop >/dev/null 2>&1 || true
+echo "e2e: [2a/20] invalid master configs fail before longruns"
+expect_invalid_config "malformed" "indentation must use two spaces" $'version:\n   bad: 1\n'
+expect_invalid_config "unknown-key" "unknown configuration key" $'version: 1\nunknown: true\n'
+expect_invalid_config "wrong-type" "agent.maxSteps" $'version: 1\nagent:\n  maxSteps: fast\n'
+expect_invalid_config "duplicate-key" "duplicate key" $'version: 1\nversion: 1\n'
+expect_invalid_config "bad-secret" "mail.smarthost.password" \
+  $'version: 1\nmail:\n  smarthost:\n    host: smtp.example\n    username: user\n    password: DO_NOT_LEAK_031\n'
+
+echo "e2e: [2b/20] preflight applies YAML and legacy service settings"
+CONFIG_ROOT="$(mktemp -d)"
+printf '%s' $'desktop:\n  resolution: 1280x720x24\n' >"$CONFIG_ROOT/virtualme.config.yaml"
+chmod 600 "$CONFIG_ROOT/virtualme.config.yaml"
+VIRTUALME_DATA="$CONFIG_ROOT" ./cli.sh start >/dev/null || fail "non-default config start"
+deadline=$(( $(date +%s) + TIMEOUT ))
+until docker exec "$NAME" grep -q "VM_EFFECTIVE_RESOLUTION='1280x720x24'" /run/virtualme/config.env 2>/dev/null; do
+  [ "$(date +%s)" -lt "$deadline" ] || fail "non-default resolution was not exported"
+  sleep 1
+done
+docker exec "$NAME" sh -c "tr '\\0' ' ' </proc/\$(pgrep -x Xvfb)/cmdline" \
+  | grep -q '1280x720x24' || fail "Xvfb did not consume configured resolution"
+VIRTUALME_DATA="$CONFIG_ROOT" ./cli.sh stop >/dev/null || fail "non-default config stop"
+rm -rf "$CONFIG_ROOT"
+
+LEGACY_ROOT="$(mktemp -d)"
+VM_RESOLUTION=1366x768x24 VIRTUALME_DATA="$LEGACY_ROOT" ./cli.sh start >/dev/null \
+  || fail "legacy config start"
+deadline=$(( $(date +%s) + TIMEOUT ))
+until docker exec "$NAME" test -f /run/virtualme/config.env 2>/dev/null; do
+  [ "$(date +%s)" -lt "$deadline" ] || fail "legacy preflight did not complete"
+  sleep 1
+done
+[ "$(docker logs "$NAME" 2>&1 | grep -c 'legacy VM_RESOLUTION overrides desktop.resolution')" = 1 ] \
+  || fail "legacy override did not emit exactly one deprecation warning"
+docker exec "$NAME" grep -q "VM_EFFECTIVE_RESOLUTION='1366x768x24'" /run/virtualme/config.env \
+  || fail "legacy override did not win"
+VIRTUALME_DATA="$LEGACY_ROOT" ./cli.sh stop >/dev/null || fail "legacy config stop"
+rm -rf "$LEGACY_ROOT"
+
 echo "e2e: [2/20] starting SMTP sink and CLI on fresh data dir ${DATA_DIR}"
 MAIL_SINK_HOST=0.0.0.0 MAIL_SINK_ACCEPT_DELAY_MS=1500 \
   node test/mail-sink.mjs "$MAIL_CAPTURE" >/tmp/virtualme-mail-sink.log 2>&1 &
@@ -63,17 +123,59 @@ kill -0 "$MAIL_SINK_PID" 2>/dev/null || fail "mail sink did not start"
 export VM_MAIL_SMARTHOST=vmhost
 export VM_MAIL_SMARTHOST_PORT=2525
 export VM_MAIL_DKIM_DOMAIN=example.test
-export VM_MAIL_FLUSH_SEC=2
+export VM_MAIL_FLUSH_SEC=5
 start_vm >/dev/null || fail "cli start"
 
 echo "e2e: [3/20] waiting for all-green /healthz (timeout ${TIMEOUT}s)"
 wait_healthy
+[ -f "$DATA_DIR/virtualme.config.yaml" ] || fail "master config was not seeded"
+[ "$(stat -c %a "$DATA_DIR/virtualme.config.yaml")" = 600 ] || fail "master config mode is not 600"
+curl -fsS "$BASE/api/config/schema" | grep -q '"schemaVersion":1' \
+  || fail "config schema endpoint missing"
+curl -fsS "$BASE/api/config" | grep -q '"pendingRestart":false' \
+  || fail "config state endpoint missing"
+docker exec "$NAME" configctl docs --check \
+  --output /opt/virtualme/docs/src/generated/config-reference.json >/dev/null \
+  || fail "config documentation stale"
+
+echo "e2e: [3a/20] config save conflicts, preflight failure, and restart lifecycle"
+controller_pid=$(docker exec "$NAME" pgrep -x controller)
+llama_pid=$(docker exec "$NAME" pgrep -f '/llama-server')
+docker exec -u 0 "$NAME" chmod 500 /run/virtualme
+node test/config-probe.mjs --preflight-failure "$BASE" \
+  || fail "config preflight-failure probe"
+docker exec -u 0 "$NAME" chmod 700 /run/virtualme
+[ "$(docker exec "$NAME" pgrep -x controller)" = "$controller_pid" ] \
+  || fail "controller restarted after failed preflight"
+[ "$(docker exec "$NAME" pgrep -f '/llama-server')" = "$llama_pid" ] \
+  || fail "llama restarted after failed preflight"
+curl -fsS "$BASE/api/config" | grep -q '"pendingRestart":true' \
+  || fail "failed preflight did not leave pending config"
+wait_healthy
+sleep 1
+
+controller_pid=$(docker exec "$NAME" pgrep -x controller)
+llama_pid=$(docker exec "$NAME" pgrep -f '/llama-server')
+node test/config-probe.mjs --restart "$BASE" || fail "config restart probe"
+wait_healthy
+[ "$(docker exec "$NAME" pgrep -x controller)" != "$controller_pid" ] \
+  || fail "controller did not respawn after config restart"
+[ "$(docker exec "$NAME" pgrep -f '/llama-server')" != "$llama_pid" ] \
+  || fail "llama did not respawn after config restart"
+node -e '
+  const response = await fetch(process.argv[1] + "/api/config");
+  const body = await response.json();
+  if (!response.ok || body.pendingRestart ||
+      body.fileHash !== body.startupHash ||
+      body.effective.llama.contextTokens !== 32769) process.exit(1);
+' "$BASE" || fail "restarted config hashes/effective value did not converge"
 
 echo "e2e: [4/20] orchestrator serves branded SPA assets and sourcemaps"
 code=$(curl -s -o /tmp/e2e-index.html -w '%{http_code}' "$BASE/")
 [ "$code" = 200 ] || fail "GET / returned $code"
 grep -q "Virtual Me" /tmp/e2e-index.html || fail "SPA markup missing from /"
-grep -q '"arctic", "solar", "studio"' /tmp/e2e-index.html || fail "SPA boot script does not list all eight themes"
+curl -fsS "$BASE/js/generated-theme-boot.js" | grep -q '"arctic","solar","studio"' \
+  || fail "SPA boot script does not list all eight themes"
 content_type=$(curl -fsS -o /dev/null -w '%{content_type}' "$BASE/brand/hero.jpg")
 [ "$content_type" = "image/jpeg" ] || fail "hero image content type is $content_type"
 curl -fsS -o /dev/null "$BASE/favicon.svg" || fail "favicon.svg not served"
@@ -217,9 +319,12 @@ compgen -G "$DATA_DIR/valkey/*" >/dev/null \
   || fail "valkey persistence is empty before restart"
 compgen -G "$DATA_DIR/tts-cache/*.wav" >/dev/null \
   || fail "speech cache is empty before restart"
+config_hash=$(sha256sum "$DATA_DIR/virtualme.config.yaml" | cut -d' ' -f1)
 ./cli.sh stop >/dev/null || fail "cli stop"
 start_vm >/dev/null || fail "cli start (restart)"
 wait_healthy
+[ "$(sha256sum "$DATA_DIR/virtualme.config.yaml" | cut -d' ' -f1)" = "$config_hash" ] \
+  || fail "restart changed canonical master config bytes"
 [ -f "$DATA_DIR/metrics/tier0.json" ] || fail "metrics tier0.json missing after restart"
 node test/metrics-probe.mjs --non-empty "ws://127.0.0.1:${PORT}/ws" \
   || fail "metrics history lost across restart"

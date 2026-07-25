@@ -1,2 +1,4 @@
 #!/command/with-contenv bash
-exec websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5900
+source /run/virtualme/config.env
+exec websockify --web=/usr/share/novnc \
+  "$VM_EFFECTIVE_NOVNC_ADDRESS" "$VM_EFFECTIVE_NOVNC_UPSTREAM"

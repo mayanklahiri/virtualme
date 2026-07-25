@@ -7,6 +7,17 @@
 !package-lock.json
 !scripts/build-web.sh
 !scripts/build-icons.mjs
+!scripts/generate-themes.mjs
+!common
+!common/themes
+!common/themes/themes.json
+!docs
+!docs/src
+!docs/src/generated
+!docs/src/generated/config-reference.json
+!docs/src/generated/themes.json
+!docs/src/styles
+!docs/src/styles/generated-themes.css
 
 # Generated / host-local — must not bust COPY checksums or overwrite fetched pins.
 controller/web/dist

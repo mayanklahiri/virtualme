@@ -113,10 +113,10 @@ First start loads a ~4 GB model; give `/healthz` a few minutes to go green.
 | `./cli.sh docs build` | Build and verify the static documentation site from a source checkout |
 
 Set `VIRTUALME_IMAGE` or `VIRTUALME_TAG` to override the default image reference,
-`VIRTUALME_DATA` to override the default data directory, and `TZ` to override
-the detected host timezone passed into the container. `start` also forwards
-the `VM_MAIL_*` variables documented below plus `VM_TTS_CACHE_DIR` and
-`VM_TTS_CACHE_MAX_MB`.
+`VIRTUALME_DATA` to override the default data directory. Runtime settings live
+in `virtualme.config.yaml`; explicitly set legacy `TZ` and `VM_*` settings are
+still forwarded and override YAML during the two-minor-release migration
+window, with a value-free deprecation warning.
 
 ### Data directory
 
@@ -128,7 +128,8 @@ stats, the reliable job queue, activity ledger, and project records),
 history), `agent/` (agent artifacts and manual `dom-dumps/` development
 captures), `projects/` (per-project scratch space),
 `tts-cache/` (recomputable synthesized audio), and `mail/` (dma config/spool,
-bounded flush log, flush marker, and the DKIM private key). Chromium settings,
+bounded flush log, flush marker, and the DKIM private key), plus the mode-0600
+`virtualme.config.yaml` master configuration. Chromium settings,
 projects, and queued mail survive container and image replacement. The
 container runs as the invoking host uid/gid, so
 every data file is host-owned. Everything else is intentionally ephemeral or
@@ -159,6 +160,7 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/jobs` | Queue, filterable machine activity with durations, and type-specific details in three panes |
 | `/tools` | Authoritative agent-tool list plus manual-only development tools (`dump_dom`), schema-generated forms, queue-backed manual invocation, and structured result rendering |
 | `/data` | Read-only icon/list explorer of `$VM_DATA_DIR` with sortable size summaries, deep links, a resizable preview pane, and typed viewers |
+| `/config` | Schema-driven master configuration read/edit view with optimistic saves and deliberate service restart |
 | `/status` | Service health, system/GPU meters, LLM token/throughput and browser-action charts, active time selectors, Quick Options (jiggler and scheduler pause), and persistent per-process/GPU metrics |
 | `/chat` | Markdown chat, generation controls, LLM progress, and conversation totals |
 | `/speech` | Single-voice streaming local speech with seeds, persistent history/replay, and disk cache |
@@ -170,6 +172,11 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `GET /api/data/list` | Read-only directory listing under `$VM_DATA_DIR` (path-contained; trust model) |
 | `GET /api/data/file` | Read-only file stream under `$VM_DATA_DIR` (text capped at 256 KiB unless `download=1`) |
 | `GET /api/data/du` | Recursive sizes of immediate child directories, cached in Valkey for five minutes |
+| `GET /api/config/schema` | Ordered, documented configuration schema projection with no values |
+| `GET /api/config` | Unresolved raw values, redacted effective state, sources, hashes, and restart plan |
+| `PUT /api/config` | Validate and atomically replace the complete raw configuration using `baseHash` |
+| `POST /api/config/restart` | Preflight and apply a confirmed pending configuration revision |
+| `POST /api/config/secrets/refresh` | Refresh one configured secret reference and return redacted status |
 | `/desktop/` | Redirect to the noVNC client; child paths reverse-proxy noVNC and websockify |
 
 History-API routes without file extensions fall back to the embedded SPA; missing asset paths still return 404. Status charts offer synchronized `15m` through `30d` lookbacks, boundary-aligned locale-aware time ticks, responsive titles and controls, and theme-consistent series colors; every chart downsamples client-side to at most 36 bars, CPU load and memory plus GPU utilization and memory (in GB) draw side by side, and dedicated charts track LLM tokens in/out, effective token throughput, and browser actions by category. The Status top banner carries overall health, the server-local scheduler clock with active selector tokens, and uptime. The branded console has eight themes, each with light and dark variants plus automatic system-scheme selection; the collapsed theme button is in the sidebar footer. Its home page shows hostname, the browser-reachable address, up to two container-interface addresses, uptime, CPU/load, memory, disk capacity, build version, and a detected GPU beside a theme-tinted logo hero image.
@@ -291,6 +298,24 @@ sentence/voice/speed renders are cached under `~/.virtualme/tts-cache/`;
 `VM_TTS_CACHE_MAX_MB` sets the LRU cap (default 256 MiB), and deleting the
 cache is safe.
 
+### Master configuration
+
+First start creates `~/.virtualme/virtualme.config.yaml` from the embedded
+schema, with stable schema-derived comments and mode `0600`. Use `/config` for
+schema-driven editing, or edit the YAML while the container is stopped.
+Configuration is strict: unknown keys, unsupported YAML syntax, invalid types,
+unresolved references, and semantic conflicts stop startup before long-running
+services. Saving rewrites the complete canonical file; Save and Restart are
+separate operations.
+
+Precedence is explicit legacy environment override, then YAML, then schema
+default. Secret fields accept only empty values or whole `${env:NAME}` and
+`${file:/absolute/path}` references. Secret files must be regular, at most
+64 KiB, and grant no group/other permissions. Raw API state retains references;
+effective API state replaces secret values with `null`. The deterministic
+reference at `docs/src/generated/config-reference.json` is generated from the
+same schema with `configctl docs`.
+
 ### Outbound mail
 
 The `/mail` tab submits standards-compliant multipart mail through the
@@ -305,20 +330,20 @@ spooled mail. The countdown is not a delivery guarantee: dma may apply its own
 retry backoff. A durable Valkey outbox tracks each submission as queued, left
 queue (dma cannot distinguish delivered from bounced), error, or cleared.
 
-| Environment | Purpose |
+| Deprecated environment override | Master configuration path |
 |---|---|
-| `VM_MAIL_MAILNAME` | HELO/default From domain; defaults to the container hostname |
-| `VM_MAIL_FROM` | Envelope/header From; defaults to `virtualme@<mailname>` |
-| `VM_MAIL_SMARTHOST` | Relay hostname; unset selects direct MX delivery |
-| `VM_MAIL_SMARTHOST_PORT` | Relay port; defaults to `587` |
-| `VM_MAIL_SMARTHOST_USER` | Optional relay username |
-| `VM_MAIL_SMARTHOST_PASS` | Optional relay password |
-| `VM_MAIL_DKIM_DOMAIN` | Enable DKIM signing for this domain |
-| `VM_MAIL_DKIM_SELECTOR` | DKIM selector; defaults to `virtualme` |
-| `VM_MAIL_FLUSH_SEC` | Queue flush cadence and countdown interval; defaults to `60` |
+| `VM_MAIL_MAILNAME` | `mail.mailname` |
+| `VM_MAIL_FROM` | `mail.from` |
+| `VM_MAIL_SMARTHOST` | `mail.smarthost.host` |
+| `VM_MAIL_SMARTHOST_PORT` | `mail.smarthost.port` |
+| `VM_MAIL_SMARTHOST_USER` | `mail.smarthost.username` |
+| `VM_MAIL_SMARTHOST_PASS` | `mail.smarthost.password` (literal legacy adapter; migrate to a reference) |
+| `VM_MAIL_DKIM_DOMAIN` | `mail.dkimDomain` |
+| `VM_MAIL_DKIM_SELECTOR` | `mail.dkimSelector` |
+| `VM_MAIL_FLUSH_SEC` | `mail.flushSeconds` |
 
-Set these variables before `virtualme start`; the CLI forwards them to the
-container. Direct delivery needs SPF and/or DKIM alignment plus acceptable IP
+Prefer `/config` or YAML; the CLI temporarily forwards explicitly set legacy
+variables. Direct delivery needs SPF and/or DKIM alignment plus acceptable IP
 and PTR reputation. Residential/dynamic IP mail is usually rejected, including
 by Gmail, so use a reputable smarthost for reliable delivery.
 
@@ -378,7 +403,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [028](specs/028-data-explorer.md) | Read-only Data explorer tab and `/api/data/*` volume API |
 | [029](specs/029-readpage-goldens.md) | `read_page` DOM goldens, layout-table fidelity, 32K context, and proportionate caps |
 | [030](specs/030-docs-site.md) | Static Astro documentation/marketing site, shared themes, local docs CLI, and orphan-branch Pages publication |
-| [031](specs/031-master-config.md) | Accepted configuration schema/exporter follow-up; not yet implemented |
+| [031](specs/031-master-config.md) | Master configuration schema, strict YAML loader, preflight, console, restart flow, and generated reference |
 | [032](specs/032-assistant-notifications.md) | Accepted durable assistant-notifications follow-up; not yet implemented |
 | [033](specs/033-telegram.md) | Accepted authorized Telegram integration follow-up; not yet implemented |
 | [034](specs/034-agent-context-budget.md) | Preflight agent context budgeting, scaled observations, adaptive completions, and graduated recovery |

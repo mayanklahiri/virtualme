@@ -205,3 +205,10 @@ reserves the persistence lane without adding agent runtime behavior.
 |---|---|---|---|
 | Bounded dma delivery diagnostics | `$VM_DATA_DIR/mail/flush.log` | `svc-mailq`, newest 500 lines | 023 |
 | Last queue-flush marker | `$VM_DATA_DIR/mail/last-flush` | `svc-mailq`, epoch seconds rewritten after each cycle | 023 |
+
+### 2026-07-25 — Master configuration
+
+| State | Path | Owner / mechanism | Introduced |
+|---|---|---|---|
+| Master runtime configuration | `$VM_DATA_DIR/virtualme.config.yaml` (mode `0600`) | `internal/config`, canonical atomic replacement | 031 |
+| First-start/write transients | `$VM_DATA_DIR/virtualme.config.yaml.lock`, `$VM_DATA_DIR/.virtualme.config.yaml.tmp-*` | `internal/config`, removed after success or failure | 031 |

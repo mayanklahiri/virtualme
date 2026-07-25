@@ -34,6 +34,6 @@ const sections = reference.sections as Section[];
     if (query) history.replaceState(null, "", `${location.pathname}?q=${encodeURIComponent(query)}`);
   };
   if (input) { input.value = new URLSearchParams(location.search).get("q") ?? ""; input.addEventListener("input", update); update(); }
-  const focusHash = () => document.querySelector<HTMLElement>(location.hash)?.focus();
+  const focusHash = () => { if (location.hash) document.querySelector<HTMLElement>(location.hash)?.focus(); };
   addEventListener("hashchange", focusHash); focusHash();
 </script>}

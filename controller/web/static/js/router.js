@@ -4,6 +4,7 @@ const routes = new Map([
   ["/jobs", ["jobs", "Jobs"]],
   ["/tools", ["tools", "Tools"]],
   ["/data", ["data", "Data"]],
+  ["/config", ["config", "Config"]],
   ["/status", ["status", "Status"]],
   ["/chat", ["chat", "Chat"]],
   ["/speech", ["speech", "Speech"]],

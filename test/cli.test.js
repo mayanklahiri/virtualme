@@ -78,7 +78,6 @@ test("start runs as the host user with the data dir mounted", () => {
       "--tmpfs", "/tmp:mode=1777",
       "-p", "8080:8080",
       "-v", `${dataDir}:/home/virtualme/.virtualme`,
-      "-e", `TZ=${process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"}`,
       "mayanklahiri/virtualme:latest",
     ]);
   } finally {

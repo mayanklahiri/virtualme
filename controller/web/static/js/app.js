@@ -13,6 +13,7 @@ import { initProjects } from "./projects.js";
 import { initJobs } from "./jobs.js";
 import { initTools } from "./tools.js";
 import { initData } from "./data.js";
+import { initConfig } from "./config.js";
 
 initTheme();
 initNav();
@@ -25,6 +26,7 @@ const projects = initProjects((value) => socket.send(value));
 const jobs = initJobs((value) => socket.send(value));
 const tools = initTools((value) => socket.send(value));
 const data = initData();
+const configuration = initConfig();
 const agent = initAgent(chat.log, (text) => chat.setStatus(text));
 const jigglerSwitch = document.querySelector("#jiggler-switch");
 jigglerSwitch.addEventListener("click", () => {
@@ -55,6 +57,7 @@ function onStatus(status, connectedSince) {
   charts.status(status);
   speech.status(status);
   mail.connection(status);
+  configuration.connection(status);
 }
 
 function onMessage(message) {
@@ -126,6 +129,12 @@ function onMessage(message) {
     case "tool-result":
       tools.frame(message);
       break;
+    case "config-saved":
+      configuration.saved(message);
+      break;
+    case "config-restarting":
+      configuration.restarting(message);
+      break;
   }
 }
 
@@ -137,4 +146,5 @@ initRouter((page) => {
   else jobs.close();
   if (page === "tools") tools.enter();
   data.show(page);
+  configuration.show(page);
 });

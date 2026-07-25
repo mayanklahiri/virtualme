@@ -1,9 +1,10 @@
 #!/command/with-contenv bash
-export DISPLAY="$VM_DISPLAY"
+source /run/virtualme/config.env
+export DISPLAY="$VM_EFFECTIVE_DISPLAY"
 until xdpyinfo >/dev/null 2>&1; do sleep 0.2; done
 
 MISS=0
-GRACE="${VM_CHROMIUM_WATCHDOG_GRACE:-3}"
+GRACE="$VM_EFFECTIVE_CHROMIUM_WATCHDOG_GRACE"
 read -r SCREEN_W SCREEN_H < <(xdotool getdisplaygeometry)
 while sleep 2; do
   WINDOWS=""

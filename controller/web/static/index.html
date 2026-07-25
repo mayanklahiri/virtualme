@@ -49,6 +49,7 @@
         <a href="/jobs" data-nav><svg class="icon"><use href="/icons.svg#i-list-checks"/></svg>Jobs</a>
         <a href="/tools" data-nav><svg class="icon"><use href="/icons.svg#i-wrench"/></svg>Tools</a>
         <a href="/data" data-nav><svg class="icon"><use href="/icons.svg#i-folder"/></svg>Data</a>
+        <a href="/config" data-nav><svg class="icon"><use href="/icons.svg#i-wrench"/></svg>Config</a>
         <a href="/status" data-nav><svg class="icon"><use href="/icons.svg#i-activity"/></svg>Status</a>
         <a href="/chat" data-nav><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg>Chat</a>
         <a href="/speech" data-nav><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg>Speech</a>
@@ -218,6 +219,23 @@
             <p class="data-empty">Select a file to inspect it.</p>
           </aside>
         </div>
+      </section>
+
+      <section data-page="config" hidden class="config-page" aria-labelledby="config-title">
+        <div class="page-heading">
+          <div>
+            <h1 id="config-title">Configuration</h1>
+            <p class="page-caption">Anyone who can reach this private-network console can change operational configuration and restart services.</p>
+          </div>
+          <div class="page-heading-actions">
+            <button id="config-edit" type="button">Edit</button>
+            <button id="config-discard" class="secondary" type="button" hidden>Discard</button>
+            <button id="config-save" type="button" hidden>Save</button>
+          </div>
+        </div>
+        <p id="config-status" class="config-status"></p>
+        <button id="config-restart" class="config-restart" type="button" hidden>Restart to update</button>
+        <div id="config-content" class="config-content"></div>
       </section>
 
       <section data-page="status" hidden aria-labelledby="status-page-title">

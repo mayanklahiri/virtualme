@@ -23,7 +23,8 @@ gates everything.
 persistence-map enforcement, eslint, tsc --checkJs, node --test, CLI dry run,
 generated shared-theme drift, isolated offline Astro docs check/build, web
 build (esbuild minify + sourcemaps into gitignored
-`controller/web/dist/`), gofmt/go vet/go test. The pre-commit hook and CI run
+`controller/web/dist/`), gofmt/go vet/go test, and generated configuration
+reference drift. The pre-commit hook and CI run
 the same script. New stateful components must be added to the canonical map in
 `specs/007-persistence-locality.md` §1.
 Container tests: `bash test/smoke.sh`, `bash test/e2e.sh` (need Docker; e2e
@@ -45,6 +46,9 @@ Documentation development is source-checkout-only:
 builds never install or fetch. `common/themes/themes.json` is the single
 controller/docs theme source. Regenerate with
 `node scripts/generate-themes.mjs` and verify with `--check`.
+The complete configuration reference is generated only from the embedded
+schema: `(cd controller && go run ./cmd/configctl docs --output
+../docs/src/generated/config-reference.json)`; use `docs --check` for drift.
 `.github/workflows/docs.yml` installs both toolchains, runs local Playwright
 tests, and publishes branch-root static output to the orphan `docs` branch.
 
@@ -107,6 +111,9 @@ requires a new spec.
 | `controller/cmd/ttsd`, `controller/internal/tts` | Single-voice (Lessac) synthesis with unknown-voice fallback, sentence WAV cache, Valkey speech log, NDJSON client, and streaming helpers |
 | `controller/internal/mail` | Stdlib MIME/CID composition, DKIM signing, dma submission, and defensive spool transparency |
 | `controller/internal/datafs` | Read-only, GET-only, path-contained list/file/recursive-size HTTP view of `$VM_DATA_DIR`; directory sizes use five-minute Valkey caching (no write endpoints — adding one requires a new spec) |
+| `controller/internal/config` | Embedded sole-source schema, typed model, strict YAML, precedence, secrets, validation, and atomic persistence |
+| `controller/internal/configapi` | Redacted REST projections, optimistic save, notifier seam, and restart coordination |
+| `controller/cmd/configctl` | Container preflight/service export and deterministic docs export/check |
 | `controller/prompts` | Embedded plain-text agent and fallback-chat system prompts |
 | `controller/web/static` | Hand-written multi-page SPA, themes, charts, markdown, agent hooks |
 | `controller/web/static/js/jobs.js` | Queue, filtered live activity with durations, and type-specific job details |
@@ -234,6 +241,11 @@ cached at startup; absence is normal and never affects health.
 - **Controller endpoint**: register it in `newMux` in
   `controller/cmd/controller/main.go`, keep behavior in an `internal` package,
   and cover routing plus package behavior with hermetic Go tests.
+- **Configuration setting**: add it first to
+  `controller/internal/config/schema.json` with complete defaults/docs/UI/env/
+  restart metadata, mirror only its type in `types.go`, migrate every consumer
+  to injected typed configuration, regenerate the docs artifact, and add
+  precedence/validation/UI tests. Never add a parallel default constant.
 - **Agent tool**: add its OpenAI schema and executor in
   `controller/internal/agent/tools.go`, inject command execution through
   `Runner`, and add hermetic tests. Browser action tools must use `xdotool`

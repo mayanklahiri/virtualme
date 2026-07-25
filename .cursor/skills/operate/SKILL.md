@@ -26,13 +26,10 @@ prompts or model requests are sent to external providers.
 | `npx virtualme keygen` | Print a 256-bit base64url token |
 | `./cli.sh soak [--no-build]` | Rebuild once, run the full e2e suite, then run live soak flows on a fresh data dir (source checkout) |
 
-Env overrides: `VIRTUALME_IMAGE`, `VIRTUALME_TAG`, `VIRTUALME_DATA`, and `TZ`
-(forwarded to the container; otherwise the detected host timezone is used). The CLI
-also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
-`VM_MAIL_SMARTHOST`, `VM_MAIL_SMARTHOST_PORT`, `VM_MAIL_SMARTHOST_USER`,
-`VM_MAIL_SMARTHOST_PASS`, `VM_MAIL_DKIM_DOMAIN`, and
-`VM_MAIL_DKIM_SELECTOR`, `VM_MAIL_FLUSH_SEC`, plus `VM_TTS_CACHE_DIR` and
-`VM_TTS_CACHE_MAX_MB`.
+Bootstrap overrides are `VIRTUALME_IMAGE`, `VIRTUALME_TAG`, and
+`VIRTUALME_DATA`. Runtime settings belong in `virtualme.config.yaml`; explicitly
+set legacy `TZ` and `VM_*` settings are temporarily forwarded and take
+precedence with a value-free deprecation warning.
 
 ## Endpoints (container running)
 
@@ -42,6 +39,7 @@ also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 - `http://localhost:8080/jobs` — queue, filterable machine activity, and details
 - `http://localhost:8080/tools` — agent definitions, queue-backed manual invocation, and structured results
 - `http://localhost:8080/data` — read-only icon/list explorer with sortable sizes, deep links, and typed previews
+- `http://localhost:8080/config` — schema-driven master configuration, secret status, save, and restart
 - `http://localhost:8080/status` — service/GPU status, LLM token and browser-action charts, active time selectors, Quick Options toggles, and tiered metrics
 - `http://localhost:8080/chat` — shared local-model chat
 - `http://localhost:8080/speech` — streaming local text-to-speech
@@ -54,6 +52,24 @@ also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 
 The desktop UI opens `/desktop/vnc.html` with autoconnect, scaling, and the
 proxied `/desktop/websockify` websocket path.
+
+## Master configuration
+
+First start creates `<data-dir>/virtualme.config.yaml` from the embedded schema
+with stable comments and mode `0600`. Prefer `/config`; when editing YAML by
+hand, stop the container first and retain the complete tree. An invalid present
+file is never replaced: startup stops before longruns and reports file,
+line/column, configuration path, and a hint. Recover by correcting the reported
+value or restoring a known-good file, then start again.
+
+Precedence is explicit legacy environment override, YAML, then schema default.
+Migrate warnings by moving the named value into YAML and removing the
+environment variable. Secret values must use `${env:NAME}` or
+`${file:/absolute/path}`. Secret files must be regular, at most 64 KiB, and
+mode `0600` (no group/other bits). Saving in `/config` validates and writes
+atomically but does not apply settings; inspect the affected-service list and
+press “Restart to update.” A failed preflight leaves the current services
+running and the pending revision retryable.
 
 ## Console
 

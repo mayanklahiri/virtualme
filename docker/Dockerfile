@@ -17,6 +17,10 @@ RUN npm ci
 # Minify SPA — invalidated by web sources / build scripts only.
 COPY scripts/build-web.sh scripts/build-web.sh
 COPY scripts/build-icons.mjs scripts/build-icons.mjs
+COPY scripts/generate-themes.mjs scripts/generate-themes.mjs
+COPY common/themes/themes.json common/themes/themes.json
+COPY docs/src/generated/themes.json docs/src/generated/themes.json
+COPY docs/src/styles/generated-themes.css docs/src/styles/generated-themes.css
 COPY controller/web/static/ controller/web/static/
 RUN bash scripts/build-web.sh
 
@@ -26,9 +30,11 @@ COPY controller/embed.go controller/embed.go
 COPY controller/cmd/ controller/cmd/
 COPY controller/internal/ controller/internal/
 COPY controller/prompts/ controller/prompts/
+COPY docs/src/generated/config-reference.json docs/src/generated/config-reference.json
 ARG VERSION=dev
 RUN cd controller && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/controller ./cmd/controller
 RUN cd controller && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ttsd ./cmd/ttsd
+RUN cd controller && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/configctl ./cmd/configctl
 
 FROM debian:stable-slim
 
@@ -81,6 +87,8 @@ RUN bash /tmp/layers/018-llama-vulkan.sh
 COPY docker/rootfs/ /
 COPY --from=controller-build /out/controller /usr/local/bin/controller
 COPY --from=controller-build /out/ttsd /usr/local/bin/ttsd
+COPY --from=controller-build /out/configctl /usr/local/bin/configctl
+COPY --from=controller-build /src/docs/src/generated/config-reference.json /opt/virtualme/docs/src/generated/config-reference.json
 
 ENV LANG=C.UTF-8 \
     HOME=/home/virtualme \
@@ -88,21 +96,6 @@ ENV LANG=C.UTF-8 \
     XDG_CONFIG_HOME=/home/virtualme/.virtualme/xdg/config \
     XDG_CACHE_HOME=/home/virtualme/.virtualme/xdg/cache \
     XDG_DATA_HOME=/home/virtualme/.virtualme/xdg/data \
-    VM_DISPLAY=:99 \
-    VM_RESOLUTION=1600x900x24 \
-    VM_MODEL_PATH=/opt/models/gemma-4-E2B-it-Q4_0.gguf \
-    VM_MMPROJ_PATH=/opt/models/mmproj-gemma-4-E2B-F16.gguf \
-    VM_LLAMA_PORT=8081 \
-    VM_LLAMA_CTX=32768 \
-    VM_TTS_PORT=8082 \
-    VM_SHERPA_DIR=/opt/sherpa-onnx \
-    VM_TTS_MODEL_DIR=/opt/models/tts \
-    VM_TTS_MAX_CHARS=4096 \
-    VM_TTS_CACHE_MAX_MB=256 \
-    VM_MAIL_FLUSH_SEC=60 \
-    VM_AGENT_MAX_STEPS=500 \
-    VM_AGENT_KEEP_TASKS=20 \
-    VM_HTTP_ADDR=:8080 \
     S6_READ_ONLY_ROOT=1 \
     S6_BEHAVIOUR_IF_STAGE2_FAILS=2 \
     S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0

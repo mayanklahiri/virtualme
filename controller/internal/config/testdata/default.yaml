@@ -1,0 +1,219 @@
+# Master configuration version.
+# Selects the master configuration format.
+# Default: 1. Restart impact: all.
+version: 1
+# Process-wide operating-system behavior.
+# The timezone is exported before supervised services start.
+system:
+  # IANA timezone used by every service.
+  # Controls scheduler and display wall-clock time.
+  # Default: UTC. Restart impact: all.
+  timezone: UTC
+# Controller network listeners and proxies.
+# Only the console listener may bind beyond loopback.
+server:
+  # Controller HTTP listen address.
+  # Exposes the management console.
+  # Default: :8080. Restart impact: controller.
+  httpAddress: :8080
+  # Internal noVNC proxy URL.
+  # Connects the controller to noVNC.
+  # Default: http://127.0.0.1:6080. Restart impact: controller.
+  desktopProxyURL: http://127.0.0.1:6080
+# Virtual desktop, browser, VNC, and CDP settings.
+# All desktop service endpoints remain loopback-only.
+desktop:
+  # X11 display identifier.
+  # Selects the virtual X display.
+  # Default: :99. Restart impact: desktop.
+  display: :99
+  # Virtual desktop width, height, and color depth.
+  # Sizes the Xvfb desktop.
+  # Default: 1600x900x24. Restart impact: desktop.
+  resolution: 1600x900x24
+  # X11 socket directory.
+  # Locates X11 Unix sockets.
+  # Default: /tmp/.X11-unix. Restart impact: desktop.
+  x11SocketDirectory: /tmp/.X11-unix
+  # x11vnc listen address.
+  # Carries the private VNC stream.
+  # Default: 127.0.0.1:5900. Restart impact: desktop.
+  vncAddress: 127.0.0.1:5900
+  # noVNC listen address.
+  # Serves browser-based desktop access.
+  # Default: 127.0.0.1:6080. Restart impact: desktop.
+  noVNCAddress: 127.0.0.1:6080
+  # noVNC VNC upstream.
+  # Connects noVNC to x11vnc.
+  # Default: 127.0.0.1:5900. Restart impact: desktop.
+  noVNCUpstreamAddress: 127.0.0.1:5900
+  # noVNC health URL.
+  # Checks noVNC readiness.
+  # Default: http://127.0.0.1:6080/vnc.html. Restart impact: controller.
+  noVNCHealthURL: http://127.0.0.1:6080/vnc.html
+  # Chromium DevTools endpoint.
+  # Provides read-only browser observations.
+  # Default: http://127.0.0.1:9222. Restart impact: desktop.
+  cdpURL: http://127.0.0.1:9222
+  # Chromium watchdog grace seconds.
+  # Controls browser restart grace.
+  # Default: 3. Restart impact: desktop.
+  chromiumWatchdogGrace: 3
+# Persistent queue and state service.
+valkey:
+  # Valkey listen address.
+  # Locates the local Valkey service.
+  # Default: 127.0.0.1:6379. Restart impact: valkey.
+  address: 127.0.0.1:6379
+# Local language and vision inference.
+# Context size trades memory for retained task history.
+llama:
+  # llama.cpp listen address.
+  # Locates the local inference server.
+  # Default: 127.0.0.1:8081. Restart impact: llama.
+  address: 127.0.0.1:8081
+  # Inference context token capacity.
+  # Sets the model context window.
+  # Higher values preserve more task context.
+  # Default: 32768. Restart impact: llama.
+  # Tradeoff 32768: Balances task depth and memory. Cost: Consumes more KV cache than
+  # small contexts.
+  contextTokens: 32768
+  # Language model path.
+  # Selects the pinned local model.
+  # Default: /opt/models/gemma-4-E2B-it-Q4_0.gguf. Restart impact: llama.
+  modelPath: /opt/models/gemma-4-E2B-it-Q4_0.gguf
+  # Vision projector path.
+  # Selects the model's vision projector.
+  # Default: /opt/models/mmproj-gemma-4-E2B-F16.gguf. Restart impact: llama.
+  projectorPath: /opt/models/mmproj-gemma-4-E2B-F16.gguf
+  # Inference CPU threads; zero uses nproc.
+  # Controls CPU inference parallelism.
+  # Default: 0. Restart impact: llama.
+  threads: 0
+  # OpenAI-compatible chat endpoint.
+  # Connects the controller to llama.cpp chat.
+  # Default: http://127.0.0.1:8081/v1/chat/completions. Restart impact: controller.
+  chatCompletionsURL: http://127.0.0.1:8081/v1/chat/completions
+# Offline text-to-speech service.
+tts:
+  # TTS listen address.
+  # Locates the local TTS daemon.
+  # Default: 127.0.0.1:8082. Restart impact: ttsd.
+  address: 127.0.0.1:8082
+  # TTS health endpoint.
+  # Checks TTS readiness.
+  # Default: http://127.0.0.1:8082/healthz. Restart impact: controller.
+  healthURL: http://127.0.0.1:8082/healthz
+  # sherpa-onnx runtime directory.
+  # Locates the speech runtime.
+  # Default: /opt/sherpa-onnx. Restart impact: ttsd.
+  sherpaDirectory: /opt/sherpa-onnx
+  # TTS model directory.
+  # Locates the pinned voice model.
+  # Default: /opt/models/tts. Restart impact: ttsd.
+  modelDirectory: /opt/models/tts
+  # Rendered speech cache directory.
+  # Stores disposable rendered sentences.
+  # Default: ${data}/tts-cache. Restart impact: ttsd.
+  cacheDirectory: ${data}/tts-cache
+  # Speech cache size in MiB.
+  # Bounds disposable speech cache storage.
+  # Default: 256. Restart impact: ttsd.
+  cacheMaxMiB: 256
+  # Maximum characters per speech request.
+  # Bounds individual synthesis requests.
+  # Default: 4096. Restart impact: ttsd.
+  maxCharacters: 4096
+# Browser-agent execution limits and tools.
+agent:
+  # Maximum tool steps per agent task.
+  # Bounds autonomous task length.
+  # Default: 500. Restart impact: controller.
+  maxSteps: 500
+  # Retained agent task artifact count.
+  # Bounds retained task artifacts.
+  # Default: 20. Restart impact: controller.
+  keepTasks: 20
+  # xdotool executable.
+  # Provides OS-level browser input.
+  # Default: xdotool. Restart impact: controller.
+  xdotoolPath: xdotool
+  # Screenshot executable.
+  # Captures the virtual desktop.
+  # Default: scrot. Restart impact: controller.
+  scrotPath: scrot
+  # Image conversion executable.
+  # Prepares screenshots for vision.
+  # Default: convert. Restart impact: controller.
+  convertPath: convert
+  # Bounded shell executable.
+  # Runs bounded local shell tools.
+  # Default: bash. Restart impact: controller.
+  bashPath: bash
+  # Baked system manifest path.
+  # Grounds the agent in installed capabilities.
+  # Default: /opt/agent/system-manifest.json. Restart impact: controller.
+  systemManifestPath: /opt/agent/system-manifest.json
+# Outbound mail identity, relay, and queue.
+# Credentials are stored only as environment or file references.
+mail:
+  # Mail hostname; empty uses container hostname.
+  # Sets the outbound mail hostname.
+  # Default: "". Restart impact: mail.
+  mailname: ""
+  # Default From address.
+  # Sets the default sender identity.
+  # Default: "". Restart impact: controller.
+  from: ""
+  # Optional authenticated SMTP relay.
+  smarthost:
+    # Relay hostname; empty enables direct MX.
+    # Selects direct or relay delivery.
+    # Default: "". Restart impact: mail.
+    host: ""
+    # Relay TCP port.
+    # Selects the relay submission port.
+    # Default: 587. Restart impact: mail.
+    port: 587
+    # Relay username.
+    # Authenticates to the relay.
+    # Default: "". Restart impact: mail.
+    username: ""
+    # Relay password secret reference.
+    # References relay credentials without persisting bytes.
+    # Default: "". Restart impact: mail.
+    password: ""
+  # DKIM signing domain.
+  # Enables DKIM signing when non-empty.
+  # Default: "". Restart impact: controller.
+  dkimDomain: ""
+  # DKIM DNS selector.
+  # Names the DKIM public key record.
+  # Default: virtualme. Restart impact: controller.
+  dkimSelector: virtualme
+  # Mail queue retry interval seconds.
+  # Controls deferred delivery retries.
+  # Default: 60. Restart impact: mail.
+  flushSeconds: 60
+  # sendmail-compatible executable path.
+  # Submits composed messages to dma.
+  # Default: /usr/sbin/sendmail. Restart impact: controller.
+  sendmailPath: /usr/sbin/sendmail
+  # Persistent dma spool directory.
+  # Stores queued outbound messages.
+  # Default: ${data}/mail/spool. Restart impact: mail.
+  spoolDirectory: ${data}/mail/spool
+# Controller health-probe targets.
+health:
+  # llama.cpp health URL.
+  # Checks inference readiness.
+  # Default: http://127.0.0.1:8081/health. Restart impact: controller.
+  llamaURL: http://127.0.0.1:8081/health
+  # xdotool health executable.
+  # Checks desktop input capability.
+  # Default: xdotool. Restart impact: controller.
+  xdotoolPath: xdotool
+# Extension point for optional external integrations.
+# Core spec 031 defines no integrations.
+integrations: {}

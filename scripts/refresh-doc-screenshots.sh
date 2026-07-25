@@ -39,6 +39,7 @@ ROUTES=(
   "jobs|/jobs"
   "tools|/tools"
   "data|/data"
+  "config|/config"
   "status|/status"
   "chat|/chat"
   "speech|/speech"

@@ -24,6 +24,8 @@ import (
 	assets "github.com/mayanklahiri/virtualme/controller"
 	"github.com/mayanklahiri/virtualme/controller/internal/agent"
 	"github.com/mayanklahiri/virtualme/controller/internal/chat"
+	"github.com/mayanklahiri/virtualme/controller/internal/config"
+	"github.com/mayanklahiri/virtualme/controller/internal/configapi"
 	"github.com/mayanklahiri/virtualme/controller/internal/datafs"
 	"github.com/mayanklahiri/virtualme/controller/internal/gpu"
 	"github.com/mayanklahiri/virtualme/controller/internal/health"
@@ -40,20 +42,6 @@ import (
 
 var version = "dev"
 
-func envInt(name string, fallback int) int {
-	if value, err := strconv.Atoi(os.Getenv(name)); err == nil && value > 0 {
-		return value
-	}
-	return fallback
-}
-
-func envOr(name, fallback string) string {
-	if value := os.Getenv(name); value != "" {
-		return value
-	}
-	return fallback
-}
-
 func capText(text string, limit int) string {
 	if len(text) <= limit {
 		return text
@@ -67,8 +55,8 @@ func jsonObject(raw json.RawMessage) bool {
 	return len(raw) > 0 && json.Unmarshal(raw, &value) == nil && value != nil
 }
 
-func envResolution() (int, int) {
-	parts := strings.Split(envOr("VM_RESOLUTION", "1600x900x24"), "x")
+func parseResolution(value string) (int, int) {
+	parts := strings.Split(value, "x")
 	if len(parts) < 2 {
 		return 1600, 900
 	}
@@ -85,7 +73,7 @@ func spaHandler(staticFS fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/healthz") || strings.HasPrefix(r.URL.Path, "/ws") ||
 			strings.HasPrefix(r.URL.Path, "/desktop/") || strings.HasPrefix(r.URL.Path, "/v1/audio/speech") ||
-			strings.HasPrefix(r.URL.Path, "/api/data/") {
+			strings.HasPrefix(r.URL.Path, "/api/data/") || strings.HasPrefix(r.URL.Path, "/api/config") {
 			http.NotFound(w, r)
 			return
 		}
@@ -116,7 +104,11 @@ func newMux(cfg health.Config, hub *ws.Hub, desktopURL *url.URL, clients ...*tts
 }
 
 func newMuxWithActivity(cfg health.Config, hub *ws.Hub, desktopURL *url.URL, activity *jobs.Activity, dataDir string, clients ...*tts.Client) *http.ServeMux {
-	client := &tts.Client{URL: "http://127.0.0.1:" + envOr("VM_TTS_PORT", "8082")}
+	ttsURL, err := url.Parse(cfg.TTSHealthURL)
+	if err != nil {
+		ttsURL = &url.URL{}
+	}
+	client := &tts.Client{URL: ttsURL.Scheme + "://" + ttsURL.Host}
 	if len(clients) > 0 && clients[0] != nil {
 		client = clients[0]
 	}
@@ -379,36 +371,44 @@ func (t *ttsWS) write(conn *ws.Conn, value any) error {
 func main() {
 	log.SetOutput(os.Stdout)
 	log.SetFlags(0)
-	cfg := health.FromEnv()
+	loaded, err := config.Load(config.Options{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	master := loaded.Config
+	cfg := health.Config{
+		Display: master.Desktop.Display, X11SocketDir: master.Desktop.X11SocketDirectory,
+		VNCAddr: master.Desktop.VNCAddress, NoVNCURL: master.Desktop.NoVNCHealthURL,
+		ValkeyAddr: master.Valkey.Address, LlamaHealthURL: master.Health.LlamaURL,
+		TTSHealthURL: master.TTS.HealthURL, Xdotool: master.Health.XdotoolPath,
+		SendmailPath: master.Mail.SendmailPath, MailSpoolDir: master.Mail.SpoolDirectory,
+	}
 	hub := ws.NewHub()
 	activity := jobs.NewActivity(valkey.New(cfg.ValkeyAddr), hub.Broadcast)
 	speechLog := tts.NewLog(valkey.New(cfg.ValkeyAddr), hub.Broadcast)
 	ttsClient := &tts.Client{
-		URL: "http://127.0.0.1:" + envOr("VM_TTS_PORT", "8082"),
+		URL: "http://" + master.TTS.Address,
 		Log: speechLog,
 	}
 	ttsSocket := newTTSWS(ttsClient, activity)
-	desktopURL, err := url.Parse("http://127.0.0.1:6080")
+	desktopURL, err := url.Parse(master.Server.DesktopProxyURL)
 	if err != nil {
 		log.Fatal(err)
 	}
-	dataDir := os.Getenv("VM_DATA_DIR")
-	if dataDir == "" {
-		dataDir = os.TempDir()
-	}
+	dataDir := loaded.DataDir
 	metricsStore := metrics.NewStore(path.Join(dataDir, "metrics"))
 	metricsStore.Load()
-	mailname := os.Getenv("VM_MAIL_MAILNAME")
+	mailname := master.Mail.Mailname
 	if mailname == "" {
 		mailname, _ = os.Hostname()
 	}
 	mailService, err := mail.NewService(mail.Config{
 		DataDir: dataDir, SendmailPath: cfg.SendmailPath,
-		Mailname: mailname, From: os.Getenv("VM_MAIL_FROM"),
-		Smarthost:     os.Getenv("VM_MAIL_SMARTHOST"),
-		DKIMDomain:    os.Getenv("VM_MAIL_DKIM_DOMAIN"),
-		DKIMSelector:  envOr("VM_MAIL_DKIM_SELECTOR", "virtualme"),
-		FlushEverySec: int64(envInt("VM_MAIL_FLUSH_SEC", 60)),
+		Mailname: mailname, From: master.Mail.From,
+		Smarthost:     master.Mail.Smarthost.Host,
+		DKIMDomain:    master.Mail.DKIMDomain,
+		DKIMSelector:  master.Mail.DKIMSelector,
+		FlushEverySec: int64(master.Mail.FlushSeconds),
 		Broadcast:     hub.Broadcast,
 		Activity:      activity,
 		Valkey:        valkey.New(cfg.ValkeyAddr),
@@ -418,18 +418,18 @@ func main() {
 	}
 	llmCounters := new(metrics.Counters)
 	agentConfig := agent.Config{
-		CDPURL:        "http://127.0.0.1:9222",
-		Display:       envOr("VM_DISPLAY", ":99"),
-		Resolution:    envOr("VM_RESOLUTION", "1600x900x24"),
-		XdotoolPath:   "xdotool",
-		ScrotPath:     "scrot",
-		ConvertPath:   "convert",
-		BashPath:      "bash",
+		CDPURL:        master.Desktop.CDPURL,
+		Display:       master.Desktop.Display,
+		Resolution:    master.Desktop.Resolution,
+		XdotoolPath:   master.Agent.XdotoolPath,
+		ScrotPath:     master.Agent.ScrotPath,
+		ConvertPath:   master.Agent.ConvertPath,
+		BashPath:      master.Agent.BashPath,
 		DataDir:       path.Join(dataDir, "agent"),
-		Manifest:      "/opt/agent/system-manifest.json",
-		MaxSteps:      envInt("VM_AGENT_MAX_STEPS", 500),
-		KeepTasks:     envInt("VM_AGENT_KEEP_TASKS", 20),
-		ContextTokens: envInt("VM_LLAMA_CTX", 32768),
+		Manifest:      master.Agent.SystemManifestPath,
+		MaxSteps:      master.Agent.MaxSteps,
+		KeepTasks:     master.Agent.KeepTasks,
+		ContextTokens: master.Llama.ContextTokens,
 		TTS:           ttsClient,
 		Activity:      activity,
 		Broadcast:     hub.Broadcast,
@@ -439,7 +439,7 @@ func main() {
 	agentConfig.Executor = localTools
 	chatService := chat.NewWithAgent(
 		cfg.ValkeyAddr,
-		"http://127.0.0.1:8081/v1/chat/completions",
+		master.Llama.ChatCompletionsURL,
 		hub.Broadcast,
 		agentConfig,
 	)
@@ -448,15 +448,15 @@ func main() {
 	jobManager := jobs.New(valkey.New(cfg.ValkeyAddr), hub.Broadcast)
 	chatService.SetJobManager(jobManager)
 	jobManager.Register("chat", chatService.Execute)
-	width, height := envResolution()
+	width, height := parseResolution(master.Desktop.Resolution)
 	jigglerService := jiggler.New(agent.NewProcessRunner(), valkey.New(cfg.ValkeyAddr), hub.Broadcast, width, height)
-	jigglerService.SetDisplay(envOr("VM_DISPLAY", ":99"))
+	jigglerService.SetDisplay(master.Desktop.Display)
 	jigglerService.SetActivity(activity)
 	gpuInfo := gpu.Detect()
-	addr := envOr("VM_HTTP_ADDR", ":8080")
+	addr := master.Server.HTTPAddress
 	collector := state.NewCollector(
 		cfg, "/proc", metricsStore, hub.Broadcast, gpuInfo, jigglerService.Enabled,
-		state.Runtime{Version: version, HTTPAddr: addr},
+		state.Runtime{Version: version, HTTPAddr: addr, DataDir: dataDir, Timezone: master.System.Timezone},
 	)
 	collector.SetCounters(llmCounters)
 	collector.SetSchedulerPaused(jobManager.SchedulerPaused)
@@ -645,7 +645,24 @@ func main() {
 	log.Println("state: collector started (2s, tiered metrics)")
 	log.Println("desktop: proxying", desktopURL)
 	log.Println("controller: listening on", addr)
-	server := &http.Server{Addr: addr, Handler: newMuxWithActivity(cfg, hub, desktopURL, activity, dataDir, ttsClient), ReadHeaderTimeout: 5 * time.Second}
+	mux := newMuxWithActivity(cfg, hub, desktopURL, activity, dataDir, ttsClient)
+	server := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	coordinator := configapi.NewProductionCoordinator(dataDir)
+	restartRequests := make(chan []string, 1)
+	configService, err := configapi.New(configapi.Options{
+		Loaded: loaded, Broadcast: hub.Broadcast,
+		Coordinator: coordinator,
+		Shutdown: func(services []string) {
+			select {
+			case restartRequests <- services:
+			default:
+			}
+		},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	configService.Mount(mux)
 	errs := make(chan error, 1)
 	go func() { errs <- server.ListenAndServe() }()
 	select {
@@ -659,5 +676,17 @@ func main() {
 		_ = server.Shutdown(shutdownCtx)
 		<-errs
 		<-persistDone
+	case services := <-restartRequests:
+		stop()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = server.Shutdown(shutdownCtx)
+		cancel()
+		<-errs
+		<-persistDone
+		restartCtx, restartCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := coordinator.Restart(restartCtx, services); err != nil {
+			log.Printf("config restart: %v", config.RedactError(err.Error()))
+		}
+		restartCancel()
 	}
 }

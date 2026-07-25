@@ -1,5 +1,7 @@
 #!/command/with-contenv bash
-export DISPLAY="$VM_DISPLAY"
+source /run/virtualme/config.env
+export DISPLAY="$VM_EFFECTIVE_DISPLAY"
 until xdpyinfo >/dev/null 2>&1; do sleep 0.2; done
-exec x11vnc -display "$VM_DISPLAY" -forever -shared -nopw -localhost \
-  -rfbport 5900 -noxdamage -cursor most -quiet
+vnc_port="${VM_EFFECTIVE_VNC_ADDRESS##*:}"
+exec x11vnc -display "$VM_EFFECTIVE_DISPLAY" -forever -shared -nopw -localhost \
+  -rfbport "$vnc_port" -noxdamage -cursor most -quiet

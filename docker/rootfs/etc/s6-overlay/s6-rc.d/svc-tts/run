@@ -1,2 +1,3 @@
 #!/command/with-contenv bash
+source /run/virtualme/config.env
 exec /usr/local/bin/ttsd
