@@ -32,11 +32,29 @@ Edit the docs to match ground truth. Keep prose terse. Do not invent
 features. Do not change code to match docs — if code looks wrong, stop and
 report instead.
 
-## 4. Validate
+## 4. Refresh doc screenshots (requires live :8080)
+
+Assumes Virtual Me is already running and healthy on `http://127.0.0.1:8080`
+(rebuild/restart first when console copy or SPA layout changed). Then:
+
+```bash
+bash scripts/refresh-doc-screenshots.sh
+bash scripts/update-doc-images.sh
+```
+
+`refresh-doc-screenshots.sh` captures each console route at 1280×720 and
+writes multi-width JPEGs under `docs/src/screenshots/` (`{slug}.jpg` at
+480px wide, plus `{slug}-960.jpg` and `{slug}-1280.jpg`).
+`update-doc-images.sh` rewires README image markers (Quick start
+`home-route`) to those paths. Do not skip either step when UI-visible
+surfaces changed; if :8080 is down, start the container and retry rather
+than leaving stale screenshots.
+
+## 5. Validate
 
 Run `npm run check`. If Docker is available and `test/smoke.sh` exists and
 container-affecting docs changed, also run `bash test/smoke.sh`.
 
-## 5. Report
+## 6. Report
 
 Summarize: files changed, drift found, anything suspicious left alone.

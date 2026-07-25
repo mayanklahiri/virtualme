@@ -6,7 +6,9 @@
 
 ## Quick start
 
-![Virtual Me home](docs/screenshots/home-route.jpg)
+<!-- update-doc-images:home-route -->
+![Virtual Me home](docs/src/screenshots/home-route.jpg)
+<!-- /update-doc-images:home-route -->
 
 ```console
 npx virtualme doctor   # check node >= 22 + docker
@@ -260,7 +262,7 @@ to initialize and inference is running on the CPU.
 | `operate` | [`.cursor/skills/operate/SKILL.md`](.cursor/skills/operate/SKILL.md) | Install, run, and troubleshoot |
 | `develop` | [`.cursor/skills/develop/SKILL.md`](.cursor/skills/develop/SKILL.md) | Follow contribution rules and patterns |
 | `do-release` | [`.cursor/skills/do-release/SKILL.md`](.cursor/skills/do-release/SKILL.md) | Execute the full npm and Docker release |
-| `master-update` | [`.cursor/skills/master-update/SKILL.md`](.cursor/skills/master-update/SKILL.md) | Audit documentation against the tree |
+| `master-update` | [`.cursor/skills/master-update/SKILL.md`](.cursor/skills/master-update/SKILL.md) | Audit docs against the tree; refresh `docs/src/screenshots/` from live `:8080` and rewire README image markers |
 
 Claude Code discovers these through the `.claude/skills` symlink; Codex reads [`AGENTS.md`](AGENTS.md).
 

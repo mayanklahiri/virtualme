@@ -207,3 +207,10 @@ two-face lockup returns, with hierarchy flipped toward "me":
 - Generator: `scripts/gen-wordmark.mjs` (pinned Archivo Black + Caveat
   sha256s unchanged from the earlier two-face amendment). Sidebar CSS:
   `.wordmark-svg` sized from the generated viewBox (~115×22 px).
+
+### 2026-07-24 — Home hero body copy
+
+Supersedes the §3 hero body sentence. The home hero body is now:
+
+> **Virtual Me** is a personal, private background AI agent that runs
+> completely locally on your computer, as you, without any GPUs or AI bills.

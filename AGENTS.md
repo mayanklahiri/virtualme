@@ -45,6 +45,8 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `./cli.sh soak [--no-build]` | Rebuild once, run the full e2e suite, then run live soak flows on a fresh data dir (spec 012) |
 | `bash controller/tools/fetch-assets.sh` | Fetch pinned fonts and icons (specs 003, 005, 011) |
 | `bash scripts/update-logo.sh` | Regenerate brand icons + home hero from repo-root `LOGO.png` |
+| `bash scripts/refresh-doc-screenshots.sh` | Capture console routes from a live `:8080` into `docs/src/screenshots/` (480/960/1280 JPEG widths) |
+| `bash scripts/update-doc-images.sh` | Rewire README image markers to `docs/src/screenshots/` paths |
 
 The controller's browser agent combines vision screenshots, dense rendered
 DOM and read-only CDP observations, OS-level `xdotool` mouse/keyboard
@@ -134,7 +136,7 @@ Durations render through one graded component and shared short formatting.
 | `operate` | `.cursor/skills/operate/SKILL.md` | Run and troubleshoot Virtual Me |
 | `develop` | `.cursor/skills/develop/SKILL.md` | Contribute within repository rules |
 | `do-release` | `.cursor/skills/do-release/SKILL.md` | Execute and verify a full npm and Docker release |
-| `master-update` | `.cursor/skills/master-update/SKILL.md` | Reconcile docs and skills with the tree |
+| `master-update` | `.cursor/skills/master-update/SKILL.md` | Reconcile docs/skills with the tree; refresh `docs/src/screenshots/` from live `:8080` and rewire README markers |
 
 ## Specs
 
