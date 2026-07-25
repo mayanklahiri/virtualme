@@ -1,6 +1,6 @@
 // Real-stack outbound mail websocket probe.
 /** @typedef {{to?: string, subject?: string, preview?: string, lastError?: string, nextRetrySec?: number}} QueueEntry */
-/** @typedef {{text?: string}} TimelineEntry */
+/** @typedef {{status?: string, to?: string}} OutboxEntry */
 const direct = process.argv[2] === "--direct";
 const url = direct ? process.argv[3] : process.argv[2];
 if (!url) {
@@ -75,9 +75,9 @@ socket.addEventListener("message", (event) => {
       if (!message.dkim?.enabled || !message.dkim.dnsName || !message.dkim.dnsValue) {
         fail("DKIM DNS record missing");
       }
-      const timeline = /** @type {TimelineEntry[]} */ (message.timeline ?? []);
+      const outbox = /** @type {OutboxEntry[]} */ (message.outbox ?? []);
       if (!sawEnrichedQueue || queue.length ||
-          !timeline.some((item) => item.text?.includes("left queue"))) {
+          !outbox.some((item) => item.status === "left_queue")) {
         poll();
         return;
       }

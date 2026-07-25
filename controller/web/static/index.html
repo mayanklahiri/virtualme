@@ -339,8 +339,6 @@
             </div>
             <small class="mail-help">Prefills a deliverability test addressed to a Gmail inbox. Gmail's headers show SPF/DKIM verdicts.</small>
             <p id="mail-result" class="mail-result"></p>
-          </form>
-          <div class="mail-card">
             <h2>Status</h2>
             <dl class="mail-status">
               <div><dt>Delivery mode</dt><dd id="mail-mode">…</dd></div>
@@ -353,17 +351,18 @@
               <label for="mail-dns-value">DNS TXT value</label>
               <div class="copy-row"><textarea id="mail-dns-value" rows="4" readonly></textarea><button type="button" data-copy="mail-dns-value"><svg class="icon"><use href="/icons.svg#i-copy"/></svg></button></div>
             </div>
-            <h2>Queue</h2>
+          </form>
+          <div class="mail-card">
+            <h2>Outbox</h2>
+            <p id="mail-last" class="mail-last">No sends yet in this controller session.</p>
+            <ol id="mail-outbox" class="mail-outbox"></ol>
+            <p id="mail-outbox-empty" class="mail-empty">Nothing submitted yet.</p>
+            <div class="mail-queue-head">
+              <h2>Queue</h2>
+              <button id="mail-clear" class="secondary" type="button" hidden>Clear queue</button>
+            </div>
             <div id="mail-queue" class="mail-queue"></div>
             <p id="mail-queue-empty" class="mail-empty"></p>
-            <section id="mail-activity-section" class="mail-activity" hidden>
-              <h2>Activity</h2>
-              <ol id="mail-activity"></ol>
-            </section>
-            <section class="mail-last-send">
-              <h2>Last send</h2>
-              <p id="mail-last">No sends yet in this controller session.</p>
-            </section>
           </div>
         </div>
         <aside class="mail-guidance">

@@ -70,6 +70,26 @@ export function initMail(send) {
     list.append(term, detail);
   }
 
+  const clear = document.querySelector("#mail-clear");
+  let clearRevert = 0;
+
+  function resetClear() {
+    clearTimeout(clearRevert);
+    clear.classList.remove("mail-clear-confirm");
+    clear.textContent = "Clear queue";
+  }
+
+  clear.addEventListener("click", () => {
+    if (!clear.classList.contains("mail-clear-confirm")) {
+      clear.classList.add("mail-clear-confirm");
+      clear.textContent = "Confirm clear";
+      clearRevert = setTimeout(resetClear, 3000);
+      return;
+    }
+    resetClear();
+    send({ type: "mail-clear" });
+  });
+
   function renderQueue(message) {
     const queue = document.querySelector("#mail-queue");
     const empty = document.querySelector("#mail-queue-empty");
@@ -132,6 +152,8 @@ export function initMail(send) {
       queue.append(details);
     }
     empty.hidden = queue.children.length > 0;
+    clear.hidden = queue.children.length === 0;
+    if (clear.hidden) resetClear();
     const cadence = Number(message.flushEverySec);
     empty.textContent = Number.isFinite(cadence)
       ? `Queue empty. Messages deliver on submit or wait here between flush runs (every ${cadence}s).`
@@ -148,36 +170,44 @@ export function initMail(send) {
   }
   setInterval(updateCountdowns, 1000);
 
-  function renderTimeline(message) {
-    const section = document.querySelector("#mail-activity-section");
-    const list = document.querySelector("#mail-activity");
-    if (!Array.isArray(message.timeline)) {
-      section.hidden = true;
-      return;
-    }
-    section.hidden = false;
+  const OUTBOX_LABELS = {
+    queued: "queued",
+    left_queue: "sent (left queue)",
+    error: "error",
+    cleared: "cleared",
+  };
+
+  function renderOutbox(message) {
+    const list = document.querySelector("#mail-outbox");
+    const empty = document.querySelector("#mail-outbox-empty");
     list.replaceChildren();
-    for (const event of message.timeline.slice(0, 20)) {
+    for (const entry of (message.outbox ?? []).slice(0, 50)) {
       const row = document.createElement("li");
-      const time = document.createElement("time");
-      const eventDate = new Date(Number(event.ts));
-      if (!Number.isNaN(eventDate.getTime())) {
-        time.dateTime = eventDate.toISOString();
-        time.textContent = eventDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
-      } else {
-        time.textContent = "…";
+      row.className = "mail-outbox-row";
+      const pill = document.createElement("span");
+      const state = String(entry.status || "queued");
+      pill.className = `mail-pill mail-pill-${state.replaceAll(/[^a-z_]/g, "")}`;
+      pill.textContent = OUTBOX_LABELS[state] ?? state;
+      const recipient = document.createElement("strong");
+      recipient.textContent = entry.to || "…";
+      recipient.title = entry.to || "";
+      const title = document.createElement("span");
+      title.className = "mail-msg-subject";
+      title.textContent = entry.subject || "(no subject)";
+      title.title = entry.subject || "";
+      const age = document.createElement("span");
+      age.className = "mail-outbox-age";
+      age.append(durationElement(Math.max(0, Date.now() - Number(entry.ts))));
+      row.append(pill, recipient, title, age);
+      if (state === "error" && entry.lastError) {
+        const error = document.createElement("p");
+        error.className = "mail-last-error";
+        error.textContent = entry.lastError;
+        row.append(error);
       }
-      const text = document.createElement("span");
-      text.textContent = event.text;
-      row.append(time, text);
       list.append(row);
     }
-    if (!list.children.length) {
-      const row = document.createElement("li");
-      row.className = "mail-empty";
-      row.textContent = "No queue activity yet.";
-      list.append(row);
-    }
+    empty.hidden = list.children.length > 0;
   }
 
   function status(message) {
@@ -191,7 +221,7 @@ export function initMail(send) {
     document.querySelector("#mail-dns-name").value = message.dkim?.dnsName ?? "";
     document.querySelector("#mail-dns-value").value = message.dkim?.dnsValue ?? "";
     renderQueue(message);
-    renderTimeline(message);
+    renderOutbox(message);
     const last = message.lastResult;
     document.querySelector("#mail-last").textContent = last
       ? `${last.ok ? "Accepted" : "Failed"} · ${last.to} · ${last.ts}${last.error ? ` · ${last.error}` : ""}`

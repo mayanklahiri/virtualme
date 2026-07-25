@@ -22,6 +22,9 @@ import (
 const (
 	previewRunes = 500
 	maxMIMEDepth = 16
+	// noAttemptText marks queue entries dma has not tried to deliver yet;
+	// it is informational, not a delivery error.
+	noAttemptText = "no delivery attempt recorded yet"
 )
 
 // Attachment describes a non-body MIME part without exposing its contents.
@@ -118,7 +121,7 @@ func queueWithState(directory, flushLog string, now time.Time, nextRetrySec int6
 			message.LastError = logErrors[id]
 		}
 		if message.LastError == "" {
-			message.LastError = "no delivery attempt recorded yet"
+			message.LastError = noAttemptText
 		}
 		result = append(result, message)
 	}

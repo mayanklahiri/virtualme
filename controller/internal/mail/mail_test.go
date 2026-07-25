@@ -324,51 +324,129 @@ func TestQueueErrorsAndRetryMath(t *testing.T) {
 	}
 }
 
-func TestServiceTimelineDiffsFlushSnapshots(t *testing.T) {
+// spoolingRunner simulates dma accepting a submission by writing a
+// queue/message pair into the spool, like the real binary does.
+type spoolingRunner struct {
+	spool string
+	id    string
+	err   error
+}
+
+func (runner *spoolingRunner) Run(_ context.Context, _ string, _ []string, input []byte) error {
+	if runner.err != nil {
+		return runner.err
+	}
+	envelope := "Sender: sender@example.test\nRecipient: user@example.test\n"
+	if err := os.WriteFile(filepath.Join(runner.spool, "Q"+runner.id), []byte(envelope), 0o600); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(runner.spool, "M"+runner.id), input, 0o600)
+}
+
+func newOutboxService(t *testing.T, runner Runner, now func() time.Time) (*Service, string) {
+	t.Helper()
 	dataDir := t.TempDir()
 	spool := filepath.Join(dataDir, "mail", "spool")
 	if err := os.MkdirAll(spool, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	now := time.Unix(1000, 0)
 	service, err := NewService(Config{
-		DataDir: dataDir, Mailname: "example.test", From: "sender@example.test",
-		Now: func() time.Time { return now }, FlushEverySec: 60,
+		DataDir: dataDir, SendmailPath: "/sendmail", Mailname: "example.test",
+		From: "sender@example.test", Smarthost: "relay", Runner: runner, Now: now,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeFlush := func(seconds int64) {
-		t.Helper()
-		if err := os.WriteFile(filepath.Join(dataDir, "mail", "last-flush"),
-			[]byte(fmt.Sprint(seconds)), 0o600); err != nil {
+	return service, spool
+}
+
+func sendAndWait(t *testing.T, service *Service, id string) {
+	t.Helper()
+	replies := make(chan []byte, 1)
+	payload := fmt.Sprintf(`{"type":"mail-send","id":%q,"to":"user@example.test","subject":"test","body":"hello"}`, id)
+	if !service.Handle([]byte(payload), func(reply []byte) error { replies <- reply; return nil }) {
+		t.Fatal("mail-send not handled")
+	}
+	<-replies
+}
+
+func TestOutboxTracksQueuedErrorAndLeftQueue(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	var service *Service
+	var spool string
+	runner := &spoolingRunner{id: "abc"}
+	service, spool = newOutboxService(t, runner, func() time.Time { return now })
+	runner.spool = spool
+	sendAndWait(t, service, "m1")
+
+	status := service.Status()
+	if len(status.Outbox) != 1 {
+		t.Fatalf("outbox = %#v", status.Outbox)
+	}
+	entry := status.Outbox[0]
+	if entry.Status != "queued" || entry.QueueID != "abc" ||
+		entry.To != "user@example.test" || entry.Subject != "test" || entry.Size <= 0 {
+		t.Fatalf("queued entry = %#v", entry)
+	}
+
+	// dma records a delivery error in the envelope: entry becomes error.
+	envelope := "Sender: sender@example.test\nRecipient: user@example.test\nError: relay refused\n"
+	if err := os.WriteFile(filepath.Join(spool, "Qabc"), []byte(envelope), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status = service.Status()
+	if status.Outbox[0].Status != "error" || !strings.Contains(status.Outbox[0].LastError, "relay refused") {
+		t.Fatalf("error entry = %#v", status.Outbox[0])
+	}
+
+	// The pair vanishing from the spool means dma delivered or bounced it.
+	for _, name := range []string{"Qabc", "Mabc"} {
+		if err := os.Remove(filepath.Join(spool, name)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	writeFlush(1000)
-	service.Status()
+	status = service.Status()
+	if status.Outbox[0].Status != "left_queue" {
+		t.Fatalf("left_queue entry = %#v", status.Outbox[0])
+	}
+
+	// No session timeline noise survives the outbox migration.
+	if encoded := string(service.StatusMessage()); strings.Contains(encoded, "Flush ran") ||
+		strings.Contains(encoded, "timeline") {
+		t.Fatalf("timeline noise in status: %s", encoded)
+	}
+}
+
+func TestClearQueueRemovesSpoolAndMarksOutbox(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	runner := &spoolingRunner{id: "abc"}
+	service, spool := newOutboxService(t, runner, func() time.Time { return now })
+	runner.spool = spool
+	sendAndWait(t, service, "m1")
+	// A second, orphan pair placed by an external submitter.
 	for name, content := range map[string]string{
-		"Qqueued": "Sender: sender@example.test\nRecipient: user@example.test\n",
-		"Mqueued": "Subject: queued\n\nbody",
+		"Qzzz": "Sender: sender@example.test\nRecipient: other@example.test\n",
+		"Mzzz": "Subject: orphan\n\nbody",
 	} {
 		if err := os.WriteFile(filepath.Join(spool, name), []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	service.Status()
-	if err := os.Remove(filepath.Join(spool, "Qqueued")); err != nil {
-		t.Fatal(err)
+	replies := make(chan []byte, 1)
+	if !service.Handle([]byte(`{"type":"mail-clear"}`), func(reply []byte) error { replies <- reply; return nil }) {
+		t.Fatal("mail-clear not handled")
 	}
-	if err := os.Remove(filepath.Join(spool, "Mqueued")); err != nil {
-		t.Fatal(err)
+	<-replies
+	entries, err := os.ReadDir(spool)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("spool after clear = %v, %v", entries, err)
 	}
-	now = time.Unix(1060, 0)
-	writeFlush(1060)
 	status := service.Status()
-	if len(status.Timeline) != 2 ||
-		!strings.Contains(status.Timeline[0].Text, "left queue") ||
-		!strings.Contains(status.Timeline[1].Text, "Flush ran (1 queued before, 0 after)") {
-		t.Fatalf("timeline = %#v", status.Timeline)
+	if len(status.Outbox) != 1 || status.Outbox[0].Status != "cleared" {
+		t.Fatalf("outbox after clear = %#v", status.Outbox)
+	}
+	if len(status.Queue) != 0 {
+		t.Fatalf("queue after clear = %#v", status.Queue)
 	}
 }
 
@@ -408,7 +486,7 @@ func TestServiceFrames(t *testing.T) {
 	status := string(<-replies)
 	if !strings.Contains(status, `"mode":"smarthost"`) ||
 		!strings.Contains(status, `"flushEverySec":60`) ||
-		!strings.Contains(status, `"timeline":[{"ts":1700000000000,"text":"Submitted message`) ||
+		!strings.Contains(status, `"outbox"`) ||
 		!strings.Contains(status, `"lastResult"`) {
 		t.Fatalf("status=%s", status)
 	}

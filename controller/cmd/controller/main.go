@@ -406,6 +406,7 @@ func main() {
 		FlushEverySec: int64(envInt("VM_MAIL_FLUSH_SEC", 60)),
 		Broadcast:     hub.Broadcast,
 		Activity:      activity,
+		Valkey:        valkey.New(cfg.ValkeyAddr),
 	})
 	if err != nil {
 		log.Fatal(err)
