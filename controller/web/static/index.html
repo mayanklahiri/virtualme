@@ -220,22 +220,24 @@
           </article>
         </div>
         <div class="charts">
-          <figure class="chart">
-            <div class="chart-head">
-              <div class="chart-title"><h3>CPU load</h3><p>per process, stacked percent</p></div>
-              <div class="lookback" role="radiogroup" aria-label="Time window" data-lookback></div>
-            </div>
-            <canvas id="chart-cpu" tabindex="0" role="img" aria-label="Stacked per-process CPU usage bars"></canvas>
-            <ul id="core-legend" class="legend"></ul>
-          </figure>
-          <figure class="chart">
-            <div class="chart-head">
-              <div class="chart-title"><h3>Memory</h3><p>per process, stacked MiB</p></div>
-              <div class="lookback" role="radiogroup" aria-label="Time window" data-lookback></div>
-            </div>
-            <canvas id="chart-mem" tabindex="0" role="img" aria-label="Stacked per-process memory usage bars"></canvas>
-            <ul id="process-legend" class="legend"></ul>
-          </figure>
+          <div class="chart-row">
+            <figure class="chart">
+              <div class="chart-head">
+                <div class="chart-title"><h3>CPU load</h3><p>per process, stacked percent</p></div>
+                <div class="lookback" role="radiogroup" aria-label="Time window" data-lookback></div>
+              </div>
+              <canvas id="chart-cpu" tabindex="0" role="img" aria-label="Stacked per-process CPU usage bars"></canvas>
+              <ul id="core-legend" class="legend"></ul>
+            </figure>
+            <figure class="chart">
+              <div class="chart-head">
+                <div class="chart-title"><h3>Memory</h3><p>per process, stacked MiB</p></div>
+                <div class="lookback" role="radiogroup" aria-label="Time window" data-lookback></div>
+              </div>
+              <canvas id="chart-mem" tabindex="0" role="img" aria-label="Stacked per-process memory usage bars"></canvas>
+              <ul id="process-legend" class="legend"></ul>
+            </figure>
+          </div>
           <div id="gpu-charts" class="chart-row" hidden>
             <figure class="chart">
               <div class="chart-head">

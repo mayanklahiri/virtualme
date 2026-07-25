@@ -83,4 +83,13 @@ test("status markup carries split GPU charts and the new LLM/action charts", asy
   assert.equal((html.match(/class="qo-tip" role="tooltip"/g) ?? []).length, 2, "two tooltips");
   assert.ok(!html.includes("qo-hint"), "old hint buttons removed");
   assert.ok(!html.includes("qo-row"), "old switch rows removed");
+  // CPU and memory share one .chart-row ancestor (desktop side-by-side).
+  const cpuAt = html.indexOf('id="chart-cpu"');
+  const memAt = html.indexOf('id="chart-mem"');
+  const rowOpen = html.lastIndexOf('<div class="chart-row"', cpuAt);
+  const rowClose = html.indexOf("</div>", memAt);
+  assert.ok(rowOpen >= 0 && rowClose > memAt && cpuAt < memAt,
+    "chart-cpu and chart-mem share one chart-row");
+  assert.ok(!html.slice(rowOpen, rowClose).includes('id="gpu-charts"'),
+    "CPU/MEM row is not the GPU row");
 });
