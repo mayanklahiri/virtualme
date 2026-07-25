@@ -10,7 +10,6 @@ import (
 func TestEncodeYAMLOrderAndQuoting(t *testing.T) {
 	value := map[string]any{
 		"body": []any{map[string]any{
-			"sel":  `body > div:nth-of-type(1)`,
 			"tag":  "h1",
 			"text": "Hello \"world\"\nline two",
 		}},
@@ -42,11 +41,10 @@ func TestEncodeYAMLOrderAndQuoting(t *testing.T) {
 }
 
 func TestDigestToYAMLBudgetMarker(t *testing.T) {
-	body := make([]any, 0, 200)
-	for range 200 {
+	body := make([]any, 0, 400)
+	for range 400 {
 		body = append(body, map[string]any{
 			"tag":  "p",
-			"sel":  "body > p:nth-of-type(1)",
 			"text": strings.Repeat("x", 120),
 		})
 	}
@@ -71,7 +69,7 @@ func TestDigestToYAMLNoMarkerWhenUntruncated(t *testing.T) {
 	digest := map[string]any{
 		"title": "T", "url": "https://example.com/",
 		"head": map[string]any{"lang": "en"},
-		"body": []any{map[string]any{"tag": "h1", "sel": "body > h1:nth-of-type(1)", "text": "Hi"}},
+		"body": []any{map[string]any{"tag": "h1", "text": "Hi"}},
 	}
 	got := digestToYAML(digest)
 	if strings.Contains(got, "exceeded budget") {
@@ -84,8 +82,7 @@ func TestDigestToYAMLPrunesEmptyContainers(t *testing.T) {
 		"title": "T", "url": "https://example.com/",
 		"head": map[string]any{},
 		"body": []any{map[string]any{
-			"tag": "ul", "sel": "body > ul:nth-of-type(1)",
-			"items": []any{}, "text": "",
+			"tag": "ul", "items": []any{}, "text": "",
 		}},
 	}
 	got := digestToYAML(digest)
@@ -107,21 +104,18 @@ func TestEncodeYAMLGoldenFixture(t *testing.T) {
 		},
 		"body": []any{
 			map[string]any{
-				"tag": "h1", "sel": "body > h1:nth-of-type(1)", "text": "Héading ünïcode",
+				"tag": "h1", "text": "Héading ünïcode",
 			},
 			map[string]any{
-				"tag": "table", "sel": "body > table:nth-of-type(1)",
-				"rows": []any{[]any{"A", "B"}, []any{"1", ""}},
+				"tag": "table", "rows": []any{[]any{"A", "B"}, []any{"1", ""}},
 			},
 			map[string]any{
-				"tag": "ul", "sel": "body > ul:nth-of-type(1)",
-				"items": []any{map[string]any{"text": "Item", "href": "https://example.com/item"}},
+				"tag": "ul", "items": []any{map[string]any{"text": "Item", "href": "https://example.com/item"}},
 			},
 			map[string]any{
-				"tag": "p", "sel": "body > p:nth-of-type(1)", "text": "para",
+				"tag": "p", "text": "para",
 				"children": []any{map[string]any{
-					"tag": "a", "sel": "body > p:nth-of-type(1) > a:nth-of-type(1)",
-					"href": "https://example.com/a", "text": "link",
+					"tag": "a", "href": "https://example.com/a", "text": "link",
 				}},
 			},
 		},
@@ -146,4 +140,11 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func TestEncodeYAMLSingleKeyNestedMapIsBlock(t *testing.T) {
+	got := encodeYAML(map[string]any{"title": "T", "head": map[string]any{"lang": "en"}})
+	if !strings.Contains(got, "head:\n\tlang: \"en\"") {
+		t.Fatalf("single-key nested map not emitted as block:\n%s", got)
+	}
 }

@@ -10,10 +10,11 @@ export function parseYamlLite(text) {
   const nodes = [];
   for (const raw of lines) {
     if (!raw.trim() || raw.trim().startsWith("#")) continue;
-    if (raw.includes("\t")) throw new Error("tabs are not allowed");
-    const indent = raw.match(/^ */)?.[0].length ?? 0;
-    if (indent % 2 !== 0) throw new Error("invalid indentation");
-    nodes.push({ indent, line: raw.slice(indent) });
+    const indent = raw.match(/^\t*/)?.[0].length ?? 0;
+    const line = raw.slice(indent);
+    if (line.startsWith(" ")) throw new Error("space indentation is not allowed");
+    if (line.includes("\t")) throw new Error("tabs are only allowed as indentation");
+    nodes.push({ indent, line });
   }
   const parsed = parseMapping(nodes, 0, -1);
   if (!parsed.value || typeof parsed.value !== "object" || Array.isArray(parsed.value)) {
@@ -99,7 +100,7 @@ function parseSequence(nodes, index, indent) {
       const itemRest = itemText.slice(itemColon + 2);
       /** @type {Record<string, any>} */
       const item = { [itemKey]: parseScalar(itemRest) };
-      // Subsequent mapping keys sit at node.indent+2; parseMapping wants
+      // Subsequent mapping keys sit one tab deeper; parseMapping wants
       // children with indent > parentIndent, so pass the dash-line indent.
       const child = parseMapping(nodes, cursor, node.indent);
       Object.assign(item, child.value);

@@ -15,7 +15,7 @@ var yamlKeyOrder = map[string][]string{
 	"":     {"title", "url", "head", "body"},
 	"head": {"lang", "description", "canonical", "og"},
 	"node": {
-		"tag", "sel", "text", "href", "src", "alt", "type", "name", "value",
+		"tag", "text", "href", "src", "alt", "type", "name", "value",
 		"placeholder", "action", "method", "label", "rows", "items", "children", "note",
 	},
 }
@@ -90,7 +90,7 @@ func encodeMap(mapping map[string]any, indent int, context string) string {
 	if len(mapping) == 0 {
 		return "{}"
 	}
-	pad := strings.Repeat("  ", indent)
+	pad := strings.Repeat("\t", indent)
 	lines := make([]string, 0, len(mapping))
 	for _, key := range orderedKeys(mapping, context) {
 		value := mapping[key]
@@ -103,15 +103,18 @@ func encodeMap(mapping map[string]any, indent int, context string) string {
 			nextContext = "node"
 		}
 		encoded := encodeNested(value, indent+1, nextContext)
-		if strings.HasPrefix(encoded, "- ") || strings.HasPrefix(encoded, "-\n") {
+		// Nested mappings and sequences always start on their own line; a
+		// single-key nested map has no newline yet must still be a block.
+		switch value.(type) {
+		case map[string]any, []any:
+			if encoded == "{}" || encoded == "[]" {
+				lines = append(lines, fmt.Sprintf("%s%s: %s", pad, key, encoded))
+				continue
+			}
 			lines = append(lines, fmt.Sprintf("%s%s:\n%s", pad, key, encoded))
-			continue
+		default:
+			lines = append(lines, fmt.Sprintf("%s%s: %s", pad, key, encoded))
 		}
-		if strings.Contains(encoded, "\n") {
-			lines = append(lines, fmt.Sprintf("%s%s:\n%s", pad, key, encoded))
-			continue
-		}
-		lines = append(lines, fmt.Sprintf("%s%s: %s", pad, key, encoded))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -131,7 +134,7 @@ func encodeSequence(items []any, indent int, context string) string {
 	if len(items) == 0 {
 		return "[]"
 	}
-	pad := strings.Repeat("  ", indent)
+	pad := strings.Repeat("\t", indent)
 	lines := make([]string, 0, len(items))
 	for _, item := range items {
 		switch typed := item.(type) {
@@ -141,7 +144,7 @@ func encodeSequence(items []any, indent int, context string) string {
 			if len(innerLines) == 0 {
 				continue
 			}
-			lines = append(lines, pad+"- "+strings.TrimPrefix(innerLines[0], strings.Repeat("  ", indent+1)))
+			lines = append(lines, pad+"- "+strings.TrimPrefix(innerLines[0], strings.Repeat("\t", indent+1)))
 			for _, line := range innerLines[1:] {
 				if line == "" {
 					continue
@@ -171,7 +174,7 @@ func digestToYAML(digest map[string]any) string {
 		return text
 	}
 	// Reserve room for the marker line so the marker itself never overflows.
-	markerRoom := len(`  - note: "truncated: page digest exceeded budget"`) + 1
+	markerRoom := len("\t- note: \"truncated: page digest exceeded budget\"") + 1
 	for len(text)+markerRoom > readPageCap && dropLastBodyNode(digest) {
 		text = encodeYAML(digest)
 	}

@@ -10,15 +10,13 @@ const fixtures = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fix
 const sample = `title: "Example Domain"
 url: "https://example.com/"
 head:
-  lang: "en"
+\tlang: "en"
 body:
-  - tag: "h1"
-    sel: "body > div:nth-of-type(1) > h1:nth-of-type(1)"
-    text: "Example Domain"
-  - tag: "a"
-    sel: "body > a:nth-of-type(1)"
-    href: "https://www.iana.org/domains/example"
-    text: "More information..."
+\t- tag: "h1"
+\t\ttext: "Example Domain"
+\t- tag: "a"
+\t\thref: "https://www.iana.org/domains/example"
+\t\ttext: "More information..."
 `;
 
 test("parseYamlLite parses read_page subset", () => {
@@ -31,9 +29,10 @@ test("parseYamlLite parses read_page subset", () => {
   assert.equal(parsed.body[1].href, "https://www.iana.org/domains/example");
 });
 
-test("parseYamlLite rejects tabs and unquoted scalars", () => {
+test("parseYamlLite rejects space indentation, stray tabs, and unquoted scalars", () => {
   assert.throws(() => parseYamlLite("title: Example\n"), /double-quoted strings/);
-  assert.throws(() => parseYamlLite("title:\t\"x\"\n"), /tabs/);
+  assert.throws(() => parseYamlLite("title:\t\"x\"\n"), /tabs are only allowed as indentation/);
+  assert.throws(() => parseYamlLite('head:\n  lang: "en"\n'), /space indentation/);
 });
 
 test("parseYamlLite round-trips the Go emitter golden fixture", () => {
@@ -49,26 +48,21 @@ test("parseYamlLite round-trips the Go emitter golden fixture", () => {
     body: [
       {
         tag: "h1",
-        sel: "body > h1:nth-of-type(1)",
         text: "Héading ünïcode",
       },
       {
         tag: "table",
-        sel: "body > table:nth-of-type(1)",
         rows: [["A", "B"], ["1", ""]],
       },
       {
         tag: "ul",
-        sel: "body > ul:nth-of-type(1)",
         items: [{ text: "Item", href: "https://example.com/item" }],
       },
       {
         tag: "p",
-        sel: "body > p:nth-of-type(1)",
         text: "para",
         children: [{
           tag: "a",
-          sel: "body > p:nth-of-type(1) > a:nth-of-type(1)",
           text: "link",
           href: "https://example.com/a",
         }],

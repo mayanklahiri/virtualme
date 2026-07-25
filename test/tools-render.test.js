@@ -8,11 +8,10 @@ test("yaml-digest results are classified before JSON page shapes", () => {
     'title: "An Example Article"',
     'url: "https://example.test/article"',
     "head:",
-    '  lang: "en"',
+    '\tlang: "en"',
     "body:",
-    '  - tag: "h1"',
-    '    sel: "body > h1:nth-of-type(1)"',
-    '    text: "Heading"',
+    '\t- tag: "h1"',
+    '\t\ttext: "Heading"',
   ].join("\n");
   const result = classifyResult(payload);
   assert.equal(result.kind, "yaml-digest");

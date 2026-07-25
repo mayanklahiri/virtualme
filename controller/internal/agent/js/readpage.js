@@ -7,13 +7,6 @@
   const MAX_ITEMS = 120;
   const NODE_BUDGET = 4000;
   const PRUNE = new Set(["script", "style", "noscript", "template"]);
-  // Tags whose nodes always keep their sel: interaction and follow-up
-  // dom_query targets. Text-only leaves outside this set drop sel — the
-  // nearest kept ancestor's sel locates them.
-  const SEL_KEEP = new Set([
-    "a", "img", "video", "audio", "iframe", "table", "form", "input",
-    "select", "textarea", "button", "h1", "h2", "h3", "h4", "h5", "h6",
-  ]);
   // Tags that absorb a sole plain-text leaf child as their own text.
   const ABSORB = new Set(["a", "button", "label", "h1", "h2", "h3", "h4", "h5", "h6"]);
   const SEMANTIC = new Set([
@@ -29,43 +22,6 @@
     if (!value) return "";
     if (value.length > cap) return value.slice(0, cap) + "…";
     return value;
-  }
-
-  function escapeID(id) {
-    return String(id).replace(/([ !"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, "\\$1");
-  }
-
-  function typeIndex(el) {
-    const tag = el.tagName.toLowerCase();
-    let index = 1;
-    let total = 0;
-    for (const child of el.parentElement.children) {
-      if (child.tagName.toLowerCase() === tag) total++;
-      if (child === el) index = total;
-    }
-    return { index, total };
-  }
-
-  function selectorFor(el) {
-    const parts = [];
-    let current = el;
-    while (current && current !== document.body) {
-      const id = current.getAttribute("id");
-      if (id) {
-        parts.unshift("#" + escapeID(id));
-        break;
-      }
-      const tag = current.tagName.toLowerCase();
-      const { index, total } = typeIndex(current);
-      // Only-of-type segments stay unique without the suffix; :nth-of-type(1)
-      // noise dominated digest bytes on component-heavy pages.
-      parts.unshift(total > 1 ? tag + ":nth-of-type(" + index + ")" : tag);
-      current = current.parentElement;
-    }
-    if (current === document.body || (current && current.parentElement === document.body)) {
-      return "body > " + parts.join(" > ");
-    }
-    return parts.join(" > ");
   }
 
   function isVisible(el) {
@@ -287,7 +243,7 @@
       const childTag = child.tagName.toLowerCase();
       if (tag === "dl") {
         if (childTag === "dt" || childTag === "dd") {
-          items.push({ tag: childTag, sel: selectorFor(child), text: fullText(child) });
+          items.push({ tag: childTag, text: fullText(child) });
         }
       } else if (childTag === "li") {
         const flat = extractListItem(child);
@@ -352,19 +308,16 @@
       const label = capAttr(el.getAttribute("aria-label"));
       if (!label) return null;
       kept++;
-      // No sel: an icon is actuated through its labelled parent control.
       return { tag: "svg", text: label };
     }
 
     if (tag === "table") {
       kept++;
-      const node = { tag, sel: selectorFor(el), rows: extractTable(el) };
-      return node;
+      return { tag, rows: extractTable(el) };
     }
     if (tag === "ul" || tag === "ol" || tag === "dl") {
       kept++;
-      const node = { tag, sel: selectorFor(el), items: extractList(el) };
-      return node;
+      return { tag, items: extractList(el) };
     }
 
     kept++;
@@ -374,7 +327,7 @@
       return null;
     }
 
-    const node = { tag, sel: selectorFor(el) };
+    const node = { tag };
     populateNode(el, node);
 
     const childTags = new Set(["input", "select", "textarea", "button", "img", "a"]);
@@ -410,20 +363,15 @@
         delete node.children;
       }
     }
-    if (!SEL_KEEP.has(tag) && !node.children && node.text) {
+    // Decorative separator leaves ("•", "|") carry no content. Links keep
+    // theirs (an icon glyph can be the only affordance).
+    if (tag !== "a" && !node.children && node.text) {
       let extra = false;
       for (const key in node) {
-        if (key !== "tag" && key !== "sel" && key !== "text") { extra = true; break; }
+        if (key !== "tag" && key !== "text") { extra = true; break; }
       }
-      if (!extra) {
-        // Decorative separator leaves ("•", "|") carry no content.
-        if (!/[\p{L}\p{N}]/u.test(node.text)) return null;
-        delete node.sel;
-      }
+      if (!extra && !/[\p{L}\p{N}]/u.test(node.text)) return null;
     }
-    // Images are observation content, not actuation targets: the enclosing
-    // link or button carries the sel, and dom_query finds imgs by src/alt.
-    if (tag === "img") delete node.sel;
     return node;
   }
 

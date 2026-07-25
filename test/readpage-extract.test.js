@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { createDOMStub, runReadPage } from "./helpers/dom-stub.mjs";
+import { runReadPage } from "./helpers/dom-stub.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixtures = path.join(root, "test/fixtures");
@@ -28,20 +28,16 @@ function walkNodes(nodes, fn) {
   }
 }
 
-/** @param {any} fixture @param {any} digest */
-function assertDigestInvariants(fixture, digest) {
-  const stub = /** @type {any} */ (createDOMStub(fixture));
+/** @param {any} digest */
+function assertDigestInvariants(digest) {
   walkNodes(digest.body, (node) => {
     if (node.note) return;
-    // Flattened list items are {text[, href]} without tag/sel (spec 027 §3f).
+    // Flattened list items are {text[, href]} without tag (spec 027 §3f).
     if (!node.tag) {
       assert.ok(node.text, `untagged node without text: ${JSON.stringify(node)}`);
       return;
     }
-    if (node.sel) {
-      const matches = stub.document.querySelectorAll(node.sel);
-      assert.equal(matches.length, 1, `sel does not resolve uniquely: ${node.sel}`);
-    }
+    assert.equal(node.sel, undefined, `sel must not be emitted: ${JSON.stringify(node)}`);
     if (!SEMANTIC.has(node.tag) && !CONTENT_KEYS.some((key) => node[key])) {
       assert.fail(`content-free non-semantic wrapper survived collapse: ${JSON.stringify(node)}`);
     }
@@ -64,7 +60,6 @@ test("read_page extracts example.com structure deterministically", () => {
   let links = 0;
   walkNodes(first.body, (node) => {
     assert.ok(node.tag);
-    assert.ok(node.sel);
     if (node.tag === "h1") headings++;
     if (node.href) {
       links++;
@@ -73,7 +68,7 @@ test("read_page extracts example.com structure deterministically", () => {
   });
   assert.equal(headings, 1);
   assert.equal(links, 1);
-  assertDigestInvariants(fixture, first);
+  assertDigestInvariants(first);
 });
 
 test("read_page extracts lahiri.me links and headings", () => {
@@ -85,7 +80,7 @@ test("read_page extracts lahiri.me links and headings", () => {
     if (node.href) links++;
   });
   assert.ok(links >= 2);
-  assertDigestInvariants(fixture, digest);
+  assertDigestInvariants(digest);
 });
 
 test("hidden and aria-hidden subtrees are pruned with scripts", () => {

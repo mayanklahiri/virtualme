@@ -4,7 +4,7 @@
 |---|---|
 | Status | Accepted (2026-07-24) |
 | Depends on | `specs/008-browser-agent.md` (agent loop, tools, CDP client), `specs/012-agent-observation-soak.md` (observation caps, soak suite), `specs/021-agent-cdp-tools-console.md` (CDP observation tools, Tools console), `specs/022-system-prompt.md` (prompt references `read_page`) |
-| Produces | A `read_page` tool that returns a deterministic, hierarchically structured YAML digest of the important visible DOM (title, url, head, body) with a CSS selector per node; a hand-written deterministic YAML-subset emitter in Go and a matching zero-dependency parser in JS; a polished reusable collapsible-tree widget rendering the digest on the Tools console; unit tests against a committed raw-DOM fixture of `www.lahiri.me`; the `dom_query` nil-attributes fix with its failing-test-first record; a binding tool-testing discipline (every tool bug gets a failing test first; every tool is soak-exercised live on `www.lahiri.me`) |
+| Produces | A `read_page` tool that returns a deterministic, hierarchically structured YAML digest of the important visible DOM (title, url, head, body); a hand-written deterministic YAML-subset emitter in Go and a matching zero-dependency parser in JS; a polished reusable collapsible-tree widget rendering the digest on the Tools console; unit tests against a committed raw-DOM fixture of `www.lahiri.me`; the `dom_query` nil-attributes fix with its failing-test-first record; a binding tool-testing discipline (every tool bug gets a failing test first; every tool is soak-exercised live on `www.lahiri.me`) |
 | Followed by | Future specs |
 
 ## 0. Executor instructions
@@ -60,25 +60,24 @@ keys, always in this order:
 title: "Example Domain"
 url: "https://example.com/"
 head:
-  lang: "en"
-  description: "…"          # meta[name=description], if present
-  canonical: "https://…"    # link[rel=canonical], if present
-  og:                       # meta[property^="og:"], if any; keys sorted
-    image: "https://…"
-    title: "…"
+	lang: "en"
+	description: "…"          # meta[name=description], if present
+	canonical: "https://…"    # link[rel=canonical], if present
+	og:                       # meta[property^="og:"], if any; keys sorted
+		image: "https://…"
+		title: "…"
 body:
-  - tag: "h1"
-    sel: "body > div:nth-of-type(1) > h1:nth-of-type(1)"
-    text: "Example Domain"
-  - tag: "p"
-    sel: "body > div:nth-of-type(1) > p:nth-of-type(1)"
-    text: "This domain is for use in illustrative examples…"
-    children:
-      - tag: "a"
-        sel: "body > div:nth-of-type(1) > p:nth-of-type(2) > a:nth-of-type(1)"
-        href: "https://www.iana.org/domains/example"
-        text: "More information..."
+	- tag: "h1"
+		text: "Example Domain"
+	- tag: "p"
+		text: "This domain is for use in illustrative examples…"
+		children:
+			- tag: "a"
+				href: "https://www.iana.org/domains/example"
+				text: "More information..."
 ```
+
+(Indentation above is literal tabs — see §4.)
 
 The previous plain-text output is **dropped entirely** — there is no `text`
 top-level key; text lives on the structured nodes.
@@ -91,7 +90,6 @@ absent ones (never emit empty strings, empty sequences, or empty mappings):
 | Key | When present | Content |
 |---|---|---|
 | `tag` | always | lowercased element tag |
-| `sel` | always | full CSS selector (§3e) |
 | `text` | element has own text | own visible text (§3d), normalized, ≤ 300 chars (*tunable*), truncated with a trailing `…` |
 | `href` | `a`, `area` | absolute resolved URL, ≤ 300 chars |
 | `src` | `img`, `video`, `audio`, `source`, `iframe`, `embed` | absolute resolved URL, ≤ 300 chars |
@@ -157,21 +155,13 @@ every run of Unicode whitespace to one space, trim, and if the result exceeds
 the cap, cut at the cap and append `…`. An element whose normalized own text
 is empty has no `text` key.
 
-### 3e. Selectors
+### 3e. Selectors (removed by A2)
 
-`sel` is a full CSS selector sufficient for `document.querySelector` to find
-the exact node, built during descent:
-
-- Segment for element `e`: if `e` has a non-empty `id`, the segment is
-  `#` + CSS-escaped id and the path **restarts** there (nearest-id
-  short-circuit); otherwise `tag:nth-of-type(k)` where `k` is the 1-based
-  index of `e` among preceding siblings of the same tag (count via
-  `children`, not `childNodes`).
-- Join segments with ` > ` from the nearest id ancestor (or `body`) down to
-  the element. `body` itself is the bare segment `body`.
-- The goal is not to enable selector-driven automation — it is provenance:
-  every extracted fact carries an exact pointer back into the live DOM that a
-  follow-up `dom_query` call can use.
+Digest nodes carry **no** `sel` key. Selector paths dominated digest bytes
+(≈ 40 % on component-heavy pages) and tokenized poorly, crowding out actual
+content; follow-up interaction goes through `dom`/`click_element` refs or a
+model-constructed `dom_query` selector instead. The original per-node
+selector design is recorded in this spec's history; see amendment A2.
 
 ### 3f. Tables, lists, forms
 
@@ -195,12 +185,15 @@ the exact node, built during descent:
 One strict subset, produced by Go and parsed by JS. Anything outside the
 subset is a bug in the emitter or a rejection in the parser.
 
-- Block-style mappings and sequences only; 2-space indentation; sequence
-  items as `- ` at the parent's indent + 2.
+- Block-style mappings and sequences only; **one tab per indentation level**
+  (a tab is one token where two-space levels compound); sequence items as
+  `- ` at the parent's indent + 1 tab. Tabs may appear only as indentation;
+  spaces may not appear in indentation.
 - Scalars: strings are always double-quoted using JSON string escaping
-  (Go: `json.Marshal` of the string; embedded newlines become `\n` — no
-  multi-line scalars, no plain-style strings). Integers bare. No booleans,
-  null, anchors, aliases, tags, flow style, comments, or document markers.
+  without HTML escaping (Go: `json.Encoder` with `SetEscapeHTML(false)`;
+  embedded newlines become `\n`, embedded tabs `\t` — no multi-line scalars,
+  no plain-style strings). Integers bare. No booleans, null, anchors,
+  aliases, tags, flow style, comments, or document markers.
 - Mapping keys are bare `[a-z][a-z0-9_]*` identifiers.
 - Key order: top-level `title, url, head, body`; head `lang, description,
   canonical, og`; nodes as the §3b table order; any key not covered by a
@@ -222,8 +215,9 @@ mid-document cut.
 **JS**: new `controller/web/static/js/yaml-lite.js` exporting
 `parseYamlLite(text)` → plain JS values, hand-written, line-based,
 indentation-driven; quoted scalars are decoded with `JSON.parse`. It throws
-on anything outside the subset (tabs, flow style, unquoted strings, bad
-indent). It is a pure module (no `document`), unit-testable under Node.
+on anything outside the subset (space indentation, tabs outside indentation,
+flow style, unquoted strings). It is a pure module (no `document`),
+unit-testable under Node.
 
 ## 5. Tool description and agent wiring
 
@@ -233,10 +227,10 @@ becomes (normative):
 > Read the current page as a structured YAML digest: title, url, head
 > metadata, and a simplified hierarchy of the important visible elements —
 > headings, text blocks, links (href), images (src, alt), media, tables
-> (rows), lists, and form structures — each with a `sel` CSS selector.
+> (rows), lists, and form structures.
 > This is the primary tool for extracting information from a page; prefer it
-> over screenshots or dom for reading content, and use the `sel` values with
-> dom_query for follow-up detail.
+> over screenshots or dom for reading content, and use dom_query or dom for
+> follow-up detail on specific elements.
 
 Schema stays the empty-object schema (no parameters). The spec-022 system
 prompt already names `read_page` in its observe-first policy; its wording is
@@ -371,9 +365,9 @@ binds structure:
    network — gate-safe.
 2. **Extraction tests** `test/readpage-extract.test.js`: run
    `controller/internal/agent/js/readpage.js` verbatim in the stub sandbox
-   against both fixtures. Assert for lahiri.me: top-level shape; every node
-   has `tag` + `sel`; every `sel` resolves back to exactly one node in the
-   stub; all `a` nodes carry absolute `href`s; no node with a
+   against both fixtures. Assert for lahiri.me: top-level shape; every
+   structured node has `tag` and no node has `sel` (A2); all `a` nodes carry
+   absolute `href`s; no node with a
    collapse-eligible wrapper tag and no content survives; text nodes are
    normalized (no runs of whitespace); byte-identical output across two runs.
    Synthetic mini-fixtures cover: hidden/`aria-hidden` pruning, nested-div
@@ -390,7 +384,8 @@ binds structure:
 4. **Node tests**: `test/yaml-lite.test.js` — parser round-trips emitter
    output for nested fixtures (a golden YAML fixture generated by the Go
    emitter and committed under `test/fixtures/`), rejects out-of-subset
-   documents (tabs, flow style, unquoted scalar). `test/tools-render.test.js`
+   documents (space indentation, tabs outside indentation, flow style,
+   unquoted scalar). `test/tools-render.test.js`
    gains `yaml-digest` classification cases (positive, and negatives: valid
    YAML without url, valid JSON page shape still classifies as before).
    `test/tools-ui.test.js` asserts `tree.js` exists, exports `renderTree`,
@@ -420,9 +415,9 @@ discipline (failing test first; live coverage on lahiri.me only).
       tests, emitter/parser tests, and render classification tests.
 - [ ] `read_page` on `https://example.com` (Tools console) renders a
       collapsible tree whose `body` contains the `h1` and the IANA link with
-      absolute `href` and working `sel`; the raw result is valid subset YAML.
-- [ ] `read_page` on `https://www.lahiri.me` yields a digest ≤ 16000 bytes
-      containing the page's headings and links with selectors; repeated calls
+      absolute `href`; the raw result is valid subset YAML.
+- [ ] `read_page` on `https://www.lahiri.me` yields a digest within
+      `readPageCap` containing the page's headings and links; repeated calls
       on the unchanged page are byte-identical.
 - [ ] A 4 GB-class local model, asked in chat to list the stories on a
       news-feed-style page, extracts titles and links from a single
@@ -502,3 +497,25 @@ browsers.
 
 Normative references to the old constants and rules in §3b, §3c, §3e, §4,
 §9, and §10 are to be read with these amendments.
+
+### A2 (2026-07-24): drop `sel`, tab indentation, denser digests
+
+Even after A1, selector paths remained ~25 % of digest bytes and the budget
+marker appeared well before full feed coverage. This amendment rewrites the
+normative sections in place (§1 Produces, §3a example, §3b table, §3e, §4,
+§5, §9, §11) as follows:
+
+- **`sel` is removed from the digest entirely.** No node carries a selector;
+  the emitter's node key order drops it and the extraction script no longer
+  builds selector paths. Follow-up interaction uses `dom`/`click_element`
+  refs or a model-written `dom_query` selector. The extraction tests now
+  assert `sel` is absent.
+- **Indentation is one literal tab per level** in both the Go emitter and
+  the JS parser. Tabs are indentation-only; spaces are forbidden in
+  indentation; tabs inside scalars stay JSON-escaped (`\t`). This roughly
+  halves indentation bytes at depth and tokenizes as one token per level.
+- The CDP `dom` tool already restricts entries to visible elements (laid-out
+  nodes with positive bounds, skipping computed `display: none` and
+  `visibility: hidden`, both on- and off-screen); recorded here as verified,
+  no change required.
+- The committed golden fixture is regenerated (tabs, no `sel`).
