@@ -203,4 +203,8 @@ mail flush silence, outbox transitions, queue clear, and grid-vs-pure
 
 ## Amendments
 
-(None.)
+### 2026-07-25 — Bar cap 120 → 72
+
+§3.1 S1's client bar cap (`MAX_BARS` in `chart-data.js`) is reduced from 120
+to 72. Downsample merges `ceil(n/72)` adjacent samples; gates and
+`test/chart-downsample.test.js` assert the new bound.

@@ -1,7 +1,7 @@
 // Pure chart-series helpers (no DOM) so Node unit tests can cover them.
 
 /** Maximum number of bars any chart may draw. */
-export const MAX_BARS = 120;
+export const MAX_BARS = 72;
 
 /**
  * Merge adjacent samples so no more than maxBars buckets remain.

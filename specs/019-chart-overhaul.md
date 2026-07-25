@@ -160,6 +160,12 @@ any lookback. Server tiers and `resSec` semantics are unchanged; the drawn
 `resSec` scales by the merge factor. `.chart-head` gains a 1rem bottom
 margin separating titles from the plot.
 
+### 2026-07-25 — Client-side bar cap reduced to 72
+
+`MAX_BARS` in `chart-data.js` is lowered from 120 to 72 (40% reduction).
+Merge factor is now `ceil(n/72)`; no chart draws more than 72 bars at any
+lookback.
+
 ### 2026-07-24 — CPU load and memory pair side-by-side
 
 The Status page draws GPU utilization and GPU memory side-by-side inside

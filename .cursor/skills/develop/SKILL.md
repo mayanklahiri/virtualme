@@ -140,7 +140,7 @@ Charts use the reusable `makeChart` path in `chart.js`: supply sample values,
 series names, units, and a maximum function while retaining the shared
 lookback/tick/hover behavior. Every chart series and legend swatch must use the
 theme's `--p1` through `--p8` ramp; never introduce chart-specific colors.
-`chart-data.js` downsamples every drawn series to at most 120 bars (gauges
+`chart-data.js` downsamples every drawn series to at most 72 bars (gauges
 average, counter fields listed in `SUM_MODES` sum). LLM token/timing and
 agent-action counters accumulate in `internal/metrics.Counters`, drain into
 each two-second snapshot, and sum (never average) during tier roll-up.
