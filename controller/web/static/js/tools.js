@@ -1,4 +1,5 @@
 import { formatShortDuration } from "./duration.js";
+import { classifyResult, parseEnvBlocks } from "./tools-render.js";
 
 /** @typedef {Record<string, any>} Data */
 
@@ -55,6 +56,64 @@ function openLightbox(src, alt) {
   close.focus();
 }
 
+/**
+ * Render one tool-result text payload by shape: page-shaped JSON becomes a
+ * linked title plus plain text, KEY=value runs become sorted tables, and
+ * everything else stays pretty-printed JSON or preformatted text.
+ * @param {HTMLElement} body
+ * @param {string} text
+ */
+function appendResultText(body, text) {
+  const shape = classifyResult(text);
+  if (shape.kind === "page") {
+    const heading = document.createElement("h3");
+    heading.className = "tool-page-title";
+    const link = document.createElement("a");
+    link.href = shape.url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = shape.title || shape.url;
+    heading.append(link);
+    const url = document.createElement("p");
+    url.className = "tool-page-url";
+    url.textContent = shape.url;
+    const pageText = document.createElement("pre");
+    pageText.className = "tool-page-text";
+    pageText.textContent = shape.text;
+    body.append(heading, url, pageText);
+    return;
+  }
+  if (shape.kind === "json") {
+    const pre = document.createElement("pre");
+    pre.textContent = JSON.stringify(JSON.parse(text), null, 2);
+    body.append(pre);
+    return;
+  }
+  for (const segment of parseEnvBlocks(text)) {
+    if (segment.kind === "env") {
+      const table = document.createElement("table");
+      table.className = "tool-env-table";
+      const tbody = document.createElement("tbody");
+      for (const [key, value] of segment.entries) {
+        const row = document.createElement("tr");
+        const keyCell = document.createElement("th");
+        keyCell.scope = "row";
+        keyCell.textContent = key;
+        const valueCell = document.createElement("td");
+        valueCell.textContent = value;
+        row.append(keyCell, valueCell);
+        tbody.append(row);
+      }
+      table.append(tbody);
+      body.append(table);
+    } else if (segment.text.trim()) {
+      const pre = document.createElement("pre");
+      pre.textContent = segment.text;
+      body.append(pre);
+    }
+  }
+}
+
 /** @param {(value: Data) => void} send */
 export function initTools(send) {
   const list = /** @type {HTMLElement} */ (document.querySelector("#tools-list"));
@@ -100,15 +159,7 @@ export function initTools(send) {
       body.append(zoom);
     }
     const text = String(result.text || result.error || "");
-    if (text) {
-      const pre = document.createElement("pre");
-      try {
-        pre.textContent = JSON.stringify(JSON.parse(text), null, 2);
-      } catch {
-        pre.textContent = text;
-      }
-      body.append(pre);
-    }
+    if (text) appendResultText(body, text);
     if (result.error && result.text) {
       const error = document.createElement("p");
       error.className = "tool-field-error";
