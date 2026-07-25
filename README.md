@@ -64,7 +64,7 @@ The first start loads a ~3 GB model; allow a few minutes for `/healthz` to becom
 | `virtualme build` | Build `:dev` and the configured start tag from a checkout |
 | `virtualme keygen` | Generate a 256-bit base64url token |
 | `virtualme update` | Pull the configured image tag |
-| `virtualme soak [--no-build]` | Rebuild, restart on a fresh data dir, and run live soak flows against the running controller (source checkout only) |
+| `virtualme soak [--no-build]` | Rebuild once, run the full e2e suite, then run live soak flows on a fresh data dir (source checkout only) |
 
 Set `VIRTUALME_IMAGE` or `VIRTUALME_TAG` to override the default image reference,
 `VIRTUALME_DATA` to override the default data directory, and `TZ` to override
@@ -169,9 +169,18 @@ invoke any tool manually. Forms are generated from the server schemas, calls
 join the same sequential queue as chat/project work, and results are retained
 in the Jobs activity ledger. Results render by shape: page-shaped JSON becomes
 a linked title plus plain text, `KEY=value` runs become sorted tables, and
-manual screenshots return pure captures without the agent's coordinate grid. This can invoke `bash` and browser actuation;
+manual screenshots return pure captures without the agent's coordinate grid. The agent's `read_page` tool returns a
+token-budgeted structured YAML digest of the page, rendered on `/tools` as a
+collapsible tree. This can invoke `bash` and browser actuation;
 under the v1 trust model it has no additional authentication, so expose the
 console only on a trusted private network.
+
+Use `/data` to browse the persistent volume without `docker exec`: a lazy
+directory tree over read-only `GET /api/data/*` endpoints with strict path
+containment, typed viewers (image lightbox, JSON/YAML trees, JSONL rows, WAV
+playback, capped text), and a raw download for every file. The whole volume,
+including the DKIM key and Chromium profile, is visible by design under the
+v1 trust model.
 
 All LLM work runs through a Valkey-backed sequential queue with interactive
 priority, retries, visibility recovery, and a dead-letter list. Chat messages

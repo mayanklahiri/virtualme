@@ -26,7 +26,7 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `.cursor/skills/` | Shared AI operating and development procedures |
 | `specs/` | Numbered, authoritative implementation specs |
 | `docker/` | Container image and supervised services (spec 002) |
-| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached local TTS, outbound mail, and multi-page console (specs 002–026) |
+| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached local TTS, outbound mail, read-only data explorer, and multi-page console (specs 002–028) |
 | `controller/prompts/` | Embedded plain-text agent and fallback-chat system prompts |
 
 ## Commands
@@ -42,14 +42,15 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `bash test/smoke.sh` | Run the container smoke test (spec 002) |
 | `bash test/e2e.sh` | Run full end-to-end tests (spec 003) |
 | `E2E_AGENT=1 bash test/e2e.sh` | Include the slow real vision/browser-agent probe |
-| `./cli.sh soak [--no-build]` | Rebuild, restart on a fresh data dir, and run live soak flows (spec 012) |
+| `./cli.sh soak [--no-build]` | Rebuild once, run the full e2e suite, then run live soak flows on a fresh data dir (spec 012) |
 | `bash controller/tools/fetch-assets.sh` | Fetch pinned fonts, icons, and hero image (specs 003, 005, 011) |
 
 The controller's browser agent combines vision screenshots, dense rendered
 DOM and read-only CDP observations, OS-level `xdotool` mouse/keyboard
 actuation, and bounded bash execution. DOM observations carry the page URL
 and title, omit layout-only noise, and always fit the model's context;
-`navigate` waits for the page to settle. CDP never performs input or
+`read_page` emits a token-budgeted structured YAML digest of the page,
+and `navigate` waits for the page to settle. CDP never performs input or
 navigation; agent screenshots and step logs (including observation text)
 persist under `$VM_DATA_DIR/agent/`. The vision coordinate grid is drawn only
 on agent observations; manual Tools-console screenshots are pure captures.
@@ -60,8 +61,14 @@ text in `controller/prompts/`; wording changes require a spec amendment.
 The server-driven `/tools` console lists every agent definition, generates
 forms from its JSON schema, and serializes manual calls through the job queue;
 manual results and timings enter the persistent activity ledger. Tool results
-render by shape: page-shaped JSON becomes a linked title plus plain text and
-KEY=value runs become sorted tables.
+render by shape: page-shaped JSON becomes a linked title plus plain text,
+KEY=value runs become sorted tables, and `read_page` YAML digests become
+collapsible trees.
+The read-only `/data` console tab explores `$VM_DATA_DIR` through GET-only
+`/api/data/list` and `/api/data/file` endpoints with strict path containment;
+typed viewers render images (lightbox), JSON/YAML trees, JSONL rows, WAV
+audio, and 256 KiB-capped text, with raw downloads for everything. Under the
+v1 trust model the whole volume is visible by design.
 Chat renders GFM pipe tables, buffers the latest task's agent steps
 server-side for websocket-reconnect replay, and declares no live regions.
 The loopback-only `ttsd` service wraps pinned sherpa-onnx and Piper Lessac

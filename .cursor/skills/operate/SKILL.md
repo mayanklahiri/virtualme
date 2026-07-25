@@ -24,7 +24,7 @@ prompts or model requests are sent to external providers.
 | `npx virtualme update` | Pull the configured image |
 | `npx virtualme build` | Build `:dev` and the configured start tag from a source checkout |
 | `npx virtualme keygen` | Print a 256-bit base64url token |
-| `./cli.sh soak [--no-build]` | Rebuild, restart on a fresh data dir, and run live soak flows from a source checkout |
+| `./cli.sh soak [--no-build]` | Rebuild once, run the full e2e suite, then run live soak flows on a fresh data dir (source checkout) |
 
 Env overrides: `VIRTUALME_IMAGE`, `VIRTUALME_TAG`, `VIRTUALME_DATA`, and `TZ`
 (forwarded to the container; otherwise the detected host timezone is used). The CLI
@@ -41,6 +41,7 @@ also forwards configured `VM_MAIL_MAILNAME`, `VM_MAIL_FROM`,
 - `http://localhost:8080/projects/<id>` — project task, runs, and scratch details
 - `http://localhost:8080/jobs` — queue, filterable machine activity, and details
 - `http://localhost:8080/tools` — agent definitions, queue-backed manual invocation, and structured results
+- `http://localhost:8080/data` — read-only explorer of the persistent data volume
 - `http://localhost:8080/status` — service/GPU status, LLM token and browser-action charts, active time selectors, Quick Options toggles, and tiered metrics
 - `http://localhost:8080/chat` — shared local-model chat
 - `http://localhost:8080/speech` — streaming local text-to-speech
@@ -85,6 +86,11 @@ renders as a linked title plus text, env output as sorted tables, and manual
 screenshots have no coordinate grid. The page can run
 `bash` and browser-input tools; it has no additional authentication under the
 v1 trust model, so use it only on a trusted private network.
+
+Use `/data` when troubleshooting: it browses `$VM_DATA_DIR` read-only without
+`docker exec`. Inspect agent step logs and screenshots under `agent/`, the
+mail spool under `mail/`, cached speech WAVs under `tts-cache/`, and metrics
+tiers under `metrics/`; every file offers a raw download.
 
 The Quick Options panel on `/status` is a row of fixed-size cockpit-style lit
 buttons with labels beneath; hover or focus a button (or tap its label) for

@@ -26,10 +26,11 @@ the same script. New stateful components must be added to the canonical map in
 `specs/007-persistence-locality.md` §1.
 Container tests: `bash test/smoke.sh`, `bash test/e2e.sh` (need Docker; e2e
 drives the real CLI and includes a restart cycle plus a chat probe).
-Soak tests: `./cli.sh soak [--no-build]` (spec 012) rebuilds, restarts on a
-fresh data dir, and runs live end-to-end flows from `test/soak.mjs` with
-layered hard/soft assertions (initial flows drive the browser agent via chat;
-the runner is feature-agnostic).
+Soak tests: `./cli.sh soak [--no-build]` (spec 012) builds once, runs the
+full e2e suite on that image (`E2E_SKIP_BUILD=1`), then runs live flows from
+`test/soak.mjs` on a fresh data dir with layered hard/soft assertions (flows
+drive the browser agent via chat or invoke tools manually; the runner is
+feature-agnostic).
 
 ## Docker layers
 
@@ -89,11 +90,14 @@ requires a new spec.
 | `controller/internal/jiggler` | Default-on humanlike mouse trajectories, Valkey state, and burst lifecycle |
 | `controller/cmd/ttsd`, `controller/internal/tts` | Single-voice (Lessac) synthesis with unknown-voice fallback, sentence WAV cache, Valkey speech log, NDJSON client, and streaming helpers |
 | `controller/internal/mail` | Stdlib MIME/CID composition, DKIM signing, dma submission, and defensive spool transparency |
+| `controller/internal/datafs` | Read-only, GET-only, path-contained HTTP view of `$VM_DATA_DIR` (no write endpoints — adding one requires a new spec) |
 | `controller/prompts` | Embedded plain-text agent and fallback-chat system prompts |
 | `controller/web/static` | Hand-written multi-page SPA, themes, charts, markdown, agent hooks |
 | `controller/web/static/js/jobs.js` | Queue, filtered live activity with durations, and type-specific job details |
 | `controller/web/static/js/tools.js` | Server-manifest tool list, schema-generated forms, and shape-rendered manual results |
-| DOM-free SPA modules | `markdown-table.js`, `chart-data.js`, `duration.js`, `tts-stream.js`, `tools-render.js` carry pure logic covered by Node unit tests |
+| `controller/web/static/js/data.js` | Lazy data-volume tree and typed file viewers over `/api/data/*` (`innerHTML` forbidden) |
+| `controller/web/static/js/tree.js` | Shared collapsible-tree widget for YAML/JSON values |
+| DOM-free SPA modules | `markdown-table.js`, `chart-data.js`, `duration.js`, `tts-stream.js`, `tools-render.js`, `yaml-lite.js` carry pure logic covered by Node unit tests |
 | `controller/web/dist` | Gitignored minified SPA + generated icon sprite |
 | `controller/tools/fetch-assets.sh` | Pinned fonts, selected Lucide SVGs, and hero image fetch |
 | `scripts/build-icons.mjs` | Deterministic Lucide SVG sprite generation |
