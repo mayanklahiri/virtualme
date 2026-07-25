@@ -56,8 +56,8 @@ COPY docker/layers/015-mta.sh /tmp/layers/015-mta.sh
 RUN bash /tmp/layers/015-mta.sh
 COPY docker/layers/016-tzdata.sh /tmp/layers/016-tzdata.sh
 RUN bash /tmp/layers/016-tzdata.sh
-COPY docker/layers/017-tts-voice-alba.sh /tmp/layers/017-tts-voice-alba.sh
-RUN bash /tmp/layers/017-tts-voice-alba.sh
+# Layer 017 (second TTS voice) was removed with the voice itself; the
+# numbering gap is permanent, like layer 007.
 COPY docker/layers/018-llama-vulkan.sh /tmp/layers/018-llama-vulkan.sh
 RUN bash /tmp/layers/018-llama-vulkan.sh
 

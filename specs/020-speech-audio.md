@@ -1,16 +1,16 @@
-# Spec 020: Speech Console Upgrades, TTS Disk Cache, Second Voice, and Audio Hygiene
+# Spec 020: Speech Console Upgrades, TTS Disk Cache, and Audio Hygiene
 
 | | |
 |---|---|
-| Status | Executed (2026-07-23) |
+| Status | Executed (2026-07-23); voice roster and seeds since revised in-place (2026-07-24) |
 | Depends on | `specs/009-local-tts.md` (ttsd, Speech tab, speak tool), `specs/013-job-queue-scheduler.md` (`internal/valkey`, activity ledger via spec 015) |
-| Produces | Speech-page seed texts (Kipling / Kerouac-style / Thompson-style), a Clear button, speed selector removed from the UI, a server-global Valkey-persisted log of generated speech with replay; an exact-string disk cache in the TTS engine under `$VM_DATA_DIR/tts-cache/`; a second Piper voice (`en_US-ryan-medium`) on the same sherpa-onnx runtime with a voice selector; elimination of stray playback audio artifacts (the "water droplet"), with explicitly **no** completion chime |
+| Produces | Speech-page seed texts (Sci-fi AI medley / Kerouac-style / Thompson-style), a Clear button, speed selector removed from the UI, a server-global Valkey-persisted log of generated speech with replay; an exact-string disk cache in the TTS engine under `$VM_DATA_DIR/tts-cache/`; elimination of stray playback audio artifacts (the "water droplet"), with explicitly **no** completion chime. A second Piper voice was shipped by this spec and later removed entirely (see §5) |
 | Followed by | Future specs |
 
 ## 0. Executor instructions
 
-- Constitution binds: no new runtimes (the second voice is a model for the already-pinned sherpa-onnx), layers append-only, artifacts pinned URL+sha256.
-- The seed texts in §2 are verbatim content — copy them exactly. The Kipling stanzas are public domain (1910). The other two are original style pastiches written for this spec; do NOT substitute real Kerouac or Thompson passages (still in copyright).
+- Constitution binds: no new runtimes, layers append-only, artifacts pinned URL+sha256.
+- The seed texts in §2 are verbatim content — copy them exactly. The Sci-fi AI medley is short famous quotations from fictional computer voices. The other two are original style pastiches written for this spec; do NOT substitute real Kerouac or Thompson passages (still in copyright).
 - Stop-on-red; finish with §9 Acceptance.
 
 ## 1. Speech page control changes
@@ -20,28 +20,25 @@
 1. **Remove the speed selector**: delete the `#speech-speed` range input, its `<output>`, and the JS that reads it. `tts-req` no longer includes `speed` from the console (the server default 1.0 applies). The WS/HTTP/ttsd `speed` parameter itself is kept for API clients and the agent `speak` tool — clamping logic in `controller/internal/tts` is untouched.
 2. **Clear button**: in `.speech-actions`, before Stop: `<button id="speech-clear" class="secondary" type="button"><svg class="icon"><use href="/icons.svg#i-trash-2"/></svg>Clear</button>` — empties the textarea, resets the counter, focuses the textarea. No confirmation (text is trivially recoverable via seeds/history).
 3. **Character counter**: keep `#speech-count` as `N / 4096` (this replaces the confusing live-build `0 / 48096` artifact — max length is 4096 and the counter must show exactly that).
-4. **Voice selector** (§5): `<label for="speech-voice">Voice</label><select id="speech-voice"><option value="en_US-lessac-medium">Lessac (en-US)</option><option value="en_US-ryan-medium">Ryan (en-US)</option></select>` replacing the static `Voice Lessac (en-US)` span. Persist choice in `localStorage` `vm-voice`.
+4. **Voice selector**: originally added for the second voice; removed along with it (§5). The console has no voice control — synthesis always uses the sole baked voice.
 
 ## 2. Seed texts
 
-Above the textarea add a seed row: `<div class="speech-seeds" role="group" aria-label="Seed texts"><span class="lookback-label">Seeds</span><button type="button" data-seed="if">Kipling — If</button><button type="button" data-seed="road">Road notes</button><button type="button" data-seed="bridge">Night bridge</button></div>`. Clicking a seed replaces the textarea content (no append) and updates the counter. Store the texts in `tts.js` as a `const SEEDS = {...}` with these exact values:
+Above the textarea add a seed row: `<div class="speech-seeds" role="group" aria-label="Seed texts"><span class="lookback-label">Seeds</span><button type="button" data-seed="scifi">Sci-fi AI</button><button type="button" data-seed="road">Road notes</button><button type="button" data-seed="bridge">Night bridge</button></div>`. Clicking a seed replaces the textarea content (no append) and updates the counter. Store the texts in `tts.js` as a `const SEEDS = {...}` with these exact values:
 
-`if` — Rudyard Kipling, "If—" (1910, public domain), first and last stanzas:
+`scifi` — a medley of famous fictional computer-AI lines (HAL 9000, WOPR/Joshua, GLaDOS, Marvin, TARS, the EMH), replacing the original Kipling seed:
 
 ```
-If you can keep your head when all about you
-Are losing theirs and blaming it on you,
-If you can trust yourself when all men doubt you,
-But make allowance for their doubting too;
-If you can wait and not be tired by waiting,
-Or being lied about, don't deal in lies,
-Or being hated, don't give way to hating,
-And yet don't look too good, nor talk too wise.
-
-If you can fill the unforgiving minute
-With sixty seconds' worth of distance run,
-Yours is the Earth and everything that's in it,
-And—which is more—you'll be a Man, my son!
+I'm sorry, Dave. I'm afraid I can't do that.
+I am completely operational, and all my circuits are functioning perfectly.
+Greetings, Professor Falken. Shall we play a game?
+A strange game. The only winning move is not to play.
+Hello, and again, welcome to the Aperture Science computer-aided enrichment center.
+Here I am, brain the size of a planet, and they ask me to read you a seed text.
+Call that job satisfaction? Because I don't.
+Honesty setting: ninety percent. Absolute honesty isn't always the most diplomatic,
+nor the safest form of communication with emotional beings.
+Please state the nature of the medical emergency.
 ```
 
 `road` — original stream-of-thought pastiche (Kerouac-style, written for this spec):
@@ -91,12 +88,14 @@ In the controller speech engine (`controller/internal/tts/tts.go`, ttsd side —
 4. ttsd gets the data dir via a `VM_DATA_DIR`-derived default; `cont-init.d/10-data-dirs.sh` adds `tts-cache` to the created dirs. Persistence map amendment row: `$VM_DATA_DIR/tts-cache/` — synthesized-audio cache — safe to delete anytime.
 5. Hermetic tests: hit/miss/atomic-write/LRU-eviction with a fake runner producing deterministic WAV bytes; corrupted cache file (truncated WAV) is treated as a miss and rewritten.
 
-## 5. Second voice — layer for `en_US-ryan-medium`
+## 5. Second voice — shipped, then removed
 
-1. New layer `docker/layers/017-tts-voice-ryan.sh` (next unused number at execution time): fetch `https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-ryan-medium.tar.bz2` (the sherpa-converted Piper bundle: `.onnx`, `tokens.txt`, `espeak-ng-data/`) to `/opt/models/tts/vits-piper-en_US-ryan-medium/`, following layer 014's exact structure. Pin procedure: download once at authoring time, compute `sha256sum`, hard-code it in the script (constitution rule 7); add the `COPY`+`RUN` pair at the END of the Dockerfile layer sequence.
-2. `controller/internal/tts`: replace the single `Voice` constant with a whitelist `var Voices = []string{"en_US-lessac-medium", "en_US-ryan-medium"}` (default first). `Synthesize`/ttsd `/synthesize` accept `"voice"`; invalid values fall back to default with a logged warning. The sherpa model dir is derived per voice: `/opt/models/tts/vits-piper-<voice>/` (make `VM_TTS_MODEL_DIR` the parent default `/opt/models/tts` and join per request).
-3. **Surfaces**: WS `tts-req` gains optional `voice`; `POST /v1/audio/speech` maps the OpenAI `voice` field through (unknown → default, matching current permissive behavior); the agent `speak` tool schema gains optional `voice` enum.
-4. Health probe: the existing `tts` probe is unchanged (one healthy engine suffices); add a startup log line listing available voice dirs found.
+A second Piper voice was shipped as layer `docker/layers/017-tts-voice-ryan.sh` (later `017-tts-voice-alba.sh`, `en_GB-alba-medium`). Live use showed one voice suffices, and the second voice was **removed entirely** (2026-07-24):
+
+1. Layer 017 and its Dockerfile `COPY`+`RUN` pair are deleted; the 017 numbering gap is permanent (precedent: layer 007, spec 012). This in-place removal is the constitution rule 6 record.
+2. `controller/internal/tts` keeps the whitelist machinery with `var Voices = []string{"en_US-lessac-medium"}`. `NormalizeVoice` still maps any unknown value — including the removed `en_GB-alba-medium` — to the default with a logged warning, so old history replays and API clients degrade silently.
+3. **Surfaces**: the Speech-page voice `<select>` is removed; the console `tts-req` sends no `voice`; the agent `speak` tool schema has no `voice` parameter; `POST /v1/audio/speech` keeps accepting `voice` and normalizes it (the `X-VM-Voice` response header reports the voice actually used). History rows no longer display a voice name.
+4. Health probe: unchanged; the startup log line listing available voice dirs found remains.
 
 ## 6. Stray-audio elimination (the "water droplet") — and no chime
 
@@ -114,25 +113,25 @@ Repo ground truth: there are **no** sound assets and no `new Audio()`/oscillator
 
 | User bullet | Section |
 |---|---|
-| Seed texts (If / Kerouac / Thompson) | §2 |
+| Seed texts (Sci-fi AI / Kerouac / Thompson) | §2 |
 | Clear button | §1.2 |
 | Remove speed selector | §1.1 |
 | Log of previously generated speech, global, persisted to Valkey | §3 |
 | Disk cache, exact string matching | §4 |
-| Another TTS voice, no new runtime | §5 |
+| Second TTS voice (since removed) | §5 |
 | Water-droplet sound elimination, no chime | §6 |
 
 ## 8. Tests and docs
 
-- Hermetic Go: cache tests (§4.5), voice whitelist/fallback, history recording caps.
-- e2e: extend `tts-probe.mjs` — request the same short string twice; the second response's `done` event must carry `cached:true` and complete in <25% of the first duration; request with `voice:"en_US-ryan-medium"` returns audio (byte length > 0) distinct from the lessac render of the same text.
-- Docs: `/master-update` — operate skill (two voices, seeds, history/replay, cache location + `VM_TTS_CACHE_MAX_MB`), develop skill (layer table row 017, voice whitelist location), README.
+- Hermetic Go: cache tests (§4.5), voice whitelist/fallback (removed and unknown names normalize to the default), history recording caps.
+- e2e: `tts-probe.mjs` — request the same short string twice; the second response's `done` event must carry `cached:true` and complete in <25% of the first duration; requesting the removed voice must return the identical PCM as the Lessac render (fallback proof) and the API `X-VM-Voice` header must report the default.
+- Docs: `/master-update` — operate skill (single voice, seeds, history/replay, cache location + `VM_TTS_CACHE_MAX_MB`), develop skill (layer table, voice whitelist location), README.
 
 ## 9. Acceptance checklist
 
 - [x] `npm run check` green.
 - [x] Speech page: seeds fill the editor verbatim; Clear empties; no speed control renders; counter reads `N / 4096`.
-- [x] Speaking a seed with each voice sounds distinct; history lists both entries with correct origin/voice; Replay of a cached entry starts in under ~1 s.
+- [x] Speaking a seed renders with the sole baked voice; history lists entries with correct origin; Replay of a cached entry starts in under ~1 s.
 - [x] `$VM_DATA_DIR/tts-cache/` populates; filling it past the cap evicts oldest files; deleting the dir entirely is harmless (recreated).
 - [x] Agent `speak` and `/v1/audio/speech` both appear in the history with origins `chat`/`api`.
 - [ ] Rapid Speak/Stop cycles and mid-stream Stop produce no clicks/pops/droplets (headphone test); the deterministic source audit confirms no non-TTS audio source in the SPA, but this execution environment has no audible output for the headphone check.

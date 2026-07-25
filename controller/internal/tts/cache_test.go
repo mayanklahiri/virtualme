@@ -75,20 +75,24 @@ func TestSentenceCacheEvictsLeastRecentlyUsed(t *testing.T) {
 }
 
 func TestVoiceWhitelistAndFallback(t *testing.T) {
-	if NormalizeVoice("en_GB-alba-medium") != "en_GB-alba-medium" {
-		t.Fatal("Alba voice rejected")
+	if NormalizeVoice(DefaultVoice) != DefaultVoice {
+		t.Fatal("default voice rejected")
+	}
+	// The removed second voice and any unknown name fall back to the default.
+	if NormalizeVoice("en_GB-alba-medium") != DefaultVoice {
+		t.Fatal("removed voice did not fall back")
 	}
 	if NormalizeVoice("unknown") != DefaultVoice {
 		t.Fatal("unknown voice did not fall back")
 	}
 	runner := &fixtureRunner{}
 	service := NewService(Config{ModelDir: "/models", Runner: runner})
-	_, _, _, _, err := service.synthesize(context.Background(), "Alba sentence.", "en_GB-alba-medium", 1)
+	_, _, _, _, err := service.synthesize(context.Background(), "One voice.", NormalizeVoice("en_GB-alba-medium"), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	argv := strings.Join(runner.args[0], " ")
-	if !strings.Contains(argv, "/vits-piper-en_GB-alba-medium/en_GB-alba-medium.onnx") {
-		t.Fatalf("Alba model path missing from %q", argv)
+	if !strings.Contains(argv, "/vits-piper-en_US-lessac-medium/en_US-lessac-medium.onnx") {
+		t.Fatalf("Lessac model path missing from %q", argv)
 	}
 }

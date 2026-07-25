@@ -211,6 +211,7 @@ func TestClientStreamsEvents(t *testing.T) {
 	var events []string
 	store := new(memoryList)
 	client := &Client{URL: server.URL, Log: NewLog(store, nil)}
+	// A removed voice normalizes to the default before synthesis and logging.
 	summary, err := client.Synthesize(context.Background(), Request{
 		Text: "hello", Voice: "en_GB-alba-medium", Origin: "api",
 	}, func(event Event) error {
@@ -221,7 +222,7 @@ func TestClientStreamsEvents(t *testing.T) {
 		t.Fatalf("Synthesize = %+v, %v, %v", summary, events, err)
 	}
 	if len(store.values) != 1 || !strings.Contains(store.values[0], `"origin":"api"`) ||
-		!strings.Contains(store.values[0], `"voice":"en_GB-alba-medium"`) ||
+		!strings.Contains(store.values[0], `"voice":"en_US-lessac-medium"`) ||
 		!strings.Contains(store.values[0], `"cached":true`) {
 		t.Fatalf("speech log = %v", store.values)
 	}

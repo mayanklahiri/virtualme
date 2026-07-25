@@ -119,13 +119,14 @@ func TestSpeechEndpointMapsVoice(t *testing.T) {
 	}))
 	defer server.Close()
 	response := httptest.NewRecorder()
+	// The removed second voice normalizes to the sole baked voice everywhere.
 	request := httptest.NewRequest(http.MethodPost, "/v1/audio/speech",
 		strings.NewReader(`{"input":"Hello.","voice":"en_GB-alba-medium","response_format":"pcm"}`))
 	speechHandler(&tts.Client{URL: server.URL}).ServeHTTP(response, request)
-	if response.Header().Get("X-VM-Voice") != "en_GB-alba-medium" {
+	if response.Header().Get("X-VM-Voice") != "en_US-lessac-medium" {
 		t.Fatalf("voice header = %q", response.Header().Get("X-VM-Voice"))
 	}
-	if input := <-requestBody; input.Voice != "en_GB-alba-medium" {
+	if input := <-requestBody; input.Voice != "en_US-lessac-medium" {
 		t.Fatalf("ttsd request voice = %q", input.Voice)
 	}
 }

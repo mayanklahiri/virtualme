@@ -26,7 +26,7 @@ import (
 
 // Voices is the complete set of image-baked Piper voices. The first is the
 // default used for omitted or unknown voice names.
-var Voices = []string{"en_US-lessac-medium", "en_GB-alba-medium"}
+var Voices = []string{"en_US-lessac-medium"}
 
 const DefaultVoice = "en_US-lessac-medium"
 

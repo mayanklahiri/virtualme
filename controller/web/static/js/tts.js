@@ -3,14 +3,16 @@ import { createTtsStream } from "./tts-stream.js";
 
 const MAX_LEN = 4096;
 const SEEDS = {
-  if: `If you can keep your head when all about you
-Are losing theirs and blaming it on you,
-If you can trust yourself when all men doubt you,
-But make allowance for their doubting too;
-If you can wait and not be tired by waiting,
-Or being lied about, don't deal in lies,
-Or being hated, don't give way to hating,
-And yet don't look too good, nor talk too wise.`,
+  scifi: `I'm sorry, Dave. I'm afraid I can't do that.
+I am completely operational, and all my circuits are functioning perfectly.
+Greetings, Professor Falken. Shall we play a game?
+A strange game. The only winning move is not to play.
+Hello, and again, welcome to the Aperture Science computer-aided enrichment center.
+Here I am, brain the size of a planet, and they ask me to read you a seed text.
+Call that job satisfaction? Because I don't.
+Honesty setting: ninety percent. Absolute honesty isn't always the most diplomatic,
+nor the safest form of communication with emotional beings.
+Please state the nature of the medical emergency.`,
   road: `And so we went, the two of us and the whole hum of the valley night going with us,
 past the fruit stands shuttered and the neon vacancy signs buzzing their one pink word
 over and over, and the road kept unspooling like it knew where it was going even
@@ -25,7 +27,6 @@ huge demented harp.`,
 export function initTTS(send) {
   const input = document.querySelector("#speech-input");
   const count = document.querySelector("#speech-count");
-  const voice = document.querySelector("#speech-voice");
   const speak = document.querySelector("#speech-speak");
   const clear = document.querySelector("#speech-clear");
   const stop = document.querySelector("#speech-stop");
@@ -54,11 +55,6 @@ export function initTTS(send) {
     },
   });
 
-  const storedVoice = localStorage.getItem("vm-voice");
-  if ([...voice.options].some((option) => option.value === storedVoice)) {
-    voice.value = storedVoice;
-  }
-
   function updateCount() {
     count.textContent = `${[...input.value].length} / ${MAX_LEN}`;
   }
@@ -67,7 +63,6 @@ export function initTTS(send) {
     const busy = stream.active !== null;
     speak.disabled = !live || busy || !input.value.trim();
     input.disabled = busy;
-    voice.disabled = busy;
     clear.disabled = busy;
     stop.hidden = !busy;
     for (const button of history.querySelectorAll("button")) {
@@ -77,9 +72,6 @@ export function initTTS(send) {
   input.addEventListener("input", () => {
     updateCount();
     enabled();
-  });
-  voice.addEventListener("change", () => {
-    localStorage.setItem("vm-voice", voice.value);
   });
   clear.addEventListener("click", () => {
     input.value = "";
@@ -96,17 +88,17 @@ export function initTTS(send) {
     });
   }
 
-  function request(text, selectedVoice) {
+  function request(text) {
     if (!text || !live || stream.active !== null) return;
     const id = crypto.randomUUID();
-    if (send({ type: "tts-req", id, text, voice: selectedVoice })) {
+    if (send({ type: "tts-req", id, text })) {
       stream.begin(id);
       status.textContent = "sending…";
       enabled();
     }
   }
   speak.addEventListener("click", () => {
-    request(input.value.trim(), voice.value);
+    request(input.value.trim());
   });
   stop.addEventListener("click", () => {
     if (stream.active) send({ type: "tts-stop", id: stream.active });
@@ -134,8 +126,7 @@ export function initTTS(send) {
       origin.textContent = entry.origin;
       const details = document.createElement("span");
       details.className = "speech-history-details";
-      const shortVoice = entry.voice === "en_GB-alba-medium" ? "Alba" : "Lessac";
-      details.textContent = `${shortVoice} · ${entry.chars} chars`;
+      details.textContent = `${entry.chars} chars`;
       if (entry.cached) {
         const cached = document.createElement("span");
         cached.className = "speech-cached";
@@ -149,7 +140,9 @@ export function initTTS(send) {
       const replay = document.createElement("button");
       replay.type = "button";
       replay.textContent = "Replay";
-      replay.addEventListener("click", () => request(entry.text, entry.voice));
+      // Replay always uses the sole baked voice; entries recorded under a
+      // removed voice fall back silently.
+      replay.addEventListener("click", () => request(entry.text));
       row.append(time, origin, details, excerpt, replay);
       history.append(row);
     }

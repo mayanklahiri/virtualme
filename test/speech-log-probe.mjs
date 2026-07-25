@@ -26,7 +26,7 @@ socket.addEventListener("message", (event) => {
   const entries = message.entries ?? [];
   if (!entries.some((entry) => entry.origin === "console")) fail("console history missing");
   if (!entries.some((entry) => entry.origin === "api")) fail("API history missing");
-  if (!entries.some((entry) => entry.voice === "en_GB-alba-medium")) fail("Alba history missing");
+  if (entries.some((entry) => entry.voice !== "en_US-lessac-medium")) fail("non-Lessac voice recorded after fallback");
   if (!entries.some((entry) => entry.cached === true)) fail("cached history entry missing");
   clearTimeout(timer);
   console.log("speech-log-probe: OK");

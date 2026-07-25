@@ -18,9 +18,9 @@ let stoppedDone = false;
 let phaseStarted = 0;
 let firstDuration = 0;
 let lessacPCM = "";
-let voicePCM = "";
+let fallbackPCM = "";
 const cacheText = "A unique sentence verifies the exact speech cache.";
-const voiceText = "Two voices must produce audibly distinct local speech.";
+const voiceText = "Unknown voices must fall back to the sole baked voice.";
 
 /** @param {string} reason */
 function fail(reason) {
@@ -43,6 +43,7 @@ function request(id, text, voice) {
   socket.send(JSON.stringify({ type: "tts-req", id, text, voice }));
 }
 
+// A removed/unknown voice must fall back to the sole baked voice.
 async function checkHTTP(voice = "en_GB-alba-medium") {
   const response = await fetch(`${base}/v1/audio/speech`, {
     method: "POST",
@@ -54,7 +55,7 @@ async function checkHTTP(voice = "en_GB-alba-medium") {
   if (!String(response.headers.get("content-type")).startsWith("audio/wav")) fail("speech API content type");
   if (body[0] !== 82 || body[1] !== 73 || body[2] !== 70 || body[3] !== 70) fail("speech API missing RIFF");
   if (body.length <= 10000) fail(`speech API body too short: ${body.length}`);
-  if (response.headers.get("x-vm-voice") !== voice) fail("speech API voice mapping");
+  if (response.headers.get("x-vm-voice") !== "en_US-lessac-medium") fail("speech API voice fallback");
 }
 
 socket.addEventListener("error", () => fail("websocket error"));
@@ -100,13 +101,13 @@ socket.addEventListener("message", async (event) => {
   } else if (phase === "voice-lessac" && message.id === "probe-voice-lessac") {
     if (message.type === "tts-chunk") lessacPCM += message.pcm;
     if (message.type === "tts-done") {
-      phase = "voice-alba";
-      request("probe-voice-alba", voiceText, "en_GB-alba-medium");
+      phase = "voice-fallback";
+      request("probe-voice-fallback", voiceText, "en_GB-alba-medium");
     }
-  } else if (phase === "voice-alba" && message.id === "probe-voice-alba") {
-    if (message.type === "tts-chunk") voicePCM += message.pcm;
+  } else if (phase === "voice-fallback" && message.id === "probe-voice-fallback") {
+    if (message.type === "tts-chunk") fallbackPCM += message.pcm;
     if (message.type === "tts-done") {
-      if (!voicePCM || voicePCM === lessacPCM) fail("Alba render is empty or identical to Lessac");
+      if (!fallbackPCM || fallbackPCM !== lessacPCM) fail("removed-voice request did not fall back to the Lessac render");
       try {
         await checkHTTP();
       } catch (error) {
