@@ -1,0 +1,27 @@
+---
+import { navigation } from "../config/navigation";
+import { url } from "../config/urls";
+const pathname = Astro.url.pathname;
+---
+<header class="site-header">
+  <a class="brand" href={url()} aria-label="Virtual Me documentation home">VIRTUAL <em>me</em></a>
+  <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+  <nav id="primary-nav" aria-label="Primary">
+    {navigation.map((item) => <a href={url(item.href)} aria-current={pathname === url(item.href) ? "page" : undefined}>{item.label}</a>)}
+    <span class="utility">
+      <a href="https://github.com/mayanklahiri/virtualme">GitHub</a>
+      <a href="https://github.com/mayanklahiri/virtualme#readme">README</a>
+    </span>
+  </nav>
+</header>
+<script>
+  const button = document.querySelector<HTMLButtonElement>(".menu-toggle");
+  const nav = document.querySelector<HTMLElement>("#primary-nav");
+  const close = () => { button?.setAttribute("aria-expanded", "false"); nav?.classList.remove("open"); };
+  button?.addEventListener("click", () => {
+    const open = button.getAttribute("aria-expanded") !== "true";
+    button.setAttribute("aria-expanded", String(open));
+    nav?.classList.toggle("open", open);
+  });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") { close(); button?.focus(); } });
+</script>

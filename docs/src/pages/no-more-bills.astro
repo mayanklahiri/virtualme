@@ -1,0 +1,17 @@
+---
+import EditorialLayout from "../layouts/EditorialLayout.astro";
+import { url } from "../config/urls";
+---
+<EditorialLayout title="No more token bills" description="A patient-computing argument for local inference, owned memory, and dependable recurring work." path="no-more-bills/">
+  <p class="eyebrow">A pull-page for patient machines</p><h1>No more token bills.</h1><p class="dek">The bundled local model works without a per-token AI bill. That is a narrower and more useful claim than “free computing.”</p>
+  <figure><img src={url("images/no-more-bills/local-machine.svg")} width="640" height="400" alt="A compact local computer beside a notebook and lamp" /><figcaption>A still life for background computing: small, present, and owned.</figcaption></figure>
+  <p class="pullquote">Eventually can be a feature when background work arrives reliably.</p>
+  <div class="magazine-copy">
+    <p>Local AI can be slow. Waiting is sometimes a rational trade for ownership: the machine can work in the background while its browser profile, project instructions, and accumulated memory remain on hardware you control.</p>
+    <h2>A useful scale, not a meter reading</h2><p>The class of a compact 25 W machine is a useful comparison frame for an always-available helper. It is not a measured consumption guarantee. Actual system draw depends on hardware, workload, and optional GPU use.</p>
+    <p>For the bundled local model there is no per-token AI bill. Electricity, hardware, internet access, and any optional external service still cost money. Virtual Me does not claim to replace every cloud model or guarantee every task.</p>
+    <h2>Keep the panels open</h2><p>The system welcomes tinkering and inspection. Its controller is Go, its CLI has no runtime dependencies, and its work appears in a queue, activity ledger, browser desktop, and ordinary files. Failure should be visible enough to understand.</p>
+    <h2>The long background</h2><p>Dependable recurring work matters more than theatrical speed. A weekly project can wait, retry, leave evidence, and return a useful result. In that setting, eventually is not an apology; it is a property of patient background computing.</p>
+    <aside class="clipping"><strong>What stays private</strong><p>Work instructions, browser state, screenshots, project artifacts, and memory remain in the local data directory unless the task itself visits or sends data to an external service.</p></aside>
+  </div>
+</EditorialLayout>

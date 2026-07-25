@@ -1,0 +1,35 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import MemorySnowglobe from "../components/MemorySnowglobe.astro";
+import { url } from "../config/urls";
+import home480 from "../screenshots/home-route.jpg";
+import home960 from "../screenshots/home-route-960.jpg";
+import home1280 from "../screenshots/home-route-1280.jpg";
+import chat480 from "../screenshots/chat.jpg";
+import chat960 from "../screenshots/chat-960.jpg";
+import chat1280 from "../screenshots/chat-1280.jpg";
+---
+<BaseLayout title="Virtual Me" description="A private background agent with a real local browser, recurring work, and memory on hardware you control.">
+  <section class="home-hero">
+    <div>
+      <p class="eyebrow">Private background agent</p>
+      <h1>Your digital life, working quietly at home.</h1>
+      <p class="lead">Virtual Me uses a real local browser for plain-English tasks and recurring projects. Its memory stays on your machine, with no per-token bill for the bundled local model.</p>
+      <div class="button-row"><a class="button" href={url("guide/")}>Start in five minutes</a><a class="button secondary" href={url("architecture/")}>See how it works</a></div>
+    </div>
+    <MemorySnowglobe />
+  </section>
+  <section>
+    <p class="eyebrow">Three steps</p><h2>Start it. Ask. Let it return.</h2>
+    <div class="steps"><div class="step"><b>01</b><h3>Run one container</h3><p>Check Docker, start Virtual Me, and open port 8080.</p></div><div class="step"><b>02</b><h3>Give it real browser work</h3><p>Ask in Chat, watch the Desktop, and take over whenever needed.</p></div><div class="step"><b>03</b><h3>Make useful work recur</h3><p>Turn a plain-English task into a scheduled Project and inspect every result.</p></div></div>
+  </section>
+  <section class="full-bleed">
+    <p class="eyebrow">A visible machine</p><h2>The browser is real. The handoff is yours.</h2>
+    <p class="lead">The agent observes pages, operates Chromium through OS-level input, and records its steps. Desktop gives you a live view and immediate takeover.</p>
+    <div class="screens"><figure><img src={home480.src} srcset={`${home480.src} 480w, ${home960.src} 960w, ${home1280.src} 1280w`} sizes="(max-width: 52rem) 100vw, 50vw" width="1280" height="800" alt="Virtual Me console home showing local system health" loading="lazy" /><figcaption>One local console for health, projects, jobs, data, and the private browser.</figcaption></figure><figure><img src={chat480.src} srcset={`${chat480.src} 480w, ${chat960.src} 960w, ${chat1280.src} 1280w`} sizes="(max-width: 52rem) 100vw, 50vw" width="1280" height="800" alt="Virtual Me Chat page with a browser task" loading="lazy" /><figcaption>Interactive tasks enter the same observable queue as recurring work.</figcaption></figure></div>
+  </section>
+  <section><p class="eyebrow">Work that waits well</p><h2>Recurring projects keep their own place.</h2><div class="feature-grid"><article class="card"><h3>Projects</h3><p>Natural-language tasks run on selectors you choose without changing chat history.</p></article><article class="card"><h3>Jobs</h3><p>The queue and durable activity ledger show starts, tools, durations, results, and failures.</p></article><article class="card"><h3>Data</h3><p>Artifacts, screenshots, project scratch files, and local history remain inspectable.</p></article></div></section>
+  <section><p class="eyebrow">Boundary, not slogan</p><h2>Your data directory survives. The trust warning matters.</h2><p class="lead">Virtual Me runs as one unprivileged container with one read-write data mount. The v1 console has no authentication or TLS, so expose it only on a trusted computer and private network.</p></section>
+  <section class="facts"><div class="fact"><h3>CPU first</h3><p>The bundled model runs without a GPU. Local inference can be patient work.</p></div><div class="fact"><h3>GPU optional</h3><p>Supported host GPU acceleration can improve inference, but it is not required.</p></div><div class="fact"><h3>No token meter</h3><p>Bundled local inference has no per-token AI bill. Hardware and electricity still cost money.</p></div></section>
+  <section class="full-bleed"><p class="eyebrow">Ready when you are</p><h2>Give the first task five minutes.</h2><a class="button" href={url("guide/")}>Open the 5-minute guide</a></section>
+</BaseLayout>

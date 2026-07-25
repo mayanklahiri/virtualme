@@ -1,0 +1,5 @@
+---
+import { navigation } from "../config/navigation";
+import { url } from "../config/urls";
+---
+<nav class="docs-nav" aria-label="Documentation">{navigation.slice(1, 4).map((item) => <a href={url(item.href)}>{item.label}</a>)}</nav>

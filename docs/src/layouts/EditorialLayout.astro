@@ -1,0 +1,7 @@
+---
+import BaseLayout from "./BaseLayout.astro";
+import "../styles/editorial.css";
+interface Props { title: string; description: string; path: string; }
+const props = Astro.props as Props;
+---
+<BaseLayout {...props}><article class="editorial-page"><slot /></article></BaseLayout>

@@ -6,4 +6,9 @@ controller/web/static/img/
 controller/web/dist/
 controller/controller
 scripts/.cache/
+docs/dist/
+docs/.astro/
+docs/node_modules/
+docs/test-results/
+docs/test/screenshots/
 /.DS_Store

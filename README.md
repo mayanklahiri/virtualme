@@ -1,5 +1,7 @@
 # Virtual Me
 
+[Documentation](https://mayanklahiri.github.io/virtualme/)
+
 <table>
 <tr>
 <td valign="top">
@@ -86,6 +88,7 @@ First start loads a ~4 GB model; give `/healthz` a few minutes to go green.
 | npm package | [`virtualme`](https://www.npmjs.com/package/virtualme) |
 | Docker image | [`mayanklahiri/virtualme`](https://hub.docker.com/r/mayanklahiri/virtualme) |
 | Source | [GitHub](https://github.com/mayanklahiri/virtualme) |
+| Documentation | [mayanklahiri.github.io/virtualme](https://mayanklahiri.github.io/virtualme/) |
 | Published releases | [GitHub Releases](https://github.com/mayanklahiri/virtualme/releases) |
 | CI | [Workflow runs](https://github.com/mayanklahiri/virtualme/actions/workflows/ci.yml) · [source](.github/workflows/ci.yml) |
 | Release automation | [Workflow runs](https://github.com/mayanklahiri/virtualme/actions/workflows/release.yml) · [source](.github/workflows/release.yml) |
@@ -106,6 +109,8 @@ First start loads a ~4 GB model; give `/healthz` a few minutes to go green.
 | `virtualme keygen` | Generate a 256-bit base64url token |
 | `virtualme update` | Pull the configured image tag |
 | `virtualme soak [--no-build]` | Rebuild once, run the full e2e suite, then run live soak flows on a fresh data dir (source checkout only) |
+| `./cli.sh docs dev [--host <host>] [--port <port>]` | Serve the documentation site from a source checkout |
+| `./cli.sh docs build` | Build and verify the static documentation site from a source checkout |
 
 Set `VIRTUALME_IMAGE` or `VIRTUALME_TAG` to override the default image reference,
 `VIRTUALME_DATA` to override the default data directory, and `TZ` to override
@@ -369,6 +374,8 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [027](specs/027-structured-read-page.md) | Structured YAML `read_page` digest, tree UI, and tool-testing soak |
 | [028](specs/028-data-explorer.md) | Read-only Data explorer tab and `/api/data/*` volume API |
 | [029](specs/029-readpage-goldens.md) | `read_page` DOM goldens, layout-table fidelity, 32K context, and proportionate caps |
+| [030](specs/030-docs-site.md) | Static Astro documentation/marketing site, shared themes, local docs CLI, and orphan-branch Pages publication |
+| [031](specs/031-master-config.md) | Accepted configuration schema/exporter follow-up; not yet implemented |
 
 ### CI/CD
 
@@ -376,6 +383,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 |---|---|---|
 | [CI](https://github.com/mayanklahiri/virtualme/actions/workflows/ci.yml) ([source](.github/workflows/ci.yml)) | Push to `main`; pull request | Node 22/24 gates, container smoke test, and the CLI-driven E2E test (including the restart cycle and chat probe); no secrets |
 | [Release](https://github.com/mayanklahiri/virtualme/actions/workflows/release.yml) ([source](.github/workflows/release.yml)) | Tag `v*` | Registry immutability and committed-notes pre-checks; native amd64/arm64 Docker publishing; Docker Hub overview refresh; npm publishing; curated GitHub Release notes plus generated commits; `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `NPM_TOKEN` |
+| [Docs](https://github.com/mayanklahiri/virtualme/actions/workflows/docs.yml) ([source](.github/workflows/docs.yml)) | Docs-related pull requests and pushes to `main` | Builds and browser-tests with read permission; main pushes rebuild and publish branch-root output to the orphan `docs` branch with write permission |
 
 ### Development setup
 
@@ -383,6 +391,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 git clone https://github.com/mayanklahiri/virtualme.git
 cd virtualme
 npm install
+npm ci --prefix docs
 git config core.hooksPath .githooks
 bash controller/tools/fetch-assets.sh
 npm run check
@@ -390,7 +399,21 @@ npm run check
 ./cli.sh start
 ```
 
-`npm run check` builds the minified SPA (`controller/web/dist/`, gitignored) before the Go gates; run `npm run build:web` to rebuild it alone.
+`npm run check` builds the minified SPA (`controller/web/dist/`, gitignored),
+checks generated shared-theme outputs, and builds the isolated docs package
+offline before the Go gates. Run `npm run build:web` to rebuild the SPA alone,
+or `./cli.sh docs dev` / `./cli.sh docs build` for the site. Astro and
+Playwright remain exact-pinned only in `docs/package.json`; browser setup is
+explicit: `npm --prefix docs exec playwright install chromium`.
+
+The eight controller/docs themes are authored once in
+`common/themes/themes.json` and checked through
+`scripts/generate-themes.mjs --check`. Site analytics is disabled by default;
+its sole edit point is `docs/src/config/site.ts`.
+
+After the docs workflow first publishes, configure GitHub Pages once to deploy
+from branch `docs`, folder `/ (root)`. The production URL is
+<https://mayanklahiri.github.io/virtualme/>.
 
 Offline `read_page` golden tests discover `test/fixtures/*.dom.json`, execute
 the production extractor, evaluate optional `*.props.mjs` assertions, and

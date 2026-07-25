@@ -25,6 +25,8 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `.github/workflows/` | CI and release automation |
 | `.cursor/skills/` | Shared AI operating and development procedures |
 | `specs/` | Numbered, authoritative implementation specs |
+| `docs/` | Isolated static Astro documentation/marketing site, authored content/assets, committed generated inputs, and browser tests |
+| `common/themes/` | Canonical validated theme-token source shared by controller and docs |
 | `docker/` | Container image and supervised services (spec 002) |
 | `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached local TTS, outbound mail, read-only data explorer, and multi-page console (specs 002–029) |
 | `controller/prompts/` | Embedded plain-text agent and fallback-chat system prompts |
@@ -34,6 +36,7 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | Command | Purpose |
 |---|---|
 | `npm install` | Install exact-pinned development tools |
+| `npm ci --prefix docs` | Install the isolated exact-pinned documentation toolchain |
 | `git config core.hooksPath .githooks` | Activate repository hooks |
 | `npm run check` | Run the canonical deterministic quality gate |
 | `npm run build:web` | Minify the SPA into `controller/web/dist/` (also done by `check`) |
@@ -47,6 +50,9 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `bash scripts/update-logo.sh` | Regenerate brand icons + home hero from repo-root `LOGO.png` |
 | `bash scripts/refresh-doc-screenshots.sh` | Capture console routes from a live `:8080` into `docs/src/screenshots/` (480/960/1280 JPEG widths) |
 | `bash scripts/update-doc-images.sh` | Rewire README image markers to `docs/src/screenshots/` paths |
+| `./cli.sh docs dev [--host <host>] [--port <port>]` | Serve the documentation site from a source checkout |
+| `./cli.sh docs build` | Build and verify the static documentation site offline |
+| `node scripts/generate-themes.mjs --check` | Verify controller/docs theme outputs match `common/themes/themes.json` |
 
 The controller's browser agent combines vision screenshots, dense rendered
 DOM and read-only CDP observations, OS-level `xdotool` mouse/keyboard
@@ -138,6 +144,15 @@ LLM tokens, effective token throughput, and browser actions by category from
 per-sample counters drained by the state collector. The Status top banner
 carries health, the scheduler clock with active selector tokens, and uptime.
 Durations render through one graded component and shared short formatting.
+The static documentation site builds beneath `/virtualme/`, is published from
+branch-root output on the orphan `docs` branch by `.github/workflows/docs.yml`,
+and keeps analytics disabled unless `docs/src/config/site.ts` or
+`PUBLIC_GA_MEASUREMENT_ID` supplies a valid public ID. All eight controller and
+docs theme variants derive from `common/themes/themes.json`; generated CSS and
+registries are committed and drift-checked. All authored documentation-site
+content and site-owned assets must remain below `docs/`; Astro sources must not
+import outside that tree; shared themes and config docs enter only through
+checked generated files under `docs/src/generated/` or `docs/src/styles/`.
 
 ## Skills
 
@@ -181,3 +196,5 @@ Durations render through one graded component and shared short formatting.
 | [027](specs/027-structured-read-page.md) | Structured YAML `read_page` digest, tree UI, and tool-testing soak |
 | [028](specs/028-data-explorer.md) | Read-only Data explorer tab and `/api/data/*` volume API |
 | [029](specs/029-readpage-goldens.md) | `read_page` DOM goldens, layout-table fidelity, 32K context, and proportionate caps |
+| [030](specs/030-docs-site.md) | Static Astro docs/marketing site, shared themes, source-checkout CLI, and Pages publication |
+| [031](specs/031-master-config.md) | Accepted master configuration schema/exporter follow-up; not yet implemented |

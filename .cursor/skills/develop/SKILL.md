@@ -13,6 +13,7 @@ gates everything.
 ## Setup after clone
 
     npm install
+    npm ci --prefix docs
     git config core.hooksPath .githooks
     bash controller/tools/fetch-assets.sh   # once; downloads pinned web assets
 
@@ -20,7 +21,8 @@ gates everything.
 
 `npm run check` = shell syntax, deterministic LLM-locality/SPA-origin/
 persistence-map enforcement, eslint, tsc --checkJs, node --test, CLI dry run,
-web build (esbuild minify + sourcemaps into gitignored
+generated shared-theme drift, isolated offline Astro docs check/build, web
+build (esbuild minify + sourcemaps into gitignored
 `controller/web/dist/`), gofmt/go vet/go test. The pre-commit hook and CI run
 the same script. New stateful components must be added to the canonical map in
 `specs/007-persistence-locality.md` §1.
@@ -36,6 +38,15 @@ The Node gate also discovers `test/fixtures/*.dom.json`, runs the production
 `*.digest.golden.yaml` snapshots (`REGEN_GOLDENS=1` regenerates them). Live
 fixture capture is development-only: navigate a healthy `:8080` browser and
 run `node test/capture-dom.mjs <fixture-name>`.
+
+Documentation development is source-checkout-only:
+`./cli.sh docs dev [--host <host>] [--port <port>]` and
+`./cli.sh docs build`. Site tooling is exact-pinned under `docs/`; ordinary
+builds never install or fetch. `common/themes/themes.json` is the single
+controller/docs theme source. Regenerate with
+`node scripts/generate-themes.mjs` and verify with `--check`.
+`.github/workflows/docs.yml` installs both toolchains, runs local Playwright
+tests, and publishes branch-root static output to the orphan `docs` branch.
 
 ## Docker layers
 

@@ -1,0 +1,8 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { url } from "../config/urls";
+---
+<BaseLayout title="Page not found" description="The requested Virtual Me documentation page could not be found." path="404/" canonicalOverride="https://mayanklahiri.github.io/virtualme/404/">
+  <p class="eyebrow">404</p><h1>This memory drawer is empty.</h1><p class="lead">The page may have moved, but the guide and generated reference remain nearby.</p>
+  <div class="button-row"><a class="button" href={url()}>Home</a><a class="button secondary" href={url("guide/")}>5-minute guide</a><a class="button secondary" href={url("configuration/")}>Configuration</a><a class="button secondary" href="https://github.com/mayanklahiri/virtualme/issues">Open a GitHub issue</a></div>
+</BaseLayout>

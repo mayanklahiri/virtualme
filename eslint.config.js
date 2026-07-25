@@ -1,7 +1,7 @@
 import js from "@eslint/js";
 
 export default [
-  { ignores: ["node_modules/", "controller/", "docker/"] },
+  { ignores: ["node_modules/", "controller/", "docker/", "docs/dist/", "docs/.astro/"] },
   js.configs.recommended,
   {
     files: ["**/*.js", "**/*.mjs"],
@@ -16,11 +16,23 @@ export default [
         WebSocket: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
+        Buffer: "readonly",
+        structuredClone: "readonly",
       },
     },
     rules: {
       "no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
       eqeqeq: "error",
+    },
+  },
+  {
+    files: ["docs/test/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        document: "readonly",
+        getComputedStyle: "readonly",
+        localStorage: "readonly",
+      },
     },
   },
 ];

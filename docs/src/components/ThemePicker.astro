@@ -1,0 +1,18 @@
+---
+import registry from "../generated/themes.json";
+---
+<div class="theme-control">
+  <button class="theme-toggle" type="button" aria-expanded="false" aria-controls="theme-panel">Theme</button>
+  <div id="theme-panel" class="theme-panel" hidden>
+    <div class="theme-choices" aria-label="Theme">
+      {registry.themes.map((theme) => <button type="button" data-theme-value={theme.id} aria-pressed="false"><span style={`--swatch-a:${theme.swatch[0]};--swatch-b:${theme.swatch[1]}`}></span>{theme.label}</button>)}
+    </div>
+    <div class="variant-choices" aria-label="Color variant">
+      {["auto", "light", "dark"].map((variant) => <button type="button" data-variant-value={variant} aria-pressed="false">{variant[0].toUpperCase() + variant.slice(1)}</button>)}
+    </div>
+  </div>
+</div>
+<script>
+  import { initializeThemePicker } from "../scripts/theme-picker";
+  initializeThemePicker();
+</script>

@@ -1,0 +1,81 @@
+name: docs
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "common/themes/**"
+      - "controller/internal/config/**"
+      - "controller/cmd/configctl/**"
+      - "scripts/generate-themes.mjs"
+      - "src/commands/docs.js"
+      - "src/main.js"
+      - "src/commands/help.js"
+      - "test/docs*.test.js"
+      - ".github/workflows/docs.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "common/themes/**"
+      - "controller/internal/config/**"
+      - "controller/cmd/configctl/**"
+      - "scripts/generate-themes.mjs"
+      - "src/commands/docs.js"
+      - "src/main.js"
+      - "src/commands/help.js"
+      - "test/docs*.test.js"
+      - ".github/workflows/docs.yml"
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix docs
+      - run: npm --prefix docs exec playwright install --with-deps chromium
+      - run: node --test test/docs*.test.js
+      - run: node scripts/generate-themes.mjs --check
+      - run: npm --prefix docs run check
+      - run: npm --prefix docs run test:browser
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions: {contents: write}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+      - run: npm ci --prefix docs
+      - run: node scripts/generate-themes.mjs --check
+      - run: npm --prefix docs run build
+      - name: Publish orphan docs branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PUBLISH=$(mktemp -d)
+          cp -a docs/dist/. "$PUBLISH/"
+          cd "$PUBLISH"
+          git init --initial-branch=docs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs: deploy ${GITHUB_SHA}"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin HEAD:docs

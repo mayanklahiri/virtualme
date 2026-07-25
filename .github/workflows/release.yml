@@ -94,6 +94,7 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
       - run: npm ci
+      - run: npm ci --prefix docs
       - run: CHECK_SKIP_GO=1 npm run check
       - run: npm publish --access public
         env:

@@ -23,6 +23,7 @@ jobs:
           # Controller is stdlib-only under controller/; no go.sum at repo root.
           cache: false
       - run: npm ci
+      - run: npm ci --prefix docs
       - name: Fetch web assets (spec 003+)
         run: |
           if [ -f controller/tools/fetch-assets.sh ]; then bash controller/tools/fetch-assets.sh; fi

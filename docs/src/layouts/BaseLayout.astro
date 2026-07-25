@@ -1,0 +1,69 @@
+---
+import PageFooter from "../components/PageFooter.astro";
+import PageHeader from "../components/PageHeader.astro";
+import ThemePicker from "../components/ThemePicker.astro";
+import themes from "../generated/themes.json";
+import "../styles/generated-themes.css";
+import "../styles/global.css";
+import { site } from "../config/site";
+import { canonical, url } from "../config/urls";
+
+interface Props {
+  title: string;
+  description: string;
+  path?: string;
+  image?: string;
+  canonicalOverride?: string;
+}
+const { title, description, path = "", image = "social-card.jpg", canonicalOverride } = Astro.props;
+const pageTitle = title === "Virtual Me" ? title : `${title} | Virtual Me`;
+const canonicalUrl = canonicalOverride ?? canonical(path);
+const analyticsMeasurementId = site.analyticsMeasurementId;
+const themeIds = themes.themes.map(({ id }) => id);
+---
+<!doctype html>
+<html lang="en" data-theme="modern" data-variant="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalUrl} />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={canonical(image)} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="theme-color" content="#4055c8" />
+    <link rel="icon" href={url("favicon.svg")} type="image/svg+xml" />
+    <script is:inline define:vars={{ themeIds }}>
+      (() => {
+        let savedTheme = ""; let savedVariant = "";
+        try { savedTheme = localStorage.getItem("vm-theme") || ""; savedVariant = localStorage.getItem("vm-variant") || ""; } catch {}
+        const theme = themeIds.includes(savedTheme) ? savedTheme : "modern";
+        const preference = ["auto", "light", "dark"].includes(savedVariant) ? savedVariant : "auto";
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.variant = preference === "auto"
+          ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+          : preference;
+      })();
+    </script>
+    {analyticsMeasurementId && <script is:inline async src={`https://www.googletagmanager.com/gtag/js?id=${analyticsMeasurementId}`}></script>}
+    {analyticsMeasurementId && <script is:inline define:vars={{ analyticsMeasurementId }}>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag("js", new Date());
+      gtag("config", analyticsMeasurementId);
+    </script>}
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <PageHeader />
+    <ThemePicker />
+    <main id="main" tabindex="-1"><slot /></main>
+    <PageFooter />
+  </body>
+</html>

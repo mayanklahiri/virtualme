@@ -29,6 +29,12 @@ node_modules/.bin/tsc -p jsconfig.json || fail typecheck
 step "unit tests (node --test)"
 node --test test/*.test.js || fail "node tests"
 
+step "generated themes"
+node scripts/generate-themes.mjs --check || fail "generated themes"
+
+step "documentation site"
+npm --prefix docs run check || fail "documentation site"
+
 step "CLI dry run"
 node bin/virtualme.js help >/dev/null || fail "cli help"
 node bin/virtualme.js version >/dev/null || fail "cli version"

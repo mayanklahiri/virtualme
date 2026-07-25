@@ -4,11 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Virtual Me</title>
+    <script src="/js/generated-theme-boot.js"></script>
     <script>
       (() => {
         const savedTheme = localStorage.getItem("vm-theme");
         const savedVariant = localStorage.getItem("vm-variant");
-        const theme = ["modern", "editorial", "terminal", "warm", "contrast", "arctic", "solar", "studio"].includes(savedTheme) ? savedTheme : "modern";
+        const theme = window.VIRTUALME_THEMES.includes(savedTheme) ? savedTheme : "modern";
         const preference = ["auto", "light", "dark"].includes(savedVariant) ? savedVariant : "auto";
         const variant = preference === "auto"
           ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")

@@ -1,0 +1,20 @@
+---
+import { url } from "../config/urls";
+---
+<figure class="snowglobe" data-snowglobe>
+  <div class="globe" tabindex="0" aria-label="A local machine holding private digital memories">
+    <span class="memory calendar">Tue<br /><b>Project</b></span>
+    <span class="memory browser">Browser<br />working locally</span>
+    <span class="memory note">remember<br />this</span>
+    <span class="memory waveform">▁▃▆▂▇▅▂</span>
+    <span class="memory mail">✉</span>
+    <span class="memory task">Weekly task ✓</span>
+    {Array.from({ length: 18 }, (_, index) => <i class={`snow snow-${index}`} aria-hidden="true"></i>)}
+  </div>
+  <figcaption><span data-globe-caption>Memories stay on your machine.</span> <a data-about-link href={url("about/")} hidden>Open the memory cabinet</a></figcaption>
+  <button type="button" data-shake>Gently shake</button>
+</figure>
+<script>
+  import { initializeSnowglobe } from "../scripts/memory-snowglobe";
+  initializeSnowglobe();
+</script>

@@ -1,0 +1,16 @@
+---
+import DocsLayout from "../layouts/DocsLayout.astro";
+---
+<DocsLayout title="How it works" description="The local controller, queue, model, browser, state stores, and trust boundary behind Virtual Me." path="architecture/">
+  <p class="eyebrow">One container, one exposed port</p><h1>A local control plane with observable work.</h1>
+  <p class="lead">Your browser connects to port 8080. A Go controller coordinates a reliable queue, local model, private Chromium desktop, Valkey state, and one mounted data directory.</p>
+  <h2 id="flow">Data and control flow</h2>
+  <div class="architecture-diagram" role="img" aria-label="User browser connects through port 8080 to the Go controller. The controller sends work through a queue to the local model and browser, while Valkey and the mounted data directory retain state and artifacts.">
+    <div><strong>User browser</strong>Console and desktop takeover</div><div><strong>Port 8080</strong>The only exposed container port</div><div class="wide"><strong>Go controller</strong>Health, websocket state, projects, tools, mail, speech, and data APIs</div><div><strong>Reliable queue</strong>Sequential interactive and scheduled work</div><div><strong>Local model</strong>CPU inference; optional GPU acceleration</div><div><strong>Private Chromium</strong>Read-only CDP observations; OS-level mouse and keyboard actuation</div><div><strong>Valkey</strong>Queue, projects, activity, chat, speech, and scheduler state</div><div class="wide"><strong>Mounted data directory</strong>Browser profile, jobs, projects, screenshots, mail, speech cache, metrics, and artifacts</div>
+  </div>
+  <p>The text order above is the complete diagram equivalent: user → port 8080 → controller → queue → local model and browser, with Valkey and the mounted data directory beside the work path.</p>
+  <h2 id="browser-boundary">A browser you can inspect</h2><p>The agent combines screenshots, rendered DOM, and allowlisted read-only CDP observations. CDP does not navigate or generate input. Browser actions use OS-level <code>xdotool</code> mouse and keyboard input behind an actuation lock, so Desktop shows the same surface the agent uses.</p>
+  <h2 id="persistence">Persistence is explicit</h2><p>The host data mount keeps browser state, queued and recurring jobs, project scratch directories, agent screenshots and logs, mail spool and keys, speech cache and history, and tiered metrics. Container binaries and generated runtime state outside that mount are replaceable.</p>
+  <h2 id="trust">Prototype trust boundary</h2><p>There is no authentication or TLS in v1. Anyone who can reach port 8080 can inspect state and use the chat, so run Virtual Me only on a trusted computer and private network. Internal services bind to loopback inside the container.</p>
+  <h2 id="hardware">CPU by default, GPU when available</h2><p>The bundled local model runs on CPU. The CLI can pass through a supported host NVIDIA GPU, and the controller also observes NVIDIA, AMD, or Intel hardware where available. Optional acceleration changes throughput, not the data boundary.</p>
+</DocsLayout>

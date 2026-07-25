@@ -1,0 +1,12 @@
+---
+import BaseLayout from "./BaseLayout.astro";
+import Toc from "../components/Toc.astro";
+interface Props { title: string; description: string; path: string; headings?: { depth: number; slug: string; text: string }[]; }
+const props = Astro.props;
+---
+<BaseLayout {...props}>
+  <div class="docs-shell">
+    <article class="docs-article"><slot /></article>
+    {props.headings?.length ? <Toc headings={props.headings} /> : null}
+  </div>
+</BaseLayout>

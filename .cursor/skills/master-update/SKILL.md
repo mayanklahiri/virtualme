@@ -9,7 +9,8 @@ Docs follow code, never the reverse. Procedure:
 
 ## 1. Enumerate ground truth (from the tree, not from memory)
 
-- `package.json`: name, version, scripts, bin, engines, devDependencies
+- root and `docs/` package manifests/locks: isolation, exact direct pins,
+  scripts, engines, and unchanged root runtime dependencies
 - `src/commands/*.js`: the real CLI surface
 - `.github/workflows/*.yml`: job names, triggers, required secrets
 - `docker/layers/*.sh`: layer numbers, artifacts, pinned versions/hashes
@@ -17,6 +18,11 @@ Docs follow code, never the reverse. Procedure:
 - `controller/`: endpoints (grep `mux.Handle`/`HandleFunc`), ws message types
 - `specs/*.md`: spec index
 - `.cursor/skills/*/SKILL.md`: skill inventory
+- `common/themes/themes.json` plus all five generated outputs: ordered theme
+  parity and `node scripts/generate-themes.mjs --check`
+- `docs/src/pages/`, content collection, `docs/src/config/site.ts`, and
+  `docs/src/generated/`: routes, analytics default, config handoff, and
+  generated provenance
 
 ## 2. Diff against documentation
 
@@ -25,6 +31,9 @@ specs, ports, commands), `AGENTS.md`, `CLAUDE.md`, every `SKILL.md`.
 Flag: missing entries, stale versions/ports/flags, removed features still
 documented, broken relative links, drift between skill tables and
 `src/commands/`.
+Also check README↔site crosslinks, the production `/virtualme/` base, docs
+workflow path filters/publication branch, and that screenshots remain solely
+under `docs/src/screenshots/`; never move site-owned assets outside `docs/`.
 
 ## 3. Apply updates
 
@@ -52,7 +61,8 @@ down, start the container and retry rather than leaving stale screenshots.
 
 ## 5. Validate
 
-Run `npm run check`. If Docker is available and `test/smoke.sh` exists and
+Run `npm run check`, `./cli.sh docs build`, and the docs browser suite when its
+explicit Playwright browser setup is present. If Docker is available and `test/smoke.sh` exists and
 container-affecting docs changed, also run `bash test/smoke.sh`.
 
 ## 6. Report

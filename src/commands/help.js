@@ -12,6 +12,8 @@ const commands = [
   ["keygen", "Generate a 256-bit base64url token"],
   ["update", "Pull the configured image"],
   ["soak [--no-build]", "Rebuild once, run full e2e, then live soak flows (source checkout)"],
+  ["docs dev [--host <host>] [--port <port>]", "Serve the documentation site (source checkout)"],
+  ["docs build", "Build the documentation site (source checkout)"],
 ];
 
 /**

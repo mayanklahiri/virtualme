@@ -1,0 +1,39 @@
+---
+import DocsLayout from "../layouts/DocsLayout.astro";
+import CodeBlock from "../components/CodeBlock.astro";
+import reference from "../generated/config-reference.json";
+import "../styles/docs.css";
+const complete = "schemaSha256" in reference;
+interface Setting {
+  path: string; anchor: string; type: string; default: unknown; required: boolean;
+  restart: string; legacyEnv?: string; overview: string; details: string[];
+}
+interface Section {
+  anchor: string; title: string; overview: string; details: string[];
+  exemplarYaml: string; settings: Setting[];
+}
+const sections = reference.sections as Section[];
+---
+<DocsLayout title="Configuration" description="Generated Virtual Me configuration reference and operational guidance." path="configuration/">
+  <p class="eyebrow">Generated reference</p><h1>Configuration, with every tradeoff attached.</h1>
+  {!complete ? <div class="pending"><h2 id="pending">Pending spec 031</h2><p>The authoritative generated option reference is pending spec 031. No options are invented here. Until then, use the current <a href="https://github.com/mayanklahiri/virtualme#readme">README configuration guidance</a>.</p></div> :
+  <div class="reference-layout">
+    <aside class="reference-rail"><label for="config-filter">Filter exact option text</label><input id="config-filter" type="search" /><p id="config-count"></p><nav aria-label="Configuration sections">{sections.map((section) => <a href={`#${section.anchor}`}>{section.title}</a>)}</nav></aside>
+    <div>{sections.map((section) => <section id={section.anchor} data-config-section tabindex="-1"><h2>{section.title} <a class="permalink" href={`#${section.anchor}`} aria-label={`Permalink to ${section.title}`}>#</a></h2><p>{section.overview}</p>{section.details.map((detail) => <p>{detail}</p>)}<CodeBlock code={section.exemplarYaml} label={`Copy ${section.title} YAML`} />{section.settings.map((setting) => <article id={setting.anchor} class="reference-card" data-config-card data-search={`${setting.path} ${setting.overview}`.toLowerCase()} tabindex="-1"><h3><code>{setting.path}</code> <a class="permalink" href={`#${setting.anchor}`} aria-label={`Permalink to ${setting.path}`}>#</a></h3><p>{setting.overview}</p><dl><dt>Type</dt><dd>{setting.type}</dd><dt>Presence</dt><dd>{setting.required ? "Required" : "Optional"}</dd><dt>Default</dt><dd><code>{JSON.stringify(setting.default)}</code></dd><dt>Restart</dt><dd>{setting.restart}</dd>{setting.legacyEnv && <><dt>Legacy environment variable</dt><dd><code>{setting.legacyEnv}</code></dd></>}</dl>{setting.details.map((detail) => <p>{detail}</p>)}</article>)}</section>)}</div>
+  </div>}
+</DocsLayout>
+{complete && <script>
+  const input = document.querySelector<HTMLInputElement>("#config-filter");
+  const count = document.querySelector<HTMLElement>("#config-count");
+  const cards = [...document.querySelectorAll<HTMLElement>("[data-config-card]")];
+  const update = () => {
+    const query = input?.value.trim().toLowerCase() ?? "";
+    let shown = 0;
+    cards.forEach((card) => { const match = !query || card.dataset.search?.includes(query); card.hidden = !match; if (match) shown += 1; });
+    if (count) count.textContent = query ? `${shown} matching options` : "";
+    if (query) history.replaceState(null, "", `${location.pathname}?q=${encodeURIComponent(query)}`);
+  };
+  if (input) { input.value = new URLSearchParams(location.search).get("q") ?? ""; input.addEventListener("input", update); update(); }
+  const focusHash = () => document.querySelector<HTMLElement>(location.hash)?.focus();
+  addEventListener("hashchange", focusHash); focusHash();
+</script>}

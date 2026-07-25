@@ -1,0 +1,23 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+const principles = [
+  ["Locality", "Work and memory stay on hardware you control."],
+  ["Inspectability", "The browser, queue, tools, artifacts, and failures remain visible."],
+  ["Patience", "Background work may be slow without becoming useless."],
+  ["Ownership", "Open source, local files, and replaceable components keep agency with the operator."],
+  ["Dependability", "Reliable recurring work matters more than theatrical speed."],
+];
+---
+<BaseLayout title="The memory cabinet" description="Five principles behind Virtual Me: locality, inspectability, patience, ownership, and dependability." path="about/">
+  <p class="eyebrow">A hidden room</p><h1>Open the memory cabinet.</h1><p class="lead">Each drawer holds one project principle. The words are always present; the controls move focus to them.</p>
+  <div class="memory-cabinet" aria-label="Memory drawers">{principles.map(([name], index) => <button type="button" data-memory={index} aria-label={`Open ${name} memory`}>{name}</button>)}</div>
+  <ol class="principles" aria-label="Project principles">{principles.map(([name, description], index) => <li id={`principle-${index}`} tabindex="-1"><h2>{name}</h2><p>{description}</p></li>)}</ol>
+</BaseLayout>
+<script>
+  let trigger: HTMLButtonElement | null = null;
+  document.querySelectorAll<HTMLButtonElement>("[data-memory]").forEach((button) => button.addEventListener("click", () => {
+    trigger = button;
+    document.querySelector<HTMLElement>(`#principle-${button.dataset.memory}`)?.focus();
+  }));
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && trigger) { trigger.focus(); trigger = null; } });
+</script>

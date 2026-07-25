@@ -1,4 +1,5 @@
-const themes = ["modern", "editorial", "terminal", "warm", "contrast", "arctic", "solar", "studio"];
+import { themes } from "./generated-themes.js";
+const themeIds = themes.map(({ id }) => id);
 const variants = [
   ["auto", "palette"],
   ["light", "sun"],
@@ -24,7 +25,7 @@ export function initTheme() {
   const popover = document.querySelector("#theme-popover");
   const savedTheme = localStorage.getItem("vm-theme");
   const savedVariant = localStorage.getItem("vm-variant");
-  let theme = themes.includes(savedTheme) ? savedTheme : "modern";
+  let theme = themeIds.includes(savedTheme) ? savedTheme : "modern";
   let preference = variants.some(([name]) => name === savedVariant) ? savedVariant : "auto";
 
   function closePopover() {
@@ -71,7 +72,7 @@ export function initTheme() {
     }
   });
 
-  for (const name of themes) {
+  for (const { id: name, label: themeLabel } of themes) {
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.value = name;
@@ -79,7 +80,7 @@ export function initTheme() {
     const swatch = document.createElement("span");
     swatch.setAttribute("aria-hidden", "true");
     const label = document.createElement("span");
-    label.textContent = name;
+    label.textContent = themeLabel;
     button.append(swatch, label);
     button.addEventListener("click", () => {
       theme = name;

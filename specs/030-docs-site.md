@@ -1175,45 +1175,45 @@ benchmark, energy measurement, release date, or compatibility promise.
 
 ## 13. Acceptance checklist
 
-- [ ] The separate append-only spec 001 carveout authorizes the isolated docs
+- [x] The separate append-only spec 001 carveout authorizes the isolated docs
       package without weakening root zero-runtime-dependency or offline-gate
       rules.
-- [ ] Red-first outputs are recorded for CLI, themes, build, workflow, and
+- [x] Red-first outputs are recorded for CLI, themes, build, workflow, and
       browser contracts before implementation; the execution amendment
       records the final green commands.
-- [ ] `docs/package.json` and lock are isolated, exact-pinned, reproducible
+- [x] `docs/package.json` and lock are isolated, exact-pinned, reproducible
       with `npm ci --prefix docs`, and root runtime dependencies remain empty.
-- [ ] `./cli.sh docs dev` and `./cli.sh docs build` meet every parsing, cwd,
+- [x] `./cli.sh docs dev` and `./cli.sh docs build` meet every parsing, cwd,
       setup, spawn, and exit-status rule from §3.
-- [ ] Ordinary docs build and `npm run check` complete with network disabled
+- [x] Ordinary docs build and `npm run check` complete with network disabled
       after explicit root/docs setup.
-- [ ] One validated JSON source generates byte-deterministic controller/docs
+- [x] One validated JSON source generates byte-deterministic controller/docs
       CSS and registries; `--check` catches drift; all eight themes, both
       variants, typography, semantics, and `--p1`…`--p8` are in parity.
-- [ ] Existing controller visual tokens are unchanged by extraction, and the
+- [x] Existing controller visual tokens are unchanged by extraction, and the
       controller pre-paint/theme picker contains no duplicate handwritten
       theme allowlist.
-- [ ] Expected listed, hidden, blog, welcome, and 404 routes build beneath
+- [x] Expected listed, hidden, blog, welcome, and 404 routes build beneath
       `/virtualme/`; all internal links/assets and canonicals are base-correct.
-- [ ] Home delivers the responsive memory-snowglobe concept and concrete
+- [x] Home delivers the responsive memory-snowglobe concept and concrete
       product path; the guide can be completed in about five minutes by a
       casual technical user.
-- [ ] `/about/` and `/no-more-bills/` are usable but absent from listed
+- [x] `/about/` and `/no-more-bills/` are usable but absent from listed
       navigation; the latter includes every required narrative point and no
       unsupported exact energy/cost claim.
-- [ ] Blog collection, reverse-chronological index, post route, metadata,
+- [x] Blog collection, reverse-chronological index, post route, metadata,
       table of contents, and initial welcome post work with JavaScript off.
-- [ ] Empty analytics emits no analytics code/request hint in any HTML;
+- [x] Empty analytics emits no analytics code/request hint in any HTML;
       `G-TEST1234` emits one valid loader/config pair in every HTML; invalid
       IDs fail; edit location is documented as `docs/src/config/site.ts`.
-- [ ] Every generated page has the exact linked copyright
+- [x] Every generated page has the exact linked copyright
       `© 2026 Mayank Lahiri`; README and docs crosslink in both directions.
-- [ ] Keyboard, focus, contrast, 200% zoom, 320 px layout, reduced motion,
+- [x] Keyboard, focus, contrast, 200% zoom, 320 px layout, reduced motion,
       no-script content, and touch controls satisfy §7 and deterministic
       browser assertions.
-- [ ] Build output meets route, reference, resource, size, hermeticity,
+- [x] Build output meets route, reference, resource, size, hermeticity,
       determinism, `.nojekyll`, and 404 contracts in §9.
-- [ ] Pull requests build/test only with read permission; main pushes rebuild
+- [x] Pull requests build/test only with read permission; main pushes rebuild
       and force-publish branch-root output to orphan `docs` with write
       permission; actions use audited full SHAs and no Pages action.
 - [ ] Repository Pages is manually configured once for `docs` `/ (root)` and
@@ -1222,11 +1222,65 @@ benchmark, energy measurement, release date, or compatibility promise.
       `schemaSha256`; every
       configuration section/option is deep-linkable and exposes exemplar
       YAML, values/constraints, defaults, examples, details, and tradeoffs.
-- [ ] `npm run check`, `./cli.sh docs build`, and the Playwright browser suite
+- [x] `npm run check`, `./cli.sh docs build`, and the Playwright browser suite
       pass, and a final `git status --short` shows no generated/build drift.
-- [ ] `/master-update` completes the §12 reconciliation and all links/spec
+- [x] `/master-update` completes the §12 reconciliation and all links/spec
       indexes/skills match repository ground truth.
 
 ## Amendments
 
-None.
+### 2026-07-25 — Execution evidence
+
+Implementation followed the required three-pass order.
+
+#### Red-first evidence
+
+All failures were contract failures against syntactically valid tests:
+
+| Command | Red result |
+|---|---|
+| `node --test test/docs-cli.test.js` | Exit 1; 0/3 passed. Registration assertion failed and `src/commands/docs.js` was absent. |
+| `node --test test/themes-generated.test.js` | Exit 1; 0/3 passed because `scripts/generate-themes.mjs` was absent. |
+| `node --test test/docs-build-contract.test.js` | Exit 1; 1/4 passed. The package/config/routes and README crosslink were absent. |
+| `node --test test/docs-workflow.test.js` | Exit 1; 0/3 passed because `.github/workflows/docs.yml` was absent. |
+| `npm --prefix docs run check` | Exit 1 because the required `docs/scripts/ensure-generated.mjs` build entrypoint was absent. |
+| `npm --prefix docs run test:browser` | Exit 1; 0/2 passed because site output/routes and the theme control were absent. |
+
+Explicit setup used `npm install --prefix docs` to create the accepted lock and
+install the exact-pinned toolchain, followed by
+`npm --prefix docs exec playwright install chromium`. Those were the only
+non-package public downloads. Ordinary builds and all gates were subsequently
+offline.
+
+#### Implementation notes and deviations
+
+- Spec 031 had not executed, so the exact `pending-spec-031` artifact from §8.1
+  was installed. No 031 schema, exporter, controller config package, or option
+  content was added.
+- Astro 7 treats `404.astro` specially and directly emits `dist/404.html`
+  instead of `dist/404/index.html`. `make-404.mjs` therefore rewrites the
+  emitted file's canonical in place. The resulting branch-root 404, base-aware
+  links/assets, canonical, and deterministic output match the acceptance
+  contract; no rendered source route is deleted.
+- Shared-token extraction expanded three-digit source colors to the canonical
+  six-digit JSON form without changing their values or controller appearance.
+  No controller screenshot refresh was required. The mandatory
+  `bash scripts/update-doc-images.sh` reconciliation completed with the
+  existing sole screenshot source under `docs/src/screenshots/`.
+
+#### Final verification evidence
+
+| Command | Result |
+|---|---|
+| `npm ci` | Exit 0; 80 root development packages installed. npm reported one pre-existing high-severity development-tree audit finding; installation and gates were unaffected. |
+| `npm ci --prefix docs` | Exit 0; 289 documentation packages installed, 0 vulnerabilities. |
+| `npm run check` | Exit 0; locality, ESLint, typecheck, 99 Node tests, generated themes, Astro check/build, 9-route/21-file output verification, CLI dry run, generated controller SPA, gofmt, vet, and all Go tests passed. |
+| `./cli.sh docs build` | Exit 0; 9 static routes built and `verify-build` reported 9 HTML / 21 total files. |
+| `npm --prefix docs run test:browser` | Exit 0; 4/4 Playwright suites passed across required routes/viewports, keyboard/focus interactions, all 16 theme combinations, persistence, hidden routes, overflow, and reduced motion. |
+| `bash scripts/update-doc-images.sh` | Exit 0; all three README screenshot markers remained wired to `docs/src/screenshots/`. |
+
+Two acceptance items intentionally remain open. Repository Pages requires the
+documented one-time administrator action after the workflow first publishes
+the orphan branch; this execution did not contact GitHub or mutate repository
+settings. The complete generated configuration reference remains blocked on
+accepted, unimplemented spec 031 exactly as §8 requires.

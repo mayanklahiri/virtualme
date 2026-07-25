@@ -1,0 +1,12 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getCollection } from "astro:content";
+import { url } from "../../config/urls";
+const posts = (await getCollection("blog", ({ data }) => import.meta.env.PROD ? !data.draft : true))
+  .sort((a, b) => b.data.published.getTime() - a.data.published.getTime() || Buffer.from(a.id).compare(Buffer.from(b.id)));
+---
+<BaseLayout title="Blog" description="Notes on local agents, shipped behavior, operating constraints, and inspectable background work." path="blog/">
+  <p class="eyebrow">Field notes</p><h1>Patient computing, documented.</h1>
+  <p class="lead">Concrete notes about what Virtual Me does, why it is built locally, and what operating it teaches.</p>
+  <ol class="post-list">{posts.map((post) => <li><article><time datetime={post.data.published.toISOString()}>{post.data.published.toISOString().slice(0, 10)}</time><h2><a href={url(`blog/${post.id}/`)}>{post.data.title}</a></h2><p>{post.data.description}</p></article></li>)}</ol>
+</BaseLayout>

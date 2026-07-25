@@ -1,0 +1,20 @@
+{
+  "name": "@virtualme/docs",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "node scripts/ensure-generated.mjs && astro build && node scripts/make-404.mjs && node scripts/verify-build.mjs",
+    "check": "node scripts/ensure-generated.mjs --check && astro check && astro build && node scripts/make-404.mjs && node scripts/verify-build.mjs",
+    "test:browser": "node --test test/browser.test.mjs"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.9",
+    "@playwright/test": "1.62.0",
+    "astro": "7.1.3",
+    "typescript": "6.0.3"
+  }
+}

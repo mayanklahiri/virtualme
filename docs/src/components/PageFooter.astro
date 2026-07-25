@@ -1,0 +1,8 @@
+---
+import { navigation } from "../config/navigation";
+import { url } from "../config/urls";
+---
+<footer>
+  <nav aria-label="Footer">{navigation.slice(1).map((item) => <a href={url(item.href)}>{item.label}</a>)}</nav>
+  <p>© 2026 <a href="https://www.linkedin.com/in/mayanklahiri/">Mayank Lahiri</a></p>
+</footer>

@@ -18,6 +18,8 @@ done
   || { echo "build-web: assets missing; run: bash controller/tools/fetch-assets.sh" >&2; exit 1; }
 [[ -s "$SRC/brand/hero.jpg" ]] \
   || { echo "build-web: brand/hero.jpg missing; run: bash scripts/update-logo.sh" >&2; exit 1; }
+node scripts/generate-themes.mjs --check \
+  || { echo "build-web: generated themes are stale; run: node scripts/generate-themes.mjs" >&2; exit 1; }
 
 rm -rf "$DIST"
 mkdir -p "$DIST/js" "$DIST/css" "$DIST/fonts" "$DIST/img" "$DIST/brand"
@@ -25,6 +27,8 @@ mkdir -p "$DIST/js" "$DIST/css" "$DIST/fonts" "$DIST/img" "$DIST/brand"
   --sourcemap --sources-content=true --outfile="$DIST/js/app.js"
 "$ESBUILD" "$SRC/css/app.css" --minify \
   --sourcemap --sources-content=true --outfile="$DIST/css/app.css"
+"$ESBUILD" "$SRC/js/generated-theme-boot.js" --minify --format=iife \
+  --outfile="$DIST/js/generated-theme-boot.js"
 cp "$SRC/index.html" "$DIST/index.html"
 for font in "${FONTS[@]}"; do
   cp "$SRC/fonts/$font" "$DIST/fonts/"

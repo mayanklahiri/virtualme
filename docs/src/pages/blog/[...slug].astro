@@ -1,0 +1,21 @@
+---
+import { getCollection, render } from "astro:content";
+import DocsLayout from "../../layouts/DocsLayout.astro";
+import { url } from "../../config/urls";
+
+export async function getStaticPaths() {
+  const posts = (await getCollection("blog", ({ data }) => import.meta.env.PROD ? !data.draft : true))
+    .sort((a, b) => b.data.published.getTime() - a.data.published.getTime() || Buffer.from(a.id).compare(Buffer.from(b.id)));
+  return posts.map((post, index) => ({ params: { slug: post.id }, props: { post, previous: posts[index + 1], next: posts[index - 1] } }));
+}
+const { post, previous, next } = Astro.props;
+const { Content, headings } = await render(post);
+---
+<DocsLayout title={post.data.title} description={post.data.description} path={`blog/${post.id}/`} headings={headings}>
+  <article>
+    <p class="eyebrow">Virtual Me blog</p><h1>{post.data.title}</h1>
+    <p><time datetime={post.data.published.toISOString()}>Published {post.data.published.toISOString().slice(0, 10)}</time>{post.data.updated && <> · <time datetime={post.data.updated.toISOString()}>Updated {post.data.updated.toISOString().slice(0, 10)}</time></>}</p>
+    <Content />
+    <nav class="post-pagination" aria-label="Adjacent posts">{previous && <a href={url(`blog/${previous.id}/`)}>← {previous.data.title}</a>}{next && <a href={url(`blog/${next.id}/`)}>{next.data.title} →</a>}</nav>
+  </article>
+</DocsLayout>
