@@ -1,4 +1,5 @@
 import { AudioPlayer } from "./audio-player.js";
+import { createTtsStream } from "./tts-stream.js";
 
 const MAX_LEN = 4096;
 const SEEDS = {
@@ -31,9 +32,27 @@ export function initTTS(send) {
   const status = document.querySelector("#speech-status");
   const history = document.querySelector("#speech-history");
   const player = new AudioPlayer();
-  let active = null;
   let live = false;
   let entries = [];
+  const stream = createTtsStream({
+    player,
+    onActiveChange() {
+      enabled();
+    },
+    onEvent(message) {
+      if (message.type === "tts-start") {
+        status.textContent = `synthesizing sentence 1/${message.sentences}`;
+      } else if (message.type === "tts-status" && message.phase === "synthesizing") {
+        status.textContent = `${player.chunks.length ? "playing · " : ""}synthesizing sentence ${message.sentence}/${message.sentences}`;
+      } else if (message.type === "tts-done") {
+        status.textContent = `playing (${Number(message.rtf).toFixed(2)}× real time)`;
+      } else if (message.type === "tts-finished") {
+        status.textContent = `done (${Number(message.audioSec).toFixed(1)} s audio)`;
+      } else if (message.type === "tts-error") {
+        status.textContent = `error: ${message.error}`;
+      }
+    },
+  });
 
   const storedVoice = localStorage.getItem("vm-voice");
   if ([...voice.options].some((option) => option.value === storedVoice)) {
@@ -45,13 +64,14 @@ export function initTTS(send) {
   }
 
   function enabled() {
-    speak.disabled = !live || active !== null || !input.value.trim();
-    input.disabled = active !== null;
-    voice.disabled = active !== null;
-    clear.disabled = active !== null;
-    stop.hidden = active === null;
+    const busy = stream.active !== null;
+    speak.disabled = !live || busy || !input.value.trim();
+    input.disabled = busy;
+    voice.disabled = busy;
+    clear.disabled = busy;
+    stop.hidden = !busy;
     for (const button of history.querySelectorAll("button")) {
-      button.disabled = !live || active !== null;
+      button.disabled = !live || busy;
     }
   }
   input.addEventListener("input", () => {
@@ -77,10 +97,10 @@ export function initTTS(send) {
   }
 
   function request(text, selectedVoice) {
-    if (!text || !live || active !== null) return;
+    if (!text || !live || stream.active !== null) return;
     const id = crypto.randomUUID();
     if (send({ type: "tts-req", id, text, voice: selectedVoice })) {
-      active = id;
+      stream.begin(id);
       status.textContent = "sending…";
       enabled();
     }
@@ -89,11 +109,9 @@ export function initTTS(send) {
     request(input.value.trim(), voice.value);
   });
   stop.addEventListener("click", () => {
-    if (active) send({ type: "tts-stop", id: active });
-    player.stop();
-    active = null;
+    if (stream.active) send({ type: "tts-stop", id: stream.active });
+    void stream.reset();
     status.textContent = "stopped";
-    enabled();
   });
 
   function renderHistory() {
@@ -141,37 +159,23 @@ export function initTTS(send) {
   return {
     status(connection) {
       live = connection === "live";
-      if (live) send({ type: "speech-log-req" });
+      if (live) {
+        send({ type: "speech-log-req" });
+      } else if (stream.active !== null) {
+        // A dropped socket means tts-done may never arrive; recover Speak.
+        void stream.reset();
+        status.textContent = "connection lost";
+      }
       enabled();
     },
-    async frame(message) {
+    frame(message) {
       if (message.type === "speech-log") {
         entries = message.entries ?? [];
         renderHistory();
         return;
       }
-      if (message.origin !== "console" || message.id !== active) return;
-      if (message.type === "tts-start") {
-        await player.begin(message.sampleRate);
-        status.textContent = `synthesizing sentence 1/${message.sentences}`;
-      } else if (message.type === "tts-chunk") {
-        player.push(message.pcm);
-      } else if (message.type === "tts-status" && message.phase === "synthesizing") {
-        status.textContent = `${player.chunks.length ? "playing · " : ""}synthesizing sentence ${message.sentence}/${message.sentences}`;
-      } else if (message.type === "tts-done") {
-        status.textContent = `playing (${Number(message.rtf).toFixed(2)}× real time)`;
-        setTimeout(() => {
-          if (active !== message.id) return;
-          status.textContent = `done (${Number(message.audioSec).toFixed(1)} s audio)`;
-          active = null;
-          enabled();
-        }, player.remainingMS());
-      } else if (message.type === "tts-error") {
-        status.textContent = `error: ${message.error}`;
-        player.stop();
-        active = null;
-        enabled();
-      }
+      if (message.origin !== "console") return;
+      stream.frame(message);
     },
   };
 }

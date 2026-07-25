@@ -34,6 +34,10 @@ export class AudioPlayer {
 
   push(encoded, keep = true) {
     if (!this.context || !this.sampleRate) return;
+    if (this.context.state === "suspended") {
+      // Background tabs can suspend the context; recover without blocking.
+      void this.context.resume();
+    }
     if (keep) this.chunks.push(encoded);
     const samples = decodePCM(encoded);
     const buffer = this.context.createBuffer(1, samples.length, this.sampleRate);
