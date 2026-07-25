@@ -120,7 +120,8 @@ The host directory `~/.virtualme` (override with `--data <dir>` or
 container's `~/.virtualme`. It contains `valkey/` (chat and speech history,
 stats, the reliable job queue, activity ledger, and project records),
 `chromium/` (browser profile), `xdg/{config,cache,data}/`, `metrics/` (tiered
-history), `agent/` (agent artifacts), `projects/` (per-project scratch space),
+history), `agent/` (agent artifacts and manual `dom-dumps/` development
+captures), `projects/` (per-project scratch space),
 `tts-cache/` (recomputable synthesized audio), and `mail/` (dma config/spool,
 bounded flush log, flush marker, and the DKIM private key). Chromium settings,
 projects, and queued mail survive container and image replacement. The
@@ -151,7 +152,7 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/projects` | Recurring natural-language tasks, schedules, manual runs, and recent results |
 | `/projects/<id>` | Project task, schedule, status, run history, and scratch-directory details |
 | `/jobs` | Queue, filterable machine activity with durations, and type-specific details in three panes |
-| `/tools` | Authoritative agent-tool list, schema-generated forms, queue-backed manual invocation, and structured result rendering |
+| `/tools` | Authoritative agent-tool list plus manual-only development tools (`dump_dom`), schema-generated forms, queue-backed manual invocation, and structured result rendering |
 | `/data` | Read-only icon/list explorer of `$VM_DATA_DIR` with sortable size summaries, deep links, a resizable preview pane, and typed viewers |
 | `/status` | Service health, system/GPU meters, LLM token/throughput and browser-action charts, active time selectors, Quick Options (jiggler and scheduler pause), and persistent per-process/GPU metrics |
 | `/chat` | Markdown chat, generation controls, LLM progress, and conversation totals |
@@ -205,15 +206,21 @@ mouse/keyboard input or a bounded bash tool. CDP is method-allowlisted and
 never performs input or navigation.
 The console shows each tool step and its screenshot; Stop cancels the active
 model call or tool process.
+Long replies may use one quarter of the default 32768-token context. If
+generation reaches that limit, the reply ends with
+`…[response truncated at token limit]`.
 
-Use `/tools` to inspect the exact definitions available to the local model and
-invoke any tool manually. Forms are generated from the server schemas, calls
-join the same sequential queue as chat/project work, and results are retained
-in the Jobs activity ledger. Results render by shape: page-shaped JSON becomes
-a linked title plus plain text, `KEY=value` runs become sorted tables, and
-manual screenshots return pure captures without the agent's coordinate grid. The agent's `read_page` tool returns a
-token-budgeted structured YAML digest of the page, rendered on `/tools` as a
-collapsible tree. This can invoke `bash` and browser actuation;
+Use `/tools` to inspect all model-callable tools plus manual-only development
+tools such as `dump_dom`, and invoke them manually. Forms are generated from
+the server schemas, calls join the same sequential queue as chat/project work,
+and results up to 64 KiB enter the Jobs activity ledger. Results render by
+shape: page-shaped JSON becomes a linked title plus plain text, `KEY=value`
+runs become sorted tables, manual screenshots omit the agent's coordinate
+grid, and `read_page` YAML renders as a collapsible tree. `read_page` emits up
+to 64000 bytes, treats layout tables as containers so links survive, and
+groups numbered feeds into explicit article fields including a ready-to-copy
+linked title, score, comments, and comment URL. Real data tables retain
+structured links. This can invoke `bash` and browser actuation;
 under the current trust model it has no additional authentication, so expose the
 console only on a trusted private network.
 
@@ -361,6 +368,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [026](specs/026-console-fixes.md) | Console bugfix sweep: chat, speech, charts, jobs, mail, tools, screenshots |
 | [027](specs/027-structured-read-page.md) | Structured YAML `read_page` digest, tree UI, and tool-testing soak |
 | [028](specs/028-data-explorer.md) | Read-only Data explorer tab and `/api/data/*` volume API |
+| [029](specs/029-readpage-goldens.md) | `read_page` DOM goldens, layout-table fidelity, 32K context, and proportionate caps |
 
 ### CI/CD
 
@@ -383,6 +391,12 @@ npm run check
 ```
 
 `npm run check` builds the minified SPA (`controller/web/dist/`, gitignored) before the Go gates; run `npm run build:web` to rebuild it alone.
+
+Offline `read_page` golden tests discover `test/fixtures/*.dom.json`, execute
+the production extractor, evaluate optional `*.props.mjs` assertions, and
+byte-compare `*.digest.golden.yaml` snapshots. Set `REGEN_GOLDENS=1` to
+refresh snapshots. To capture a live fixture, navigate the running browser and
+run `node test/capture-dom.mjs <fixture-name>` against a healthy `:8080`.
 
 ### Release runbook
 
@@ -409,7 +423,7 @@ Use a Raspberry Pi 5 or Raspberry Pi 4 with 8 GB RAM at minimum. The RAM floor i
 
 ## Architecture
 
-The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Valkey, vision-enabled llama.cpp with Gemma 4 E2B (baked CPU and Vulkan GPU runtimes; the service picks one at startup), local sherpa-onnx/Piper TTS, a dma outbound-mail queue, and a Go controller on `:8080`, running unprivileged (host uid/gid) with one rw data mount. The controller concurrently probes service health, detects and samples visible NVIDIA/AMD/Intel GPUs, samples and persists metrics, records machine activity, composes and DKIM-signs mail, schedules and sequentially executes reliable Valkey jobs and recurring projects, streams shared chat and speech, produces default-on ambient OS-level mouse motion, and runs a bounded browser-agent loop combining screenshots, compact DOM/read-only CDP observations, OS-level `xdotool` actions, bash, and audible responses. It proxies noVNC and embeds the same-origin minified multi-page SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.
+The container has s6-supervised Xvfb, openbox, x11vnc, noVNC, Chromium, Valkey, vision-enabled llama.cpp with Gemma 4 E2B and a default 32768-token context (baked CPU and Vulkan GPU runtimes; the service picks one at startup), local sherpa-onnx/Piper TTS, a dma outbound-mail queue, and a Go controller on `:8080`, running unprivileged (host uid/gid) with one rw data mount. The controller concurrently probes service health, detects and samples visible NVIDIA/AMD/Intel GPUs, samples and persists metrics, records machine activity, composes and DKIM-signs mail, schedules and sequentially executes reliable Valkey jobs and recurring projects, streams shared chat and speech, produces default-on ambient OS-level mouse motion, and runs a bounded browser-agent loop combining screenshots, compact DOM/read-only CDP observations, OS-level `xdotool` actions, bash, and audible responses. It proxies noVNC and embeds the same-origin minified multi-page SPA. See [`specs/`](specs/) for the authoritative architecture and implementation contracts.
 
 The model's system prompts are plain text in
 [controller/prompts/](controller/prompts/) (spec 022).

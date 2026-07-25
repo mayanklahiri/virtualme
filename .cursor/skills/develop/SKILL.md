@@ -31,6 +31,11 @@ full e2e suite on that image (`E2E_SKIP_BUILD=1`), then runs live flows from
 `test/soak.mjs` on a fresh data dir with layered hard/soft assertions (flows
 drive the browser agent via chat or invoke tools manually; the runner is
 feature-agnostic).
+The Node gate also discovers `test/fixtures/*.dom.json`, runs the production
+`read_page` extractor, evaluates optional `*.props.mjs` properties, and checks
+`*.digest.golden.yaml` snapshots (`REGEN_GOLDENS=1` regenerates them). Live
+fixture capture is development-only: navigate a healthy `:8080` browser and
+run `node test/capture-dom.mjs <fixture-name>`.
 
 ## Docker layers
 
@@ -176,8 +181,10 @@ pausing skips scheduled-job promotion only. In the Quick Options cockpit UI
 the SCHED lamp shows the inverse (lit while running), so the client sends
 `enabled: !ariaChecked` on press.
 It maps `tools-list-req`/`tool-invoke` to sender-only `tools-list`/`tool-result`
-frames. Tool manifests come directly from `localTools.Definitions()`; manual
-calls use `manual-tool` queue envelopes and enter the activity ledger.
+frames. `localTools.Manifest()` serializes agent `Definitions()` plus
+manual-only tools such as `dump_dom`; manual calls use `manual-tool` queue
+envelopes and enter the activity ledger. Manual result text is capped at
+64 KiB.
 
 | Tools WS type | Direction | Purpose |
 |---|---|---|
@@ -190,10 +197,12 @@ Agent CDP observation tools:
 
 | Tool | Purpose |
 |---|---|
+| `read_page` | Structured YAML page digest up to 64000 bytes; layout tables collapse, numbered feeds gain explicit `title_link`/score/comments fields, and data tables preserve structured links |
 | `dom_query` | Precise CSS extraction of bounded text and requested attributes |
 | `dom_validate` | Full-batch structure/content assertions |
 | `page_eval` | Bounded expression extraction with tripwires and Chromium side-effect rejection |
 | `layout_debug` | Ref/selector geometry, visibility, occlusion, and scroll state |
+| `dump_dom` | Manual-only DOM JSON fixture capture under `$VM_DATA_DIR/agent/dom-dumps/`; absent from agent definitions |
 
 The CDP transport allowlists only `Runtime.evaluate` and
 `DOMSnapshot.captureSnapshot`. Never weaken that boundary or use CDP for
@@ -218,10 +227,10 @@ cached at startup; absence is normal and never affects health.
   `controller/internal/agent/tools.go`, inject command execution through
   `Runner`, and add hermetic tests. Browser action tools must use `xdotool`
   OS input; CDP is observation-only and must never call `Input.*`,
-  `Page.navigate`, or another state-changing method. Every definition
-  automatically appears on `/tools` through `Manifest()`; do not duplicate it
-  in the SPA. Manual console calls go through `ExecuteManual`, which only
-  differs by skipping the screenshot vision grid.
+  `Page.navigate`, or another state-changing method. Agent definitions appear
+  on `/tools` through `Manifest()`; manual-only entries are appended there and
+  handled in `ExecuteManual`, never exposed to the model. Do not duplicate
+  definitions in the SPA. Manual screenshots skip the agent vision grid.
 - **Job type**: register an `internal/jobs` executor in controller `main.go`;
   use an interactive envelope for client work or a `RegisterSource` provider
   for scheduled work, and cover retries/cancellation with the hermetic RESP

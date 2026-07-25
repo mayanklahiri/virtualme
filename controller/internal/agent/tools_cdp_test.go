@@ -14,7 +14,7 @@ func TestManifestMatchesDefinitions(t *testing.T) {
 	tools := NewLocalTools(Config{})
 	definitions := tools.Definitions()
 	manifest := tools.Manifest()
-	if len(manifest) != len(definitions) {
+	if len(manifest) != len(definitions)+1 {
 		t.Fatalf("manifest has %d tools, definitions has %d", len(manifest), len(definitions))
 	}
 	for index, definition := range definitions {
@@ -27,8 +27,48 @@ func TestManifestMatchesDefinitions(t *testing.T) {
 			t.Fatalf("manifest[%d] = %+v, definition = %+v", index, entry, definition)
 		}
 	}
+	if manifest[len(manifest)-1].Name != "dump_dom" || !tools.Has("dump_dom") {
+		t.Fatalf("manual-only dump_dom missing from manifest: %+v", manifest[len(manifest)-1])
+	}
+	for _, definition := range definitions {
+		if definition.Name == "dump_dom" {
+			t.Fatal("dump_dom must not be exposed to the model")
+		}
+	}
 	if _, err := json.Marshal(manifest); err != nil {
 		t.Fatalf("manifest does not marshal: %v", err)
+	}
+}
+
+func TestDumpDOMWritesManualFixture(t *testing.T) {
+	server := fakeCDPServer(t, false, func(method string, params json.RawMessage) any {
+		if method != "Runtime.evaluate" {
+			t.Fatalf("method = %q", method)
+		}
+		if !strings.Contains(string(params), "serializeChildren") {
+			t.Fatal("dump expression not sent")
+		}
+		return evaluateResult(map[string]any{
+			"url": "https://news.ycombinator.com/", "title": "Hacker News", "lang": "en",
+			"head": []any{}, "body": []any{map[string]any{"tag": "p", "text": "hello"}},
+		})
+	})
+	defer server.Close()
+	dataDir := filepath.Join(t.TempDir(), "agent")
+	tools := NewLocalTools(Config{DataDir: dataDir, CDPURL: server.URL, Client: server.Client()})
+	result, err := tools.ExecuteManual(context.Background(), "dump_dom", json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(result.Text, "agent/dom-dumps/news.ycombinator.com-") {
+		t.Fatalf("path = %q", result.Text)
+	}
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(dataDir), filepath.FromSlash(result.Text)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"title": "Hacker News"`) {
+		t.Fatalf("fixture = %s", data)
 	}
 }
 

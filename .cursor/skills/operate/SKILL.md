@@ -79,10 +79,11 @@ speech, and mail actions with run times. Tool calls and jiggler bursts are
 hidden by default behind persisted filter toggles, and details open in a third
 pane at desktop widths.
 
-Use `/tools` to inspect every definition available to the local model and
-invoke it with a schema-generated form. Manual calls wait in the same
-sequential queue and their results appear in Jobs activity; page-shaped JSON
-renders as a linked title plus text, env output as sorted tables, and manual
+Use `/tools` to inspect every model-callable tool plus manual-only development
+tools such as `dump_dom`, and invoke them with schema-generated forms. Manual
+calls wait in the same sequential queue and their results up to 64 KiB appear
+in Jobs activity; page-shaped JSON renders as a linked title plus text, env
+output as sorted tables, `read_page` YAML as a collapsible tree, and manual
 screenshots have no coordinate grid. The page can run
 `bash` and browser-input tools; it has no additional authentication under the
 v1 trust model, so use it only on a trusted private network.
@@ -119,6 +120,9 @@ the page title.” The agent observes screenshots, rendered DOM, and read-only
 CDP state; all browser actions use `xdotool` mouse/keyboard input on `:99`.
 The chat timeline shows each tool step. Use the Stop button to cancel an
 in-flight model request, shell command, or runaway task.
+Prefer `read_page` for page content: it preserves links while collapsing
+layout tables. The default llama context is 32768 tokens; a reply that reaches
+its completion limit ends with `…[response truncated at token limit]`.
 
 Chat and agent work runs sequentially through the reliable Valkey queue;
 additional messages wait instead of returning a busy error. Closing the browser
@@ -200,7 +204,7 @@ private key mode at 0600.
 9. Browser sandbox: namespace sandboxing is automatic when supported; use `--no-browser-sandbox` to force the warning-suppressed fallback.
 10. Data location: all persistent state is under `~/.virtualme/`; see `specs/007-persistence-locality.md` §1a plus its amendments.
 11. Data explorer: use `/data` to inspect agent steps, project scratch space, and TTS cache files without `docker exec`; `?path=` URLs deep-link to a directory or file. Root-hidden `chromium`, `mail`, `metrics`, `valkey`, and `xdg` remain reachable via `/data?path=…` or the read-only API under the v1 trust model.
-12. Agent artifacts: inspect `~/.virtualme/agent/<taskId>/steps.jsonl` and `step-*.jpg`; Stop cancels the current task.
+12. Agent artifacts: inspect `~/.virtualme/agent/<taskId>/steps.jsonl` and `step-*.jpg`; manual `dump_dom` captures are under `~/.virtualme/agent/dom-dumps/`; Stop cancels the current task.
 13. Speech: check the `tts` entry in `/healthz`; `ttsd` listens only on container loopback port 8082. Its startup log lists the found voice directories (Lessac only); cache files are under `~/.virtualme/tts-cache/`.
 14. Mail not arriving: check the `mail` health entry, queue row's last error and next-flush countdown, and `~/.virtualme/mail/flush.log`; confirm relay credentials/port or direct-path outbound port 25, publish the displayed DKIM TXT record and SPF, and verify sending-IP PTR/reputation. Residential/dynamic IPs should use a smarthost.
 15. Job queue: `queue-peek` on `/ws` returns upcoming, running, and finished jobs; durable queue keys are in the Valkey AOF under `~/.virtualme/valkey/`.

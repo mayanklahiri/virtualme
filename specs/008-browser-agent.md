@@ -212,6 +212,14 @@ Commit as `spec 008: OS-level browser-control agent (vision + xdotool + DOM + ba
 
 Section 3b's 8192-token default is superseded: `VM_LLAMA_CTX` defaults to 16384 tokens. Agent requests must remain below that configured limit. Chat history is bounded by both message count and text size. Tool output and full observations are separately capped; observation content is not duplicated in both tool and user messages. The loop retains at most four recent complete tool rounds and only the latest full observation, preventing accumulated screenshots, DOM snapshots, and command output from exhausting the context. Completions reserve at most one quarter of the configured context, capped at 1024 tokens. If llama still rejects a request for context overflow, the loop drops all but the current user turn and latest tool round, then retries once without exposing llama's raw HTTP error.
 
+### 2026-07-25 — Increase context and remove silent completion truncation (spec 029)
+
+Spec 029 supersedes the 2026-07-23 context amendment: `VM_LLAMA_CTX`
+defaults to 32768 tokens, completions may use one quarter of that context
+without the former 1024-token clamp, and a `finish_reason` of `length` is
+surfaced in the reply. Observation, tool, DOM, and history byte caps scale
+proportionately as specified there.
+
 ### 2026-07-23 — Dense DOM observation and settled navigate (spec 012)
 
 Spec 012 supersedes parts of §5a: `dom` results carry `url`/`title`, omit

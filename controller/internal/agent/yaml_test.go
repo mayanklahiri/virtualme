@@ -41,8 +41,8 @@ func TestEncodeYAMLOrderAndQuoting(t *testing.T) {
 }
 
 func TestDigestToYAMLBudgetMarker(t *testing.T) {
-	body := make([]any, 0, 400)
-	for range 400 {
+	body := make([]any, 0, 800)
+	for range 800 {
 		body = append(body, map[string]any{
 			"tag":  "p",
 			"text": strings.Repeat("x", 120),

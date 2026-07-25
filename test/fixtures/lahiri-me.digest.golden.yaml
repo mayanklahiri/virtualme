@@ -1,0 +1,19 @@
+title: "Mayank Lahiri"
+url: "https://www.lahiri.me/"
+head:
+	lang: "en"
+	description: "Mayank Lahiri homepage"
+body:
+	- tag: "h1"
+		text: "Mayank Lahiri"
+	- tag: "p"
+		text: "Works at Oracle"
+	- tag: "img"
+		src: "https://www.lahiri.me/photo.jpg"
+		alt: "Portrait"
+	- tag: "ul"
+		items:
+			- text: "Projects"
+				href: "https://www.lahiri.me/projects/"
+			- text: "GitHub"
+				href: "https://github.com/mayanklahiri"

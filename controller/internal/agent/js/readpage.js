@@ -1,18 +1,18 @@
 (() => {
-  const TEXT_CAP = 300;
-  const HREF_CAP = 300;
-  const ATTR_CAP = 120;
-  const CELL_CAP = 80;
-  const MAX_ROWS = 120;
-  const MAX_ITEMS = 120;
-  const NODE_BUDGET = 4000;
+  const TEXT_CAP = 500;
+  const HREF_CAP = 500;
+  const ATTR_CAP = 200;
+  const CELL_CAP = 300;
+  const MAX_ROWS = 400;
+  const MAX_ITEMS = 400;
+  const NODE_BUDGET = 8000;
   const PRUNE = new Set(["script", "style", "noscript", "template"]);
   // Tags that absorb a sole plain-text leaf child as their own text.
   const ABSORB = new Set(["a", "button", "label", "h1", "h2", "h3", "h4", "h5", "h6"]);
   const SEMANTIC = new Set([
     "h1", "h2", "h3", "h4", "h5", "h6", "a", "img", "video", "audio", "iframe",
     "table", "form", "input", "select", "textarea", "button", "label", "ul", "ol",
-    "dl", "li", "p", "blockquote", "pre", "code", "time", "figcaption",
+    "dl", "li", "p", "blockquote", "pre", "code", "time", "figcaption", "tr",
   ]);
   let kept = 0;
   let budgetHit = false;
@@ -148,10 +148,12 @@
         });
       }
       // Content-free non-semantic wrappers are hoisted away even if they have children.
-      if (!hasOwnContent(node) && !SEMANTIC.has(node.tag)) {
+      if (node._layout || (!hasOwnContent(node) && !SEMANTIC.has(node.tag))) {
+        delete node._layout;
         if (Array.isArray(node.children)) out.push(...node.children);
         continue;
       }
+      if (node.tag === "tr" && !hasOwnContent(node) && !node.children?.length) continue;
       out.push(node);
     }
     return out;
@@ -192,19 +194,44 @@
 
   function extractTable(table) {
     const rows = [];
-    const trs = elementsByTag(table, "tr");
+    const trs = [];
+    const collectRows = (container) => {
+      for (const child of container.children ?? []) {
+        const tag = child.tagName.toLowerCase();
+        if (tag === "tr") trs.push(child);
+        else if (tag === "thead" || tag === "tbody" || tag === "tfoot") collectRows(child);
+      }
+    };
+    collectRows(table);
     let truncated = false;
     for (let i = 0; i < trs.length && rows.length < MAX_ROWS; i++) {
       const cells = [];
       for (const cell of trs[i].children) {
         const tag = cell.tagName.toLowerCase();
-        if (tag === "td" || tag === "th") cells.push(normalize(fullText(cell), CELL_CAP));
+        if (tag !== "td" && tag !== "th") continue;
+        const value = { text: normalize(fullText(cell), CELL_CAP) };
+        const links = elementsByTag(cell, "a").filter((link) => link.getAttribute("href"));
+        if (links.length === 1) value.href = capURL(links[0].getAttribute("href"));
+        cells.push(value);
       }
       if (cells.length) rows.push(cells);
     }
     if (trs.length > MAX_ROWS) truncated = true;
     if (truncated) rows.push(["…truncated"]);
     return rows;
+  }
+
+  function isDataTable(table) {
+    const hasHeader = elementsByTag(table, "th").length > 0 ||
+      elementsByTag(table, "thead").length > 0 ||
+      elementsByTag(table, "caption").length > 0;
+    if (!hasHeader) return false;
+    for (const child of table.children ?? []) {
+      if (child.tagName.toLowerCase() === "table" || elementsByTag(child, "table").length) {
+        return false;
+      }
+    }
+    return true;
   }
 
   function extractListItem(li) {
@@ -311,7 +338,8 @@
       return { tag: "svg", text: label };
     }
 
-    if (tag === "table") {
+    const dataTable = tag === "table" && isDataTable(el);
+    if (dataTable) {
       kept++;
       return { tag, rows: extractTable(el) };
     }
@@ -328,10 +356,11 @@
     }
 
     const node = { tag };
+    if (tag === "table" && !dataTable) node._layout = true;
     populateNode(el, node);
 
     const childTags = new Set(["input", "select", "textarea", "button", "img", "a"]);
-    const skipChildren = tag === "table" || tag === "ul" || tag === "ol" || tag === "dl";
+    const skipChildren = dataTable || tag === "ul" || tag === "ol" || tag === "dl";
     if (!skipChildren) {
       const children = [];
       for (const child of el.children) {
@@ -384,6 +413,78 @@
     return text.replace(/\s+/g, " ").trim();
   }
 
+  // Numbered feed pages commonly encode one item as a title row followed by
+  // a metadata row. Keep those rows together so titles, URLs, scores, ages,
+  // and comment links remain one model-readable record.
+  function groupFeedRows(nodes) {
+    const rankCount = (node) => {
+      let count = /^\d+\.$/.test(node?.text || "") ? 1 : 0;
+      for (const child of node?.children ?? []) count += rankCount(child);
+      return count;
+    };
+    for (const node of nodes) {
+      if (node.children) node.children = groupFeedRows(node.children);
+      if (node.items) node.items = groupFeedRows(node.items);
+    }
+    const grouped = [];
+    for (let index = 0; index < nodes.length; index++) {
+      const node = nodes[index];
+      const rank = node?.tag === "tr" && rankCount(node) === 1;
+      if (!rank) {
+        grouped.push(node);
+        continue;
+      }
+      const children = [node];
+      const next = nodes[index + 1];
+      const nextIsRank = next?.tag === "tr" && rankCount(next) === 1;
+      if (next?.tag === "tr" && !nextIsRank) {
+        children.push(next);
+        index++;
+      }
+      const flattened = [];
+      const collect = (entry) => {
+        flattened.push(entry);
+        for (const child of entry?.children ?? []) collect(child);
+      };
+      for (const child of children) collect(child);
+      const rankNode = flattened.find((entry) => /^\d+\.$/.test(entry?.text || ""));
+      const titleLinks = [];
+      collectTitleLinks(node, titleLinks);
+      const titleLink = titleLinks.find((entry) =>
+        entry.text && entry.href &&
+        !/\/(?:vote|from)\?/.test(entry.href));
+      const scoreNode = flattened.find((entry) => /^\d+ points?$/.test(entry?.text || ""));
+      const commentLink = flattened.find((entry) =>
+        entry.href && /\/item\?id=\d+/.test(entry.href) &&
+        /^(?:\d+ comments?|discuss)$/.test(entry.text || ""));
+      const ageLink = flattened.find((entry) =>
+        entry.href && /\/item\?id=\d+/.test(entry.href) && /\bago$/.test(entry.text || ""));
+      const authorLink = flattened.find((entry) => /\/user\?id=/.test(entry?.href || ""));
+      const commentURL = commentLink?.href || ageLink?.href || "";
+      const title = titleLink?.text || "";
+      const article = {
+        tag: "article",
+        rank: Number((rankNode?.text || "").slice(0, -1)),
+        title,
+        title_link: title && commentURL ? `[${title}](${commentURL})` : "",
+        url: titleLink?.href || "",
+        score: scoreNode?.text || "",
+        comments: commentLink?.text || "",
+        comment_url: commentURL,
+        author: authorLink?.text || "",
+        age: ageLink?.text || "",
+        children,
+      };
+      grouped.push(article);
+    }
+    return grouped;
+  }
+
+  function collectTitleLinks(node, output) {
+    if (node?.tag === "a") output.push(node);
+    for (const child of node?.children ?? []) collectTitleLinks(child, output);
+  }
+
   function dedupeLinks(nodes, seen) {
     for (let index = 0; index < nodes.length; index++) {
       const node = nodes[index];
@@ -417,7 +518,7 @@
     }
   }
   dedupeLinks(body, new Map());
-  const collapsed = collapse(body);
+  const collapsed = groupFeedRows(collapse(body));
   if (budgetHit) {
     collapsed.push({ note: "truncated: node budget reached" });
   }

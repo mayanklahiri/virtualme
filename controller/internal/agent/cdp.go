@@ -316,6 +316,24 @@ func (c *CDP) ReadPage(ctx context.Context) (string, error) {
 	return digestToYAML(result.Result.Value), nil
 }
 
+// DumpDOM returns the current page in the offline read_page fixture format.
+func (c *CDP) DumpDOM(ctx context.Context) (map[string]any, error) {
+	var result struct {
+		Result struct {
+			Value map[string]any `json:"value"`
+		} `json:"result"`
+	}
+	if err := c.call(ctx, "Runtime.evaluate", map[string]any{
+		"expression": domDumpScript, "returnByValue": true,
+	}, &result); err != nil {
+		return nil, err
+	}
+	if result.Result.Value == nil {
+		return nil, errors.New("DOM dump returned no value")
+	}
+	return result.Result.Value, nil
+}
+
 type snapshotResult struct {
 	Strings   []string           `json:"strings"`
 	Documents []snapshotDocument `json:"documents"`

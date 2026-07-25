@@ -157,6 +157,14 @@ automated test, spec, or prompt used by tests. Consequences:
    `lahiri-readpage` to `test/soak.mjs` with or after spec 027 execution
    (the oracle needs the YAML digest and can reuse the spec 027 subset
    parser module); the soak runner itself is unchanged.
+
+### 2026-07-25 — Offline Hacker News golden exception (spec 029)
+
+The live-site allowlist remains binding for automated network access. Spec 029
+adds one committed Hacker News DOM fixture and its generated YAML solely for
+offline deterministic extractor tests; the gate never contacts Hacker News.
+The explicit developer capture script may refresh that fixture against a
+locally running browser when invoked manually.
 2. By operator decision this amendment also rewrote the historic §1 and §5a
    text of this spec, and the flow lists in spec 022, to remove the retired
    site's name and URL from the repository entirely — a recorded, deliberate

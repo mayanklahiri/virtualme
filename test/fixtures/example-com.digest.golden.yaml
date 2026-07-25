@@ -1,0 +1,15 @@
+title: "Example Domain"
+url: "https://example.com/"
+head:
+	lang: "en"
+	description: "Example description"
+	canonical: "https://example.com/"
+body:
+	- tag: "h1"
+		text: "Example Domain"
+	- tag: "p"
+		text: "This domain is for use in illustrative examples in documents."
+		children:
+			- tag: "a"
+				text: "More information..."
+				href: "https://www.iana.org/domains/example"

@@ -429,7 +429,7 @@ func main() {
 		Manifest:      "/opt/agent/system-manifest.json",
 		MaxSteps:      envInt("VM_AGENT_MAX_STEPS", 500),
 		KeepTasks:     envInt("VM_AGENT_KEEP_TASKS", 20),
-		ContextTokens: envInt("VM_LLAMA_CTX", 16384),
+		ContextTokens: envInt("VM_LLAMA_CTX", 32768),
 		TTS:           ttsClient,
 		Activity:      activity,
 		Broadcast:     hub.Broadcast,
@@ -480,7 +480,7 @@ func main() {
 		result, toolErr := localTools.ExecuteManual(ctx, request.Tool, request.Args)
 		duration := time.Since(started).Milliseconds()
 		llmCounters.AddAction(agent.ActionCategory(request.Tool, result.Observe))
-		text := capText(result.Text, 32*1024)
+		text := capText(result.Text, 64*1024)
 		errorText := ""
 		if toolErr != nil {
 			errorText = toolErr.Error()

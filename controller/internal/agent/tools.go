@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,8 +24,8 @@ import (
 
 const (
 	outputCap        = 64 * 1024
-	domCap           = 12 * 1024
-	pageEvalCap      = 8 * 1024
+	domCap           = 24 * 1024
+	pageEvalCap      = 16 * 1024
 	layoutDebugCap   = 4 * 1024
 	navigateSettleMs = 15000
 )
@@ -177,10 +178,10 @@ func (t *localTools) Definitions() []Tool {
 	return []Tool{
 		{Name: "screenshot", Description: "Capture the visible browser screen. Agent observations include an API-coordinate grid; manual console calls return a pure capture.", Schema: schema(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "dom", Description: "Read rendered visible DOM elements with stable refs for click_element/type_into. selectorHint is a case-insensitive substring matched against tag/text/attributes - NOT a CSS selector. Large pages paginate; pass page to continue.", Schema: schema(`{"type":"object","properties":{"selectorHint":{"type":"string","description":"substring filter (not CSS)"},"page":{"type":"integer","minimum":0}},"additionalProperties":false}`)},
-		{Name: "read_page", Description: "Read the current page as a structured YAML digest: title, url, head metadata, and a simplified hierarchy of the important visible elements — headings, text blocks, links (href), images (src, alt), media, tables (rows), lists, and form structures. This is the primary tool for extracting information from a page; prefer it over screenshots or dom for reading content, and use dom_query or dom for follow-up detail on specific elements.", Schema: schema(`{"type":"object","properties":{},"additionalProperties":false}`)},
+		{Name: "read_page", Description: "Read the current page as a structured YAML digest: title, url, head metadata, and a simplified hierarchy of important visible elements. Numbered feed articles expose rank, title, title_link (ready-to-copy Markdown linked to the comment page), url, score, comments, comment_url, author, and age. Other content includes headings, text blocks, links (href), images (src, alt), media, tables (rows), lists, and forms. This is the primary tool for extracting page information; prefer it over screenshots or dom, and use dom_query or dom for targeted follow-up.", Schema: schema(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "dom_query", Description: "Extract structured text and attributes from elements matching a precise CSS selector.", Schema: schema(`{"type":"object","properties":{"selector":{"type":"string","description":"CSS selector evaluated in the page"},"attributes":{"type":"array","items":{"type":"string"},"description":"attribute names to return; default: text only"},"limit":{"type":"integer","minimum":1,"maximum":50,"default":10}},"required":["selector"],"additionalProperties":false}`)},
 		{Name: "dom_validate", Description: "Evaluate page structure and content assertions without short-circuiting.", Schema: schema(`{"type":"object","properties":{"assertions":{"type":"array","maxItems":10,"items":{"type":"object","properties":{"selector":{"type":"string"},"exists":{"type":"boolean"},"minCount":{"type":"integer"},"textContains":{"type":"string"},"attribute":{"type":"string"},"attributeEquals":{"type":"string"}},"required":["selector"],"additionalProperties":false}}},"required":["assertions"],"additionalProperties":false}`)},
-		{Name: "page_eval", Description: "Evaluate one bounded read-only JavaScript expression and return its JSON value.", Schema: schema(`{"type":"object","properties":{"expression":{"type":"string","maxLength":2000,"description":"A single JavaScript expression evaluated read-only in the page; its JSON-stringified value is returned (max 8 KiB). Mutation attempts fail."}},"required":["expression"],"additionalProperties":false}`)},
+		{Name: "page_eval", Description: "Evaluate one bounded read-only JavaScript expression and return its JSON value.", Schema: schema(`{"type":"object","properties":{"expression":{"type":"string","maxLength":2000,"description":"A single JavaScript expression evaluated read-only in the page; its JSON-stringified value is returned (max 16 KiB). Mutation attempts fail."}},"required":["expression"],"additionalProperties":false}`)},
 		{Name: "layout_debug", Description: "Inspect geometry, computed visibility, occlusion, and scroll state for exactly one DOM ref or CSS selector.", Schema: schema(`{"type":"object","properties":{"ref":{"type":"string"},"selector":{"type":"string"}},"additionalProperties":false}`)},
 		{Name: "click", Description: "Click API-space screenshot coordinates via OS input.", Schema: schema(`{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"}},"required":["x","y"],"additionalProperties":false}`)},
 		{Name: "click_element", Description: "Click the center of a DOM ref via OS input.", Schema: schema(`{"type":"object","properties":{"ref":{"type":"integer"}},"required":["ref"],"additionalProperties":false}`)},
@@ -198,7 +199,13 @@ func (t *localTools) Definitions() []Tool {
 // Manifest directly re-serializes Definitions for the authoritative Tools page.
 func (t *localTools) Manifest() []ToolManifest {
 	definitions := t.Definitions()
-	manifest := make([]ToolManifest, 0, len(definitions))
+	manual := Tool{
+		Name:        "dump_dom",
+		Description: "Capture the current page DOM as a development golden-fixture JSON file under the data volume.",
+		Schema:      schema(`{"type":"object","properties":{},"additionalProperties":false}`),
+	}
+	manifest := make([]ToolManifest, 0, len(definitions)+1)
+	definitions = append(definitions, manual)
 	for _, definition := range definitions {
 		manifest = append(manifest, ToolManifest{
 			Name: definition.Name, Description: definition.Description, Schema: definition.Schema,
@@ -209,7 +216,7 @@ func (t *localTools) Manifest() []ToolManifest {
 
 // Has reports whether name is present in the authoritative tool definitions.
 func (t *localTools) Has(name string) bool {
-	for _, definition := range t.Definitions() {
+	for _, definition := range t.Manifest() {
 		if definition.Name == name {
 			return true
 		}
@@ -230,11 +237,46 @@ func decodeArgs(raw json.RawMessage, target any) error {
 // exactly like Execute except screenshots return a pure capture: the
 // API-coordinate grid exists only to ground the agent's vision (X1).
 func (t *localTools) ExecuteManual(ctx context.Context, name string, raw json.RawMessage) (ToolResult, error) {
+	if name == "dump_dom" {
+		if err := decodeArgs(raw, &struct{}{}); err != nil {
+			return ToolResult{}, err
+		}
+		return t.dumpDOM(ctx)
+	}
 	if name == "screenshot" {
 		image, err := t.screenshot(ctx, false)
 		return ToolResult{Text: fmt.Sprintf("screenshot %dx%d API space; display %dx%d", t.apiWidth, t.apiHeight, t.width, t.height), ImageJPEG: image, Summary: "Captured screenshot", Observe: true}, err
 	}
 	return t.Execute(ctx, name, raw)
+}
+
+func (t *localTools) dumpDOM(ctx context.Context) (ToolResult, error) {
+	dump, err := t.cdp.DumpDOM(ctx)
+	if err != nil {
+		return ToolResult{}, err
+	}
+	encoded, err := json.MarshalIndent(dump, "", "  ")
+	if err != nil {
+		return ToolResult{}, fmt.Errorf("encode DOM dump: %w", err)
+	}
+	rawURL, _ := dump["url"].(string)
+	parsed, _ := url.Parse(rawURL)
+	host := strings.ToLower(parsed.Hostname())
+	host = regexp.MustCompile(`[^a-z0-9.-]+`).ReplaceAllString(host, "-")
+	host = strings.Trim(host, ".-")
+	if host == "" {
+		host = "page"
+	}
+	dir := filepath.Join(t.cfg.DataDir, "dom-dumps")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return ToolResult{}, fmt.Errorf("create DOM dump directory: %w", err)
+	}
+	name := fmt.Sprintf("%s-%d.dom.json", host, time.Now().UnixMilli())
+	if err := os.WriteFile(filepath.Join(dir, name), append(encoded, '\n'), 0o644); err != nil {
+		return ToolResult{}, fmt.Errorf("write DOM dump: %w", err)
+	}
+	relative := filepath.ToSlash(filepath.Join(filepath.Base(t.cfg.DataDir), "dom-dumps", name))
+	return ToolResult{Text: relative, Summary: "Captured DOM fixture"}, nil
 }
 
 func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessage) (ToolResult, error) {

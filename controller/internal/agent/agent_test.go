@@ -111,6 +111,13 @@ func sse(w http.ResponseWriter, chunks ...any) {
 	fmt.Fprint(w, "data: [DONE]\n\n")
 }
 
+func TestDefaultLLMClientUsesContextCancellationWithoutWallClockTimeout(t *testing.T) {
+	agent := New(Config{Executor: noDefinitionsExecutor{}})
+	if agent.cfg.Client.Timeout != 0 {
+		t.Fatalf("default HTTP timeout = %s, want context-controlled", agent.cfg.Client.Timeout)
+	}
+}
+
 func TestToolLoopThenFinalReply(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -170,6 +177,43 @@ func TestToolLoopThenFinalReply(t *testing.T) {
 	}
 	if !strings.Contains(joined, `"text":"tool result"`) {
 		t.Fatal("agent-step frames must carry observation text")
+	}
+}
+
+func TestCompletionBudgetAndLengthMarker(t *testing.T) {
+	var maxTokens int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			MaxTokens int `json:"max_tokens"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		maxTokens = request.MaxTokens
+		sse(w,
+			map[string]any{"choices": []any{map[string]any{"delta": map[string]string{"content": "partial"}}}},
+			map[string]any{"choices": []any{map[string]any{"delta": map[string]any{}, "finish_reason": "length"}}},
+		)
+	}))
+	defer server.Close()
+	var events [][]byte
+	agent := New(Config{
+		LlamaURL: server.URL, DataDir: t.TempDir(), Executor: noDefinitionsExecutor{},
+		ContextTokens: 32768,
+		Broadcast:     func(payload []byte) { events = append(events, append([]byte(nil), payload...)) },
+	})
+	result, err := agent.Handle(context.Background(), "answer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if maxTokens != 8192 {
+		t.Fatalf("max_tokens = %d, want 8192", maxTokens)
+	}
+	if result.Reply != "partial\n…[response truncated at token limit]" {
+		t.Fatalf("reply = %q", result.Reply)
+	}
+	if !strings.Contains(string(bytesJoin(events)), "response truncated at token limit") {
+		t.Fatal("length marker was not streamed")
 	}
 }
 

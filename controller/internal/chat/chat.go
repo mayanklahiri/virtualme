@@ -29,7 +29,7 @@ const (
 	statsKey         = "virtualme:chat-stats"
 	historyCap       = 200
 	contextWindow    = 16
-	historyPromptCap = 8 * 1024
+	historyPromptCap = 16 * 1024
 	maxTextLen       = 4096
 )
 

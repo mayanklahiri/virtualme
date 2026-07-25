@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -26,10 +27,10 @@ import (
 const (
 	defaultMaxSteps      = 500
 	defaultKeep          = 20
-	defaultContextTokens = 16384
+	defaultContextTokens = 32768
 	maxToolRounds        = 4
-	toolTextCap          = 4 * 1024
-	observationTextCap   = 32 * 1024
+	toolTextCap          = 8 * 1024
+	observationTextCap   = 64 * 1024
 )
 
 var errContextExceeded = errors.New("model context exceeds the configured limit")
@@ -181,7 +182,9 @@ func New(cfg Config) *Agent {
 		cfg.Broadcast = func([]byte) {}
 	}
 	if cfg.Client == nil {
-		cfg.Client = &http.Client{Timeout: 5 * time.Minute}
+		// Large CPU-only prompts can legitimately take longer than five
+		// minutes at the 32K context. The request context remains cancellable.
+		cfg.Client = &http.Client{}
 	}
 	if cfg.DataDir == "" {
 		cfg.DataDir = filepath.Join(os.TempDir(), "virtualme-agent")
@@ -470,7 +473,8 @@ func compactAfterContextError(messages []PromptMessage, historyEnd int) []Prompt
 
 type streamedReply struct {
 	Choices []struct {
-		Delta struct {
+		FinishReason string `json:"finish_reason"`
+		Delta        struct {
 			Content   string `json:"content"`
 			ToolCalls []struct {
 				Index    int    `json:"index"`
@@ -509,7 +513,7 @@ func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta 
 	}
 	body, err := json.Marshal(map[string]any{
 		"stream": true, "messages": messages, "tools": definitions, "tool_choice": "auto",
-		"max_tokens": max(1, min(1024, a.cfg.ContextTokens/4)),
+		"max_tokens": max(1, a.cfg.ContextTokens/4),
 	})
 	if err != nil {
 		return "", nil, tokenUsage{}, fmt.Errorf("encode llama request: %w", err)
@@ -538,6 +542,7 @@ func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta 
 	cachedTokens := 0
 	promptMs, predictedMs := 0.0, 0.0
 	fallbackCompletionTokens := 0
+	finishReason := ""
 	scanner := bufio.NewScanner(response.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
@@ -570,6 +575,9 @@ func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta 
 		if len(chunk.Choices) == 0 {
 			continue
 		}
+		if chunk.Choices[0].FinishReason != "" {
+			finishReason = chunk.Choices[0].FinishReason
+		}
 		delta := chunk.Choices[0].Delta
 		if delta.Content != "" {
 			text.WriteString(delta.Content)
@@ -592,6 +600,12 @@ func (a *Agent) complete(ctx context.Context, messages []PromptMessage, onDelta 
 	}
 	if err := scanner.Err(); err != nil {
 		return text.String(), nil, usage, err
+	}
+	if finishReason == "length" {
+		const marker = "\n…[response truncated at token limit]"
+		text.WriteString(marker)
+		onDelta(marker)
+		log.Printf("agent completion reached max_tokens=%d", max(1, a.cfg.ContextTokens/4))
 	}
 	if usage.CompletionTokens == 0 {
 		usage.CompletionTokens = fallbackCompletionTokens

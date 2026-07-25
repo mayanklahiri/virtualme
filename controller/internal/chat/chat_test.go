@@ -248,7 +248,7 @@ func TestBoundedHistoryLimitsCountAndTextSize(t *testing.T) {
 	for _, message := range recent {
 		size += len(message.Text)
 	}
-	if len(recent) >= contextWindow || size > historyPromptCap {
+	if len(recent) > contextWindow || size > historyPromptCap {
 		t.Fatalf("bounded history has %d messages and %d bytes", len(recent), size)
 	}
 	if !strings.HasPrefix(recent[len(recent)-1].Text, "19:") {

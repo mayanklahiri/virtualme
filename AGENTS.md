@@ -26,7 +26,7 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `.cursor/skills/` | Shared AI operating and development procedures |
 | `specs/` | Numbered, authoritative implementation specs |
 | `docker/` | Container image and supervised services (spec 002) |
-| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached local TTS, outbound mail, read-only data explorer, and multi-page console (specs 002–028) |
+| `controller/` | Go control plane, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached local TTS, outbound mail, read-only data explorer, and multi-page console (specs 002–029) |
 | `controller/prompts/` | Embedded plain-text agent and fallback-chat system prompts |
 
 ## Commands
@@ -51,8 +51,11 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 The controller's browser agent combines vision screenshots, dense rendered
 DOM and read-only CDP observations, OS-level `xdotool` mouse/keyboard
 actuation, and bounded bash execution. DOM observations carry the page URL
-and title, omit layout-only noise, and always fit the model's context;
-`read_page` emits a token-budgeted structured YAML digest of the page,
+and title, omit layout-only noise, and fit the default 32768-token context;
+`read_page` emits a structured YAML digest of up to 64000 bytes, collapsing
+layout tables while preserving links, grouping numbered feed rows into
+explicit article fields (including ready-to-copy `title_link`, score, comments,
+and comment URL), and retaining structured links in data tables,
 and `navigate` waits for the page to settle. CDP never performs input or
 navigation; agent screenshots and step logs (including observation text)
 persist under `$VM_DATA_DIR/agent/`. The vision coordinate grid is drawn only
@@ -61,12 +64,15 @@ Chromium uses documented deterministic
 automation flags and one undecorated full-screen virtual-desktop surface.
 Its agent and fallback-chat system prompts are embedded from reviewable plain
 text in `controller/prompts/`; wording changes require a spec amendment.
-The server-driven `/tools` console lists every agent definition, generates
-forms from its JSON schema, and serializes manual calls through the job queue;
+The server-driven `/tools` console lists every agent definition plus
+manual-only development tools such as `dump_dom`, generates forms from JSON
+schemas, and serializes manual calls through the job queue;
 manual results and timings enter the persistent activity ledger. Tool results
 render by shape: page-shaped JSON becomes a linked title plus plain text,
 KEY=value runs become sorted tables, and `read_page` YAML digests become
-collapsible trees.
+collapsible trees. Manual result text is capped at 64 KiB. Completions may use
+one quarter of the configured context; a token-limit stop gains an explicit
+`…[response truncated at token limit]` marker.
 The read-only `/data` console tab provides icon/list single-directory browsing,
 sortable columns and recursive size bars, `?path=` deep links, a remembered
 drag-resizable 66/34 desktop split, and a mobile preview slide-over. GET-only
@@ -174,3 +180,4 @@ Durations render through one graded component and shared short formatting.
 | [026](specs/026-console-fixes.md) | Console bugfix sweep: chat, speech, charts, jobs, mail, tools, screenshots |
 | [027](specs/027-structured-read-page.md) | Structured YAML `read_page` digest, tree UI, and tool-testing soak |
 | [028](specs/028-data-explorer.md) | Read-only Data explorer tab and `/api/data/*` volume API |
+| [029](specs/029-readpage-goldens.md) | `read_page` DOM goldens, layout-table fidelity, 32K context, and proportionate caps |

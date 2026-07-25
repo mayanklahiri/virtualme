@@ -519,3 +519,14 @@ normative sections in place (§1 Produces, §3a example, §3b table, §3e, §4,
   `visibility: hidden`, both on- and off-screen); recorded here as verified,
   no change required.
 - The committed golden fixture is regenerated (tabs, no `sel`).
+
+### A3 (2026-07-25): live goldens, layout tables, and 32K context (spec 029)
+
+Spec 029 supersedes the A1 budget values and table behavior. The gate now
+executes live-captured DOM fixtures through the production extractor with
+declarative properties and complete YAML snapshots. Tables without explicit
+header semantics, and nested table shells, are treated as layout rather than
+flattened data; data-table cells retain links. Extractor limits are 500
+characters for text/hrefs, 200 for attributes, 300 for cells, 400 rows/items,
+and 8000 nodes. The YAML and observation caps rise to 64000 bytes and 64 KiB
+respectively for the 32768-token model context.

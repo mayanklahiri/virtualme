@@ -12,7 +12,7 @@ const fixtures = path.join(root, "test/fixtures");
 const SEMANTIC = new Set([
   "h1", "h2", "h3", "h4", "h5", "h6", "a", "img", "video", "audio", "iframe",
   "table", "form", "input", "select", "textarea", "button", "label", "ul", "ol",
-  "dl", "li", "p", "blockquote", "pre", "code", "time", "figcaption", "svg",
+  "dl", "li", "p", "blockquote", "pre", "code", "time", "figcaption", "svg", "tr",
 ]);
 const CONTENT_KEYS = [
   "text", "href", "src", "alt", "type", "name", "value", "placeholder",
@@ -116,10 +116,13 @@ test("nested content-free wrappers hoist their content to the top", () => {
   assert.equal(digest.body[0].text, "promoted");
 });
 
-test("tables shape rows and append the truncation row past the row cap", () => {
+test("data tables shape direct rows, preserve links, and enforce the row cap", () => {
   const trs = [];
-  for (let index = 0; index < 125; index++) {
-    trs.push({ tag: "tr", children: [{ tag: "td", text: `r${index}  c1` }, { tag: "td", text: "c2" }] });
+  for (let index = 0; index < 405; index++) {
+    trs.push({ tag: "tr", children: [
+      { tag: index === 0 ? "th" : "td", children: [{ tag: "a", text: `r${index} c1`, attrs: { href: `/r/${index}` } }] },
+      { tag: "td", text: "c2" },
+    ] });
   }
   const fixture = {
     title: "Table", url: "https://example.com/",
@@ -129,15 +132,70 @@ test("tables shape rows and append the truncation row past the row cap", () => {
   const table = digest.body[0];
   assert.equal(table.tag, "table");
   assert.equal(table.children, undefined);
-  assert.equal(table.rows.length, 121);
-  assert.deepEqual(table.rows[0], ["r0 c1", "c2"]);
-  assert.deepEqual(table.rows[120], ["…truncated"]);
+  assert.equal(table.rows.length, 401);
+  assert.deepEqual(table.rows[0], [
+    { text: "r0 c1", href: "https://example.com/r/0" }, { text: "c2" },
+  ]);
+  assert.deepEqual(table.rows[400], ["…truncated"]);
+});
+
+test("layout tables preserve links and do not flatten nested rows", () => {
+  const fixture = {
+    title: "Layout", url: "https://example.com/",
+    body: [{
+      tag: "table", children: [{
+        tag: "tbody", children: [{
+          tag: "tr", children: [{
+            tag: "td", children: [
+              { tag: "a", text: "Story", attrs: { href: "/story" } },
+              { tag: "table", children: [{
+                tag: "tr", children: [{ tag: "td", text: "Score 10 points" }],
+              }] },
+            ],
+          }],
+        }],
+      }],
+    }],
+  };
+  const digest = runReadPage(fixture);
+  assert.equal(digest.body[0].tag, "tr");
+  assert.equal(digest.body[0].rows, undefined);
+  const serialized = JSON.stringify(digest);
+  assert.match(serialized, /https:\/\/example\.com\/story/);
+  assert.match(serialized, /Score 10 points/);
+});
+
+test("numbered feed rows group title and metadata into articles", () => {
+  const fixture = {
+    title: "Feed", url: "https://example.com/",
+    body: [{ tag: "table", children: [{ tag: "tbody", children: [
+      { tag: "tr", children: [
+        { tag: "td", text: "1." },
+        { tag: "td", children: [{ tag: "a", text: "Story", attrs: { href: "/story" } }] },
+      ] },
+      { tag: "tr", children: [{ tag: "td", children: [
+        { tag: "span", text: "10 points" },
+        { tag: "a", text: "3 comments", attrs: { href: "/item?id=1" } },
+      ] }] },
+      { tag: "tr" },
+    ] }] }],
+  };
+  const digest = runReadPage(fixture);
+  assert.equal(digest.body.length, 1);
+  assert.equal(digest.body[0].tag, "article");
+  assert.equal(digest.body[0].rank, 1);
+  assert.equal(digest.body[0].title, "Story");
+  assert.equal(digest.body[0].title_link, "[Story](https://example.com/item?id=1)");
+  assert.equal(digest.body[0].url, "https://example.com/story");
+  assert.equal(digest.body[0].score, "10 points");
+  assert.equal(digest.body[0].comments, "3 comments");
+  assert.equal(digest.body[0].comment_url, "https://example.com/item?id=1");
 });
 
 test("single-link list items flatten; long lists append a truncation note", () => {
   /** @type {any[]} */
   const lis = [{ tag: "li", children: [{ tag: "a", text: "Story one", attrs: { href: "/one" } }] }];
-  for (let index = 0; index < 124; index++) {
+  for (let index = 0; index < 404; index++) {
     lis.push({ tag: "li", text: `item ${index}` });
   }
   const fixture = {
@@ -147,10 +205,10 @@ test("single-link list items flatten; long lists append a truncation note", () =
   const digest = runReadPage(fixture);
   const list = digest.body[0];
   assert.equal(list.tag, "ul");
-  assert.equal(list.items.length, 121);
+  assert.equal(list.items.length, 401);
   assert.equal(list.items[0].text, "Story one");
   assert.equal(list.items[0].href, "https://example.com/one");
-  assert.deepEqual(list.items[120], { note: "…truncated" });
+  assert.deepEqual(list.items[400], { note: "…truncated" });
 });
 
 test("form controls carry properties and password values are omitted", () => {
@@ -182,7 +240,7 @@ test("form controls carry properties and password values are omitted", () => {
 test("node budget appends exactly one body-level marker", () => {
   /** @type {any[]} */
   const body = [];
-  for (let index = 0; index < 4100; index++) {
+  for (let index = 0; index < 8100; index++) {
     body.push({ tag: "p", text: `p${index}` });
   }
   const fixture = { title: "Budget", url: "https://example.com/", body };
@@ -190,5 +248,5 @@ test("node budget appends exactly one body-level marker", () => {
   const markers = digest.body.filter((/** @type {any} */ node) => node.note === "truncated: node budget reached");
   assert.equal(markers.length, 1);
   assert.equal(digest.body[digest.body.length - 1].note, "truncated: node budget reached");
-  assert.ok(digest.body.length < 4100);
+  assert.ok(digest.body.length < 8100);
 });

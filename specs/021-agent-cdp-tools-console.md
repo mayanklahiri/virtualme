@@ -142,3 +142,10 @@ The output pane may recognize result *shapes* (never tool names, preserving
 page text; runs of three or more `KEY=value` lines inside plain-text results
 render as sorted two-column tables. All other results keep the generic
 pretty-JSON / plain-text / image paths.
+
+### 2026-07-25 — Context-scaled observation limits (spec 029)
+
+Spec 029 supersedes the tool-result limits in §2 and §3: `dom`/`dom_query`/
+`dom_validate` use 24 KiB, `page_eval` uses 16 KiB, and manual tool-result
+text uses 64 KiB. The Tools manifest also exposes the development-only
+`dump_dom` capture tool; it is intentionally absent from model definitions.

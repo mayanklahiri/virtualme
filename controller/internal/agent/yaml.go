@@ -9,19 +9,23 @@ import (
 	"strings"
 )
 
-const readPageCap = 32000
+const readPageCap = 64000
 
 var yamlKeyOrder = map[string][]string{
 	"":     {"title", "url", "head", "body"},
 	"head": {"lang", "description", "canonical", "og"},
 	"node": {
-		"tag", "text", "href", "src", "alt", "type", "name", "value",
+		"tag", "rank", "title", "title_link", "url", "score", "comments", "comment_url",
+		"author", "age", "text", "href", "src", "alt", "type", "name", "value",
 		"placeholder", "action", "method", "label", "rows", "items", "children", "note",
 	},
 }
 
 //go:embed js/readpage.js
 var readPageScript string
+
+//go:embed js/domdump.js
+var domDumpScript string
 
 func encodeYAML(value any) string {
 	return strings.TrimSpace(encodeValue(value, 0, "")) + "\n"
