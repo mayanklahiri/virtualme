@@ -45,6 +45,9 @@ async function run() {
   const initial = await jsonRequest("/api/config");
   if (!initial.response.ok) fail(`GET config status ${initial.response.status}`);
   const raw = structuredClone(initial.body.raw);
+  const telegramReference = initial.body.secrets?.["integrations.telegram.botToken"]?.reference;
+  if (telegramReference) raw.integrations.telegram.botToken = telegramReference;
+  if (process.argv[4]) raw.integrations.telegram.botToken = process.argv[4];
 
   if (mode === "--preflight-failure") {
     raw.agent.keepTasks += 1;

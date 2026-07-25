@@ -30,6 +30,7 @@ These rules bind this spec, specs 002/003, and all future work. Copy this sectio
 | `docker/` | Container image and supervised services (spec 002) |
 | `controller/` | Go control plane, durable notifications/lifecycle marker, master configuration, GPU observability, reliable job queue/scheduler, activity ledger, recurring projects, browser-agent loop, manual Tools console, ambient jiggler, cached local TTS, outbound mail, read-only data explorer, and multi-page console |
 | `controller/internal/config`, `controller/cmd/configctl` | Embedded schema, strict YAML loader, atomic persistence, preflight exports, and deterministic docs reference |
+| `controller/internal/origin`, `controller/internal/telegram` | Channel-neutral source metadata plus stdlib Telegram Bot API long polling, authorization, persistence, delivery, and console protocol |
 | `controller/prompts/` | Embedded plain-text agent and fallback-chat system prompts |
 
 ## Commands
@@ -111,6 +112,14 @@ in Valkey through atomic Lua scripts, broadcasts authoritative websocket
 snapshots/pages/details, and exposes a bell popover plus `/notifications`.
 Lifecycle evidence in mode-0600 `$VM_DATA_DIR/controller-lifecycle.json`
 distinguishes clean stops, crashes, and planned configuration restarts.
+The optional Telegram integration uses controller-initiated HTTPS long polling
+with no SDK, webhook, sidecar, or exposed port. Exact chat AND optional-user
+allowlists gate shared-chat ingress; source/correlation metadata routes final
+answers back only to their originating chat. Its offset, bounded events, known
+chats, notification suppression, and ingress records persist in Valkey, while
+`/telegram` uses sender-scoped `telegram-*` websocket frames for status,
+details, and test sends. Enabling Telegram deliberately crosses the local
+privacy boundary.
 Configuration saves and the agent's `notify` tool use narrow typed producer
 seams; notification creation itself does not duplicate activity-ledger events.
 Chat renders GFM pipe tables, buffers the latest task's agent steps
@@ -224,5 +233,5 @@ checked generated files under `docs/src/generated/` or `docs/src/styles/`.
 | [030](specs/030-docs-site.md) | Static Astro docs/marketing site, shared themes, source-checkout CLI, and Pages publication |
 | [031](specs/031-master-config.md) | Master configuration schema, strict loader, preflight/runtime migration, console, restart flow, and docs export |
 | [032](specs/032-assistant-notifications.md) | Durable notifications, global read state, lifecycle markers, agent tool, and console UI |
-| [033](specs/033-telegram.md) | Accepted authorized Telegram integration follow-up; not yet implemented |
+| [033](specs/033-telegram.md) | Authorized Telegram long polling, shared-chat ingress/delivery, persistence, notifications, and console |
 | [034](specs/034-agent-context-budget.md) | Preflight agent context budgeting, scaled observations, adaptive completions, and graduated recovery |

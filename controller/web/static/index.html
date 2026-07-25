@@ -53,6 +53,7 @@
         <a href="/config" data-nav><svg class="icon"><use href="/icons.svg#i-wrench"/></svg>Config</a>
         <a href="/status" data-nav><svg class="icon"><use href="/icons.svg#i-activity"/></svg>Status</a>
         <a href="/chat" data-nav><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg>Chat</a>
+        <a href="/telegram" data-nav><svg class="icon"><use href="/icons.svg#i-send"/></svg>Telegram</a>
         <a href="/speech" data-nav><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg>Speech</a>
         <a href="/mail" data-nav><svg class="icon"><use href="/icons.svg#i-mail"/></svg>Mail</a>
         <a href="/desktop-view" data-nav><svg class="icon"><use href="/icons.svg#i-monitor"/></svg>Desktop</a>
@@ -126,6 +127,7 @@
           <a href="/tools" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-wrench"/></svg></span><strong>Tools</strong><span>Inspect and invoke local tools</span></a>
           <a href="/status" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-activity"/></svg></span><strong>Status</strong><span>Inspect services and metrics</span></a>
           <a href="/chat" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-message-circle"/></svg></span><strong>Chat</strong><span>Talk to the local model</span></a>
+          <a href="/telegram" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-send"/></svg></span><strong>Telegram</strong><span>Inspect the optional bot integration</span></a>
           <a href="/speech" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-volume-2"/></svg></span><strong>Speech</strong><span>Speak with the local voice</span></a>
           <a href="/mail" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-mail"/></svg></span><strong>Mail</strong><span>Compose and inspect delivery</span></a>
           <a href="/desktop-view" data-nav><span class="quick-icon"><svg class="icon"><use href="/icons.svg#i-monitor"/></svg></span><strong>Desktop</strong><span>Open the private browser</span></a>
@@ -393,6 +395,16 @@
             <button id="chat-stop" type="button"><svg class="icon"><use href="/icons.svg#i-square"/></svg>Stop</button>
           </div>
         </form>
+      </section>
+
+      <section data-page="telegram" hidden class="telegram-page" aria-labelledby="telegram-title">
+        <div class="page-heading"><h1 id="telegram-title">Telegram</h1><a class="button secondary" href="/config#integrations-telegram" data-nav>Configure Telegram</a></div>
+        <div class="telegram-grid">
+          <article class="metric telegram-state"><h2>Integration state</h2><p id="telegram-state">Disabled</p><dl id="telegram-details"></dl></article>
+          <article class="metric telegram-privacy"><h2>Privacy boundary</h2><ul><li>Chat and optional user allowlists are the authentication boundary.</li><li>An empty user allowlist permits every human sender in an allowed chat.</li><li>Group privacy mode is configured with BotFather.</li><li>Telegram traffic crosses the private-network boundary around port 8080.</li></ul></article>
+          <form id="telegram-test-form" class="metric"><h2>Integration test</h2><label for="telegram-destination">Destination</label><select id="telegram-destination" disabled></select><label for="telegram-test-text">Message</label><textarea id="telegram-test-text" maxlength="4096" rows="4">Virtual Me Telegram integration test.</textarea><button id="telegram-test-send" type="submit" disabled>Send</button><p id="telegram-test-result" tabindex="-1" hidden></p></form>
+        </div>
+        <article id="telegram-events-card" class="metric telegram-events" hidden><h2>Event log</h2><div id="telegram-event-list"></div><aside id="telegram-event-detail" hidden><h3>Event detail</h3><p>Raw Telegram update (may contain message content)</p><div id="telegram-event-raw"></div><button id="telegram-event-close" type="button">Close</button></aside></article>
       </section>
 
       <section data-page="speech" hidden class="speech-page" aria-labelledby="speech-title">

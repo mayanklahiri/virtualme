@@ -88,9 +88,6 @@ func Load(options Options) (*Loaded, error) {
 	if err := resolveTree(schema.root, effective, raw, "", root, env, resolver, secrets, effective); err != nil {
 		return nil, withLocations(file, err, locations)
 	}
-	if err := schema.Validate(effective); err != nil {
-		return nil, withLocations(file, err, locations)
-	}
 	if err := ValidateSemantic(effective); err != nil {
 		return nil, withLocations(file, err, locations)
 	}
@@ -137,6 +134,9 @@ func deferredValidationTree(schema map[string]any, value any) any {
 		return result
 	}
 	if text, ok := value.(string); ok && envReferencePattern.MatchString(text) {
+		if _, secret := schema["x-vm-secret"]; secret {
+			return value
+		}
 		return deepCopy(schema["default"])
 	}
 	return value

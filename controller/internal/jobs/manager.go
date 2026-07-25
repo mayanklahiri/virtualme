@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mayanklahiri/virtualme/controller/internal/origin"
 	"github.com/mayanklahiri/virtualme/controller/internal/valkey"
 	"github.com/mayanklahiri/virtualme/controller/internal/ws"
 )
@@ -47,11 +48,31 @@ type Envelope struct {
 	Attempts             int             `json:"attempts"`
 	MaxRetries           int             `json:"maxRetries"`
 	VisibilityTimeoutSec int             `json:"visibilityTimeoutSec"`
-	InitiatorConn        string          `json:"initiatorConn"`
+	Initiator            Initiator       `json:"initiator"`
+	CorrelationID        string          `json:"correlationId,omitempty"`
+	Source               *origin.Source  `json:"source,omitempty"`
+	InitiatorConn        string          `json:"initiatorConn,omitempty"`
 	ProjectID            string          `json:"projectId"`
 	Selector             string          `json:"selector"`
 	LastError            string          `json:"lastError,omitempty"`
 	Result               *Result         `json:"result,omitempty"`
+}
+
+type Initiator struct {
+	ID                 string `json:"id"`
+	Kind               string `json:"kind"`
+	ConnectionID       string `json:"connectionId,omitempty"`
+	CancelOnDisconnect bool   `json:"cancelOnDisconnect"`
+}
+
+func (env *Envelope) NormalizeLegacy() {
+	if env.Initiator.ID == "" && env.InitiatorConn != "" {
+		env.Initiator = Initiator{
+			ID: "ws:" + env.InitiatorConn, Kind: "web", ConnectionID: env.InitiatorConn,
+			CancelOnDisconnect: true,
+		}
+		env.InitiatorConn = ""
+	}
 }
 
 type executor func(context.Context, Envelope) (string, error)
@@ -122,6 +143,7 @@ func readyKey(priority string) string {
 }
 
 func normalize(env *Envelope, now time.Time) {
+	env.NormalizeLegacy()
 	if env.ID == "" {
 		env.ID = NewID()
 	}
@@ -476,6 +498,26 @@ func (m *Manager) IsRunning() bool {
 	return m.running != nil
 }
 
+// ChatState returns working, queued, or idle for Telegram /status.
+func (m *Manager) ChatState() string {
+	m.mu.Lock()
+	if m.running != nil && m.running.env.Type == "chat" {
+		m.mu.Unlock()
+		return "working"
+	}
+	m.mu.Unlock()
+	for _, key := range []string{readyInteractive, readyScheduled} {
+		items, _ := m.client.LRange(key, 0, -1)
+		for _, item := range items {
+			var env Envelope
+			if json.Unmarshal([]byte(item), &env) == nil && env.Type == "chat" {
+				return "queued"
+			}
+		}
+	}
+	return "idle"
+}
+
 // CancelRunningType cancels the current job only when its type matches.
 func (m *Manager) CancelRunningType(jobType, reason string) bool {
 	m.mu.Lock()
@@ -487,10 +529,24 @@ func (m *Manager) CancelRunningType(jobType, reason string) bool {
 	return true
 }
 
-// DropInitiator cancels running and removes queued jobs owned by connID.
-func (m *Manager) DropInitiator(connID string) {
+func (m *Manager) CancelRunningConnection(connID, jobType, reason string) bool {
 	m.mu.Lock()
-	if m.running != nil && m.running.env.InitiatorConn == connID {
+	defer m.mu.Unlock()
+	if m.running == nil || m.running.env.Type != jobType {
+		return false
+	}
+	m.running.env.NormalizeLegacy()
+	if !m.running.env.Initiator.CancelOnDisconnect || m.running.env.Initiator.ConnectionID != connID {
+		return false
+	}
+	m.running.cancel(errors.New(reason))
+	return true
+}
+
+// DropConnection cancels only disconnect-scoped work owned by connID.
+func (m *Manager) DropConnection(connID string) {
+	m.mu.Lock()
+	if m.running != nil && m.running.env.Initiator.CancelOnDisconnect && m.running.env.Initiator.ConnectionID == connID {
 		m.running.cancel(errors.New("initiator disconnected"))
 	}
 	m.mu.Unlock()
@@ -501,13 +557,20 @@ func (m *Manager) DropInitiator(connID string) {
 		}
 		for _, item := range items {
 			var env Envelope
-			if json.Unmarshal([]byte(item), &env) == nil && env.InitiatorConn == connID {
+			if json.Unmarshal([]byte(item), &env) != nil {
+				continue
+			}
+			env.NormalizeLegacy()
+			if env.Initiator.CancelOnDisconnect && env.Initiator.ConnectionID == connID {
 				_, _ = m.client.LRem(key, 0, item)
 			}
 		}
 	}
 	m.broadcastState()
 }
+
+// DropInitiator forwards legacy callers to DropConnection.
+func (m *Manager) DropInitiator(connID string) { m.DropConnection(connID) }
 
 // DropQueued removes queued jobs of type owned by connID.
 func (m *Manager) DropQueued(connID, jobType string) {
@@ -518,7 +581,10 @@ func (m *Manager) DropQueued(connID, jobType string) {
 		}
 		for _, item := range items {
 			var env Envelope
-			if json.Unmarshal([]byte(item), &env) == nil && env.InitiatorConn == connID && env.Type == jobType {
+			if json.Unmarshal([]byte(item), &env) == nil {
+				env.NormalizeLegacy()
+			}
+			if env.Initiator.CancelOnDisconnect && env.Initiator.ConnectionID == connID && env.Type == jobType {
 				_, _ = m.client.LRem(key, 0, item)
 			}
 		}
@@ -644,7 +710,7 @@ func (m *Manager) HandleMessage(conn *ws.Conn, payload []byte) bool {
 	}
 	env := Envelope{
 		ID: NewID(), Type: request.Job.Type, Payload: request.Job.Payload,
-		Priority: "interactive", InitiatorConn: conn.ID(),
+		Priority: "interactive", Initiator: Initiator{ID: "ws:" + conn.ID(), Kind: "web", ConnectionID: conn.ID(), CancelOnDisconnect: true},
 	}
 	if _, err := m.Enqueue(env); err != nil {
 		message, _ := json.Marshal(map[string]string{"type": "chat-error", "error": "job enqueue failed: " + err.Error()})

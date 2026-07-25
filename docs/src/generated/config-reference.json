@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "schemaSha256": "27cb7181ecdb9837f9939f0f7b0c6fa793f86b14956514755c734bc66f79b9b3",
+  "schemaSha256": "f40c2508f032c13333c0b907ce0e1164e26f77ccdb9cf210232398cfb0e32412",
   "sections": [
     {
       "id": "system",
@@ -1534,9 +1534,9 @@
       "title": "Integrations",
       "anchor": "integrations",
       "consoleDeepLink": "/config#integrations",
-      "overview": "Extension point for optional external integrations.",
+      "overview": "Optional external integrations.",
       "details": [
-        "Core spec 031 defines no integrations."
+        "External integrations explicitly cross the local privacy boundary."
       ],
       "exemplarYaml": "integrations: {}\n",
       "tradeoffs": [],
@@ -1548,7 +1548,190 @@
         "section": "Integrations",
         "sectionRenderer": "vm-config-integrations-section"
       },
-      "settings": []
+      "settings": [
+        {
+          "path": "integrations.telegram.enabled",
+          "anchor": "integrations-telegram-enabled",
+          "consoleDeepLink": "/config#integrations-telegram-enabled",
+          "type": "boolean",
+          "default": false,
+          "required": true,
+          "choices": null,
+          "constraints": {},
+          "restart": "controller",
+          "secret": false,
+          "overview": "Enabling starts outbound HTTPS long polling after token resolution and allowlist validation.",
+          "details": [],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-checkbox",
+            "control": "checkbox",
+            "order": 10,
+            "section": "Integrations"
+          }
+        },
+        {
+          "path": "integrations.telegram.botToken",
+          "anchor": "integrations-telegram-bot-token",
+          "consoleDeepLink": "/config#integrations-telegram-bot-token",
+          "type": "string",
+          "default": "",
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maxLength": 4096,
+            "minLength": 0
+          },
+          "restart": "controller",
+          "secret": true,
+          "overview": "References the BotFather token without persisting credential bytes.",
+          "details": [
+            "A non-empty whole-scalar environment or file reference is required while enabled."
+          ],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [
+            {
+              "href": "https://core.telegram.org/bots/features#botfather",
+              "label": "BotFather"
+            }
+          ],
+          "ui": {
+            "advanced": false,
+            "component": "vm-secret-reference",
+            "control": "secret",
+            "order": 20,
+            "section": "Integrations"
+          }
+        },
+        {
+          "path": "integrations.telegram.allowedChatIds",
+          "anchor": "integrations-telegram-allowed-chat-ids",
+          "consoleDeepLink": "/config#integrations-telegram-allowed-chat-ids",
+          "type": "array",
+          "default": [],
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "uniqueItems": true
+          },
+          "restart": "controller",
+          "secret": false,
+          "overview": "Required chat allowlist; every inbound and test-send chat must match.",
+          "details": [
+            "This list is ANDed with the optional user allowlist."
+          ],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-string-list",
+            "control": "string-list",
+            "order": 30,
+            "section": "Integrations"
+          }
+        },
+        {
+          "path": "integrations.telegram.allowedUserIds",
+          "anchor": "integrations-telegram-allowed-user-ids",
+          "consoleDeepLink": "/config#integrations-telegram-allowed-user-ids",
+          "type": "array",
+          "default": [],
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "uniqueItems": true
+          },
+          "restart": "controller",
+          "secret": false,
+          "overview": "Optional user allowlist applied in addition to the chat allowlist.",
+          "details": [
+            "When empty, every human sender in an allowed chat is authorized."
+          ],
+          "tradeoffs": [],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": false,
+            "component": "vm-string-list",
+            "control": "string-list",
+            "order": 40,
+            "section": "Integrations"
+          }
+        },
+        {
+          "path": "integrations.telegram.pollTimeoutSeconds",
+          "anchor": "integrations-telegram-poll-timeout-seconds",
+          "consoleDeepLink": "/config#integrations-telegram-poll-timeout-seconds",
+          "type": "integer",
+          "default": 30,
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maximum": 50,
+            "minimum": 1
+          },
+          "restart": "controller",
+          "secret": false,
+          "overview": "Controls long-poll latency and request cadence.",
+          "details": [],
+          "tradeoffs": [
+            {
+              "benefit": "Fewer empty requests.",
+              "choice": "Longer timeout",
+              "cost": "Longer-lived outbound requests."
+            }
+          ],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-number-field",
+            "control": "number",
+            "order": 50,
+            "section": "Integrations"
+          }
+        },
+        {
+          "path": "integrations.telegram.maxEventLog",
+          "anchor": "integrations-telegram-max-event-log",
+          "consoleDeepLink": "/config#integrations-telegram-max-event-log",
+          "type": "integer",
+          "default": 200,
+          "required": true,
+          "choices": null,
+          "constraints": {
+            "maximum": 1000,
+            "minimum": 20
+          },
+          "restart": "controller",
+          "secret": false,
+          "overview": "Bounds the redacted Telegram operator event log.",
+          "details": [
+            "Selected raw updates may contain inbound message text under the trusted-console model."
+          ],
+          "tradeoffs": [
+            {
+              "benefit": "More diagnostics survive.",
+              "choice": "Larger log",
+              "cost": "More persistent local metadata."
+            }
+          ],
+          "examples": [],
+          "links": [],
+          "ui": {
+            "advanced": true,
+            "component": "vm-number-field",
+            "control": "number",
+            "order": 60,
+            "section": "Integrations"
+          }
+        }
+      ]
     }
   ]
 }

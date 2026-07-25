@@ -8,6 +8,7 @@ const routes = new Map([
   ["/config", ["config", "Config"]],
   ["/status", ["status", "Status"]],
   ["/chat", ["chat", "Chat"]],
+  ["/telegram", ["telegram", "Telegram"]],
   ["/speech", ["speech", "Speech"]],
   ["/mail", ["mail", "Mail"]],
   ["/desktop-view", ["desktop", "Desktop"]],

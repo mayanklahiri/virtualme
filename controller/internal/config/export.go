@@ -349,9 +349,6 @@ func ValidateRaw(raw RawConfig, dataDir string, environment []string, resolver *
 	if err := resolveTree(schema.root, effective, tempRoot, "", dataDir, env, resolver, secrets, effective); err != nil {
 		return nil, nil, err
 	}
-	if err := schema.Validate(effective); err != nil {
-		return nil, nil, err
-	}
 	if err := ValidateSemantic(effective); err != nil {
 		return nil, nil, err
 	}

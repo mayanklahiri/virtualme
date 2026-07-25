@@ -166,11 +166,12 @@ as superseded for mail by [`spec 010 §7`](specs/010-outbound-mail.md#7-persiste
 | `/config` | Schema-driven master configuration read/edit view with optimistic saves and deliberate service restart |
 | `/status` | Service health, system/GPU meters, LLM token/throughput and browser-action charts, active time selectors, Quick Options (jiggler and scheduler pause), and persistent per-process/GPU metrics |
 | `/chat` | Markdown chat, generation controls, LLM progress, and conversation totals |
+| `/telegram` | Optional Telegram Bot API long-poll status, authorized destinations, test sends, and bounded event diagnostics |
 | `/speech` | Single-voice streaming local speech with seeds, persistent history/replay, and disk cache |
 | `/mail` | Outbound-mail composer, durable outbox with per-message status, queue contents/errors/next-flush timing, queue clearing, and DKIM DNS record |
 | `/desktop-view` | Embedded private noVNC desktop |
 | `/healthz` | Aggregate JSON health for all eight services |
-| `/ws` | Websocket: live state, metrics, notifications, queued jobs, activity, tool manifests/invocation, chat, agent, TTS, and mail frames |
+| `/ws` | Websocket: live state, metrics, notifications, Telegram, queued jobs, activity, tool manifests/invocation, chat, agent, TTS, and mail frames |
 | `POST /v1/audio/speech` | OpenAI-compatible local speech API (`wav` or raw `pcm`) |
 | `GET /api/data/list` | Read-only directory listing under `$VM_DATA_DIR` (path-contained; trust model) |
 | `GET /api/data/file` | Read-only file stream under `$VM_DATA_DIR` (text capped at 256 KiB unless `download=1`) |
@@ -299,6 +300,24 @@ unclean-startup message; deliberate configuration restarts produce explicit
 shutdown/startup messages instead. Notification protocol is websocket-only;
 there is no notification HTTP API.
 
+### Telegram
+
+Telegram is optional and disabled by default. Configure
+`integrations.telegram` on `/config` with a BotFather token held only through
+an `${env:...}` or `${file:/absolute/path}` secret reference, plus at least one
+canonical decimal `allowedChatIds` entry. Authorization is the chat allowlist
+AND the optional user allowlist; leaving `allowedUserIds` empty permits every
+human sender in an allowed chat.
+
+The controller uses outbound HTTPS long polling against the Telegram Bot API:
+there is no webhook, inbound port, SDK, or sidecar. Authorized text joins the
+same persistent conversation as `/chat`; final answers route only to the
+originating Telegram chat. `/telegram` shows bot/poller state, authorized test
+destinations, and a bounded event log. Telegram is an external cloud boundary:
+authorized text, replies, chat actions, and Bot API metadata leave the host.
+Group privacy mode is managed with
+[BotFather](https://core.telegram.org/bots/features#botfather).
+
 ### Local speech
 
 The `/speech` tab streams sentence-level audio from the fully local
@@ -424,7 +443,7 @@ After changing anything structural, run the `/master-update` skill — it re-syn
 | [030](specs/030-docs-site.md) | Static Astro documentation/marketing site, shared themes, local docs CLI, and orphan-branch Pages publication |
 | [031](specs/031-master-config.md) | Master configuration schema, strict YAML loader, preflight, console, restart flow, and generated reference |
 | [032](specs/032-assistant-notifications.md) | Durable assistant notifications, global read state, lifecycle markers, agent tool, and console UI |
-| [033](specs/033-telegram.md) | Accepted authorized Telegram integration follow-up; not yet implemented |
+| [033](specs/033-telegram.md) | Authorized Telegram Bot API long-poll ingress, correlated shared-chat delivery, status console, and diagnostics |
 | [034](specs/034-agent-context-budget.md) | Preflight agent context budgeting, scaled observations, adaptive completions, and graduated recovery |
 
 ### CI/CD

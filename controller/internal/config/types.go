@@ -91,7 +91,18 @@ type HealthConfig struct {
 	XdotoolPath string `json:"xdotoolPath"`
 }
 
-type IntegrationsConfig struct{}
+type IntegrationsConfig struct {
+	Telegram TelegramConfig `json:"telegram"`
+}
+
+type TelegramConfig struct {
+	Enabled            bool     `json:"enabled"`
+	BotToken           string   `json:"botToken"`
+	AllowedChatIDs     []string `json:"allowedChatIds"`
+	AllowedUserIDs     []string `json:"allowedUserIds"`
+	PollTimeoutSeconds int      `json:"pollTimeoutSeconds"`
+	MaxEventLog        int      `json:"maxEventLog"`
+}
 
 type RawConfig map[string]any
 

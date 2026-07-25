@@ -15,6 +15,7 @@ import { initTools } from "./tools.js";
 import { initData } from "./data.js";
 import { initConfig } from "./config.js";
 import { initNotifications } from "./notifications.js";
+import { initTelegram } from "./telegram.js";
 
 initTheme();
 initNav();
@@ -29,6 +30,7 @@ const tools = initTools((value) => socket.send(value));
 const data = initData();
 const configuration = initConfig();
 const notifications = initNotifications((value) => socket.send(value));
+const telegram = initTelegram((value) => socket.send(value));
 const agent = initAgent(chat.log, (text) => chat.setStatus(text));
 const jigglerSwitch = document.querySelector("#jiggler-switch");
 jigglerSwitch.addEventListener("click", () => {
@@ -61,6 +63,7 @@ function onStatus(status, connectedSince) {
   mail.connection(status);
   configuration.connection(status);
   notifications.status(status);
+  telegram.connection(status);
 }
 
 function onMessage(message) {
@@ -144,6 +147,13 @@ function onMessage(message) {
     case "notification-error":
       notifications.frame(message);
       break;
+    case "telegram-status":
+    case "telegram-events":
+    case "telegram-event":
+    case "telegram-event-detail":
+    case "telegram-command-result":
+      telegram.frame(message);
+      break;
   }
 }
 
@@ -158,4 +168,5 @@ initRouter((page) => {
   configuration.show(page);
   if (page === "notifications") notifications.enter();
   else notifications.closePopover(false);
+  telegram.show(page);
 });

@@ -87,6 +87,13 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
     "-p", `${PORT}:${PORT}`,
     "-v", `${dataDir}:${DATA_MOUNT}`,
   ];
+  const telegramTestMode = process.env.VM_TELEGRAM_TEST_MODE;
+  const telegramBase = process.env.VM_TELEGRAM_API_BASE_URL;
+  if ((telegramTestMode === "1") !== Boolean(telegramBase)) {
+    console.error("Telegram test mode and API base URL must be supplied together");
+    return 2;
+  }
+  const telegramTest = telegramTestMode === "1" && Boolean(telegramBase);
   if (flags["no-browser-sandbox"]) {
     dockerArgs.push("-e", "VM_CHROMIUM_NO_SANDBOX=1");
   }
@@ -98,7 +105,7 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
     dockerArgs.push("--gpus", gpuSpec,
       "-e", "VM_LLAMA_GPU=1", "-e", "NVIDIA_DRIVER_CAPABILITIES=all");
   }
-  if (process.env.VM_MAIL_SMARTHOST) {
+  if (process.env.VM_MAIL_SMARTHOST || telegramTest) {
     dockerArgs.push("--add-host", "vmhost:host-gateway");
   }
   for (const name of [
@@ -118,6 +125,9 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
     if (process.env[name] !== undefined) {
       dockerArgs.push("-e", `${name}=${process.env[name]}`);
     }
+  }
+  if (telegramTest) {
+    dockerArgs.push("-e", "VM_TELEGRAM_TEST_MODE=1", "-e", `VM_TELEGRAM_API_BASE_URL=${telegramBase}`);
   }
   dockerArgs.push(`${IMAGE}:${TAG}`);
   const code = docker(dockerArgs);

@@ -114,6 +114,7 @@ requires a new spec.
 | `controller/internal/config` | Embedded sole-source schema, typed model, strict YAML, precedence, secrets, validation, and atomic persistence |
 | `controller/internal/configapi` | Redacted REST projections, optimistic save, notifier seam, and restart coordination |
 | `controller/internal/notifications` | Durable notification model/validation, atomic Valkey scripts, websocket protocol, and crash/clean lifecycle marker |
+| `controller/internal/origin`, `controller/internal/telegram` | Channel-neutral source metadata and stdlib Telegram Bot API long polling, authorization, bounded persistence, commands, delivery, and websocket console |
 | `controller/cmd/configctl` | Container preflight/service export and deterministic docs export/check |
 | `controller/prompts` | Embedded plain-text agent and fallback-chat system prompts |
 | `controller/web/static` | Hand-written multi-page SPA, themes, charts, markdown, agent hooks |
@@ -242,6 +243,16 @@ seam. A custom renderer requires one allowed-renderer registry entry and one
 DOM-only renderer map entry in `notifications.js` (never markup strings or
 browser-local state). Stateful additions must also update spec 007's canonical
 persistence map and known-root checks.
+
+Telegram uses no SDK, webhook, sidecar, exposed port, Docker layer, or s6
+service. Configuration and its secret reference are owned by
+`integrations.telegram`; production is fixed to Telegram HTTPS, while the
+guarded local-stub override exists only for offline e2e. Authorized messages
+enter shared chat with durable source, initiator, and correlation metadata;
+final-only delivery routes by envelope source. Persistent
+`virtualme:telegram:*` and bounded `virtualme:chat:ingress:telegram:*` keys are
+covered by spec 007. Run Telegram Go tests, the static UI test, and the local
+stub/probe before full gates.
 
 ## How to add things
 

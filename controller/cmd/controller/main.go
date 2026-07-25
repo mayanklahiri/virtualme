@@ -37,6 +37,7 @@ import (
 	"github.com/mayanklahiri/virtualme/controller/internal/notifications"
 	"github.com/mayanklahiri/virtualme/controller/internal/projects"
 	"github.com/mayanklahiri/virtualme/controller/internal/state"
+	"github.com/mayanklahiri/virtualme/controller/internal/telegram"
 	"github.com/mayanklahiri/virtualme/controller/internal/tts"
 	"github.com/mayanklahiri/virtualme/controller/internal/valkey"
 	"github.com/mayanklahiri/virtualme/controller/internal/ws"
@@ -68,6 +69,32 @@ func parseResolution(value string) (int, int) {
 		return 1600, 900
 	}
 	return width, height
+}
+
+func telegramAPIBase() (string, error) {
+	const production = "https://api.telegram.org"
+	mode, override := os.Getenv("VM_TELEGRAM_TEST_MODE"), os.Getenv("VM_TELEGRAM_API_BASE_URL")
+	if mode == "" && override == "" {
+		return production, nil
+	}
+	if mode != "1" || override == "" {
+		return "", fmt.Errorf("Telegram test API override requires exact test mode and base URL")
+	}
+	parsed, err := url.Parse(override)
+	if err != nil || parsed.Scheme != "http" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" ||
+		!containsString([]string{"127.0.0.1", "localhost", "vmhost"}, parsed.Hostname()) {
+		return "", fmt.Errorf("Telegram test API base URL is invalid")
+	}
+	return strings.TrimRight(override, "/"), nil
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func spaHandler(staticFS fs.FS) http.Handler {
@@ -454,6 +481,38 @@ func main() {
 	jobManager := jobs.New(valkey.New(cfg.ValkeyAddr), hub.Broadcast)
 	chatService.SetJobManager(jobManager)
 	jobManager.Register("chat", chatService.Execute)
+	baseURL, err := telegramAPIBase()
+	if err != nil {
+		log.Fatal(err)
+	}
+	var telegramAPI telegram.API
+	telegramConfig := telegram.Config{
+		Enabled: master.Integrations.Telegram.Enabled, BotToken: master.Integrations.Telegram.BotToken,
+		AllowedChatIDs:     master.Integrations.Telegram.AllowedChatIDs,
+		AllowedUserIDs:     master.Integrations.Telegram.AllowedUserIDs,
+		PollTimeoutSeconds: master.Integrations.Telegram.PollTimeoutSeconds,
+		MaxEventLog:        master.Integrations.Telegram.MaxEventLog,
+	}
+	if telegramConfig.Enabled {
+		telegramAPI, err = telegram.NewClient(baseURL, telegramConfig.BotToken, &http.Client{
+			Transport: &http.Transport{ResponseHeaderTimeout: time.Duration(telegramConfig.PollTimeoutSeconds+10) * time.Second},
+		})
+		if err != nil {
+			log.Fatal("telegram: invalid client")
+		}
+	}
+	telegramService := telegram.New(telegramConfig, telegramAPI, sharedValkey, hub.Broadcast, notificationService)
+	telegramService.SetJobState(jobManager.ChatState)
+	telegramService.SetSubmitter(func(ctx context.Context, updateID int64, chatID, userID, text string) error {
+		_, err := chatService.SubmitUserText(ctx, chat.Submission{
+			Text: text, InitiatorID: "tg:" + chatID, CorrelationID: fmt.Sprintf("telegram:update:%d", updateID),
+			Source: chat.Source{Channel: "telegram", ChatID: chatID, UserID: userID, UpdateID: updateID},
+		})
+		return err
+	})
+	chatService.RegisterDelivery("telegram", func(delivery chat.Delivery) error {
+		return telegramService.Deliver(context.Background(), delivery.Source.ChatID, delivery.Text)
+	})
 	width, height := parseResolution(master.Desktop.Resolution)
 	jigglerService := jiggler.New(agent.NewProcessRunner(), valkey.New(cfg.ValkeyAddr), hub.Broadcast, width, height)
 	jigglerService.SetDisplay(master.Desktop.Display)
@@ -499,7 +558,7 @@ func main() {
 			"type": "tool-result", "id": request.ID, "ok": toolErr == nil,
 			"durationMs": duration, "text": text, "image": image, "error": errorText,
 		})
-		hub.SendTo(env.InitiatorConn, reply)
+		hub.SendTo(env.Initiator.ConnectionID, reply)
 		summary := result.Summary
 		if summary == "" {
 			summary = request.Tool
@@ -589,7 +648,8 @@ func main() {
 			jobPayload, _ := json.Marshal(map[string]any{"id": invoke.ID, "tool": invoke.Tool, "args": invoke.Args})
 			if _, err := jobManager.Enqueue(jobs.Envelope{
 				ID: jobs.NewID(), Type: "manual-tool", Payload: jobPayload, Priority: "interactive",
-				InitiatorConn: conn.ID(), VisibilityTimeoutSec: 300,
+				Initiator:            jobs.Initiator{ID: "ws:" + conn.ID(), Kind: "web", ConnectionID: conn.ID(), CancelOnDisconnect: true},
+				VisibilityTimeoutSec: 300,
 			}); err != nil {
 				reply, _ := json.Marshal(map[string]any{
 					"type": "tool-result", "id": invoke.ID, "ok": false,
@@ -614,6 +674,9 @@ func main() {
 		if notificationService.HandleMessage(conn, payload) {
 			return
 		}
+		if telegramService.HandleMessage(conn, payload) {
+			return
+		}
 		chatService.HandleClientMessage(conn, payload)
 	})
 	hub.SetOnConnect(func(conn *ws.Conn) {
@@ -622,6 +685,8 @@ func main() {
 			_ = conn.WriteText(frame)
 		}
 		_ = conn.WriteText(chatService.StatsMessage())
+		_ = conn.WriteText(telegramService.StatusMessage())
+		_ = conn.WriteText(telegramService.EventsMessage())
 		_ = conn.WriteText(mailService.StatusMessage())
 		_ = conn.WriteText(jobManager.StateMessage())
 		_ = conn.WriteText(projectService.Message())
@@ -635,13 +700,14 @@ func main() {
 			_ = conn.WriteText(message)
 		}
 	})
-	hub.SetOnDisconnect(jobManager.DropInitiator)
+	hub.SetOnDisconnect(jobManager.DropConnection)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go mailService.Start(ctx, func() bool { return hub.Count() > 0 })
 	if err := jobManager.Start(ctx); err != nil {
 		log.Fatal("jobs: startup failed:", err)
 	}
+	telegramService.Start(ctx)
 	if err := jigglerService.Start(ctx); err != nil {
 		log.Fatal("jiggler: startup failed:", err)
 	}

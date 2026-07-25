@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"github.com/mayanklahiri/virtualme/controller/internal/agent"
 	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 	"github.com/mayanklahiri/virtualme/controller/internal/metrics"
+	"github.com/mayanklahiri/virtualme/controller/internal/origin"
 	"github.com/mayanklahiri/virtualme/controller/internal/valkey"
 	"github.com/mayanklahiri/virtualme/controller/internal/ws"
 	"github.com/mayanklahiri/virtualme/controller/prompts"
@@ -35,10 +37,41 @@ const (
 
 // Message is one chat history entry.
 type Message struct {
-	Role string `json:"role"`
-	Text string `json:"text"`
-	Ts   int64  `json:"ts"`
+	ID            string  `json:"id,omitempty"`
+	Role          string  `json:"role"`
+	Text          string  `json:"text"`
+	Ts            int64   `json:"ts"`
+	CorrelationID string  `json:"correlationId,omitempty"`
+	Source        *Source `json:"source,omitempty"`
 }
+
+type Source = origin.Source
+
+type Submission struct {
+	Text          string
+	InitiatorID   string
+	CorrelationID string
+	Source        Source
+}
+
+type SubmitResult struct {
+	MessageID     string
+	CorrelationID string
+	JobID         string
+	Duplicate     bool
+	Ahead         int
+}
+
+type Delivery struct {
+	CorrelationID string
+	JobID         string
+	Source        origin.Source
+	Text          string
+	Err           error
+	Stopped       bool
+}
+
+type DeliveryHandler func(Delivery) error
 
 // Service owns the shared conversation state.
 type Service struct {
@@ -56,6 +89,7 @@ type Service struct {
 	mu             sync.Mutex
 	history        []Message
 	fallbackCancel context.CancelFunc
+	deliveries     map[string]DeliveryHandler
 }
 
 // Stats contains persisted conversation totals.
@@ -81,7 +115,73 @@ func New(valkeyAddr, llamaURL string, broadcast func([]byte)) *Service {
 		broadcast:  broadcast,
 		client:     &http.Client{Timeout: 120 * time.Second},
 		retryDelay: 2 * time.Second,
+		deliveries: make(map[string]DeliveryHandler),
 	}
+}
+
+func (s *Service) RegisterDelivery(channel string, handler DeliveryHandler) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.deliveries[channel]; exists {
+		panic("chat: duplicate delivery channel " + channel)
+	}
+	s.deliveries[channel] = handler
+}
+
+func (s *Service) SubmitUserText(ctx context.Context, in Submission) (SubmitResult, error) {
+	text := strings.TrimSpace(in.Text)
+	if text == "" || len([]rune(text)) > maxTextLen || in.InitiatorID == "" || in.CorrelationID == "" ||
+		(in.Source.Channel != "web" && in.Source.Channel != "telegram") {
+		return SubmitResult{}, errors.New("invalid chat submission")
+	}
+	if in.Source.Channel == "telegram" && (in.Source.ChatID == "" || in.Source.UserID == "" || in.Source.UpdateID <= 0) {
+		return SubmitResult{}, errors.New("invalid Telegram source")
+	}
+	messageID, jobID := jobs.NewID(), jobs.NewID()
+	if in.Source.Channel == "telegram" {
+		messageID = fmt.Sprintf("telegram-user:%d", in.Source.UpdateID)
+		jobID = fmt.Sprintf("telegram-chat:%d", in.Source.UpdateID)
+	}
+	source := in.Source
+	message := Message{ID: messageID, Role: "user", Text: text, Ts: time.Now().UnixMilli(), CorrelationID: in.CorrelationID, Source: &source}
+	s.append(message)
+	s.broadcast(marshalEvent(struct {
+		Type string `json:"type"`
+		Message
+	}{Type: "chat-message", Message: message}))
+	if _, err := s.valkey.HIncrBy(statsKey, "queries", 1); err == nil {
+		s.broadcast(s.StatsMessage())
+	}
+	body, _ := json.Marshal(map[string]string{"text": text})
+	kind := in.Source.Channel
+	initiator := jobs.Initiator{ID: in.InitiatorID, Kind: kind, CancelOnDisconnect: false}
+	if kind == "web" {
+		initiator.ConnectionID = strings.TrimPrefix(in.InitiatorID, "ws:")
+		initiator.CancelOnDisconnect = true
+	}
+	env := jobs.Envelope{
+		ID: jobID, Type: "chat", Payload: body, Priority: "interactive", EnqueuedTs: message.Ts,
+		Initiator: initiator, CorrelationID: in.CorrelationID, Source: &source, VisibilityTimeoutSec: 900,
+	}
+	if s.jobs == nil {
+		runCtx, cancel := context.WithCancel(ctx)
+		s.mu.Lock()
+		s.fallbackCancel = cancel
+		s.mu.Unlock()
+		go func() {
+			_, _ = s.generate(runCtx, env)
+			s.mu.Lock()
+			s.fallbackCancel = nil
+			s.mu.Unlock()
+			cancel()
+		}()
+		return SubmitResult{MessageID: messageID, CorrelationID: in.CorrelationID, JobID: jobID}, nil
+	}
+	ahead, err := s.jobs.Enqueue(env)
+	if err != nil {
+		return SubmitResult{}, err
+	}
+	return SubmitResult{MessageID: messageID, CorrelationID: in.CorrelationID, JobID: jobID, Ahead: ahead}, nil
 }
 
 // SetJobManager routes interactive generation through manager.
@@ -267,7 +367,7 @@ func (s *Service) HandleClientMessage(c *ws.Conn, payload []byte) {
 			if c != nil {
 				connID = c.ID()
 			}
-			s.jobs.CancelRunningType("chat", "stopped")
+			s.jobs.CancelRunningConnection(connID, "chat", "stopped")
 			s.jobs.DropQueued(connID, "chat")
 		} else {
 			s.mu.Lock()
@@ -288,59 +388,29 @@ func (s *Service) HandleClientMessage(c *ws.Conn, payload []byte) {
 		return
 	}
 	text := strings.TrimSpace(request.Text)
-	if text == "" || len(text) > maxTextLen {
+	if text == "" || len([]rune(text)) > maxTextLen {
 		writeError(c, "message must be 1-4096 characters")
-		return
-	}
-
-	userMessage := Message{Role: "user", Text: text, Ts: time.Now().UnixMilli()}
-	s.append(userMessage)
-	s.broadcast(marshalEvent(struct {
-		Type string `json:"type"`
-		Message
-	}{Type: "chat-message", Message: userMessage}))
-	// Count the query as soon as it is submitted so the stats strip moves on
-	// every turn, not only after the reply lands.
-	if _, err := s.valkey.HIncrBy(statsKey, "queries", 1); err == nil {
-		s.broadcast(s.StatsMessage())
-	}
-	payloadBody, _ := json.Marshal(map[string]string{"text": text})
-
-	if s.jobs == nil {
-		ctx, cancel := context.WithCancel(context.Background())
-		s.mu.Lock()
-		s.fallbackCancel = cancel
-		s.mu.Unlock()
-		go func() {
-			_, _ = s.generate(ctx, jobs.Envelope{
-				Payload:    payloadBody,
-				EnqueuedTs: userMessage.Ts,
-			})
-			s.mu.Lock()
-			s.fallbackCancel = nil
-			s.mu.Unlock()
-			cancel()
-		}()
 		return
 	}
 	connID := ""
 	if c != nil {
 		connID = c.ID()
 	}
-	ahead, err := s.jobs.Enqueue(jobs.Envelope{
-		Type: "chat", Payload: payloadBody, Priority: "interactive",
-		EnqueuedTs: userMessage.Ts, InitiatorConn: connID, VisibilityTimeoutSec: 900,
+	correlationID := jobs.NewID()
+	result, err := s.SubmitUserText(context.Background(), Submission{
+		Text: text, InitiatorID: "ws:" + connID, CorrelationID: correlationID,
+		Source: Source{Channel: "web"},
 	})
 	if err != nil {
-		writeError(c, "job enqueue failed: "+err.Error())
+		writeError(c, "job enqueue failed")
 		return
 	}
-	if ahead > 0 {
+	if result.Ahead > 0 {
 		s.broadcast(marshalEvent(struct {
 			Type   string `json:"type"`
 			Phase  string `json:"phase"`
 			Detail string `json:"detail"`
-		}{Type: "llm-status", Phase: "queued", Detail: fmt.Sprintf("queued behind %d jobs", ahead)}))
+		}{Type: "llm-status", Phase: "queued", Detail: fmt.Sprintf("queued behind %d jobs", result.Ahead)}))
 	}
 }
 
@@ -555,7 +625,7 @@ func (s *Service) generate(ctx context.Context, env jobs.Envelope) (string, erro
 	}()
 
 	if s.agent != nil {
-		summary, err := s.generateAgent(ctx, started, prompt.Text)
+		summary, err := s.generateAgent(ctx, started, prompt.Text, env)
 		llmFinished = true
 		return summary, err
 	}
@@ -570,7 +640,7 @@ func (s *Service) generate(ctx context.Context, env jobs.Envelope) (string, erro
 	response, err := s.client.Do(request)
 	if err != nil {
 		if ctx.Err() != nil {
-			s.finishReply(ctx, "", true, 0, 0, time.Since(started))
+			s.finishReply(ctx, env, "", true, 0, 0, time.Since(started))
 			llmFinished = true
 			return "stopped", nil
 		} else {
@@ -669,12 +739,12 @@ func (s *Service) generate(ctx context.Context, env jobs.Envelope) (string, erro
 	if s.counters != nil {
 		s.counters.AddLLM(promptTokens, completionTokens, cachedTokens, promptMs, predictedMs)
 	}
-	s.finishReply(ctx, reply.String(), stopped, promptTokens, completionTokens, time.Since(started))
+	s.finishReply(ctx, env, reply.String(), stopped, promptTokens, completionTokens, time.Since(started))
 	llmFinished = true
 	return "chat reply completed", nil
 }
 
-func (s *Service) generateAgent(ctx context.Context, started time.Time, userText string) (string, error) {
+func (s *Service) generateAgent(ctx context.Context, started time.Time, userText string, env jobs.Envelope) (string, error) {
 	result, err := s.agent.Handle(ctx, userText)
 	if err != nil {
 		s.broadcast(errorEvent("agent failed: " + err.Error()))
@@ -685,6 +755,7 @@ func (s *Service) generateAgent(ctx context.Context, started time.Time, userText
 	}
 	s.finishReply(
 		ctx,
+		env,
 		result.Reply,
 		result.Stopped,
 		result.PromptTokens,
@@ -694,8 +765,16 @@ func (s *Service) generateAgent(ctx context.Context, started time.Time, userText
 	return "chat reply completed", nil
 }
 
-func (s *Service) finishReply(ctx context.Context, text string, stopped bool, promptTokens, completionTokens int, elapsed time.Duration) {
-	assistantMessage := Message{Role: "assistant", Text: text, Ts: time.Now().UnixMilli()}
+func (s *Service) finishReply(ctx context.Context, env jobs.Envelope, text string, stopped bool, promptTokens, completionTokens int, elapsed time.Duration) {
+	var source *Source
+	if env.Source != nil {
+		copy := Source(*env.Source)
+		source = &copy
+	}
+	assistantMessage := Message{
+		ID: jobs.NewID(), Role: "assistant", Text: text, Ts: time.Now().UnixMilli(),
+		CorrelationID: env.CorrelationID, Source: source,
+	}
 	s.append(assistantMessage)
 	s.broadcast(marshalEvent(struct {
 		Type    string `json:"type"`
@@ -704,6 +783,19 @@ func (s *Service) finishReply(ctx context.Context, text string, stopped bool, pr
 	}{Type: "chat-done", Stopped: stopped, Message: assistantMessage}))
 	s.updateStats(promptTokens, completionTokens, elapsed)
 	s.recordLLMFinish(ctx, promptTokens, completionTokens, elapsed, stopped, !stopped)
+	if source != nil {
+		s.mu.Lock()
+		handler := s.deliveries[source.Channel]
+		s.mu.Unlock()
+		if handler != nil {
+			if err := handler(Delivery{
+				CorrelationID: env.CorrelationID, JobID: env.ID, Source: *source,
+				Text: text, Stopped: stopped,
+			}); err != nil {
+				log.Printf("chat: %s delivery failed", source.Channel)
+			}
+		}
+	}
 }
 
 func (s *Service) recordLLMStart(ctx context.Context, prompt string) {

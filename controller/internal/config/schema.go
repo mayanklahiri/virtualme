@@ -572,6 +572,24 @@ func (s *Schema) Validate(value any) error {
 		value = map[string]any(raw)
 	}
 	issues := s.validateNode(s.root, value, "", nil)
+	if root, ok := value.(map[string]any); ok {
+		if integrations, ok := root["integrations"].(map[string]any); ok {
+			if telegram, ok := integrations["telegram"].(map[string]any); ok {
+				enabled, _ := telegram["enabled"].(bool)
+				token, _ := telegram["botToken"].(string)
+				chats, _ := telegram["allowedChatIds"].([]any)
+				if token != "" && envReferencePattern.FindStringSubmatch(token) == nil && fileReferencePattern.FindStringSubmatch(token) == nil {
+					issues = append(issues, Issue{Path: "integrations.telegram.botToken", Message: "must be an exact environment or file secret reference"})
+				}
+				if enabled && token == "" {
+					issues = append(issues, Issue{Path: "integrations.telegram.botToken", Message: "secret reference is required while Telegram is enabled"})
+				}
+				if enabled && len(chats) == 0 {
+					issues = append(issues, Issue{Path: "integrations.telegram.allowedChatIds", Message: "at least one chat ID is required while Telegram is enabled"})
+				}
+			}
+		}
+	}
 	if len(issues) > 0 {
 		if len(issues) > 20 {
 			omitted := len(issues) - 20

@@ -214,6 +214,45 @@ health:
   # Checks desktop input capability.
   # Default: xdotool. Restart impact: controller.
   xdotoolPath: xdotool
-# Extension point for optional external integrations.
-# Core spec 031 defines no integrations.
-integrations: {}
+# Optional external integrations.
+# External integrations explicitly cross the local privacy boundary.
+integrations:
+  # Telegram Bot API integration over HTTPS long polling.
+  # Allowed chat IDs and optional user IDs form an AND authentication boundary.
+  # Telegram traffic crosses the private-network boundary; group privacy mode is
+  # configured with BotFather.
+  telegram:
+    # Enable Telegram.
+    # Enabling starts outbound HTTPS long polling after token resolution and allowlist
+    # validation.
+    # Default: false. Restart impact: controller.
+    enabled: false
+    # Telegram bot-token secret reference.
+    # References the BotFather token without persisting credential bytes.
+    # A non-empty whole-scalar environment or file reference is required while enabled.
+    # Default: "". Restart impact: controller.
+    botToken: ""
+    # Authorized Telegram chat IDs.
+    # Required chat allowlist; every inbound and test-send chat must match.
+    # This list is ANDed with the optional user allowlist.
+    # Default: []. Restart impact: controller.
+    allowedChatIds: []
+    # Optional authorized Telegram user IDs.
+    # Optional user allowlist applied in addition to the chat allowlist.
+    # When empty, every human sender in an allowed chat is authorized.
+    # Default: []. Restart impact: controller.
+    allowedUserIds: []
+    # Telegram getUpdates long-poll timeout in seconds.
+    # Controls long-poll latency and request cadence.
+    # Default: 30. Restart impact: controller.
+    # Tradeoff Longer timeout: Fewer empty requests. Cost: Longer-lived outbound
+    # requests.
+    pollTimeoutSeconds: 30
+    # Retained Telegram event count.
+    # Bounds the redacted Telegram operator event log.
+    # Selected raw updates may contain inbound message text under the trusted-console
+    # model.
+    # Default: 200. Restart impact: controller.
+    # Tradeoff Larger log: More diagnostics survive. Cost: More persistent local
+    # metadata.
+    maxEventLog: 200

@@ -1322,4 +1322,45 @@ OpenAPI client and not a webhook.
 
 ## Amendments
 
-None.
+### 2026-07-25 — Execution
+
+Status: **Executed** after specs 031 and 032 at
+`43b459b9981ca5f58c85e5abbb81ed92e08648bd`.
+
+The implementation retained the prescribed sequential RED/GREEN/REFACTOR
+order. T1 RED evidence:
+
+- `go test ./internal/telegram -count=1` failed with undefined
+  `GetUpdatesRequest`, `NewClient`, `Config`, `Authorized`, and `NewEvent`.
+- `node --test test/telegram-ui.test.js` failed because
+  `controller/web/static/js/telegram.js` did not exist.
+
+After T1 transport/config/service/UI work, the T2 test diff was added.
+`go test ./internal/chat ./internal/jobs ./internal/telegram -count=1` then
+failed on absent source/correlation fields, `origin.Source`, durable
+initiators, legacy normalization, and the delivery registry. Those tests
+remained in the tree and passed after the channel-neutral migration.
+
+Execution added the exact schema-owned `integrations.telegram` tree, typed
+configuration, secret-reference-only validation, generated public reference,
+stdlib typed Bot API client, guarded loopback/vmhost e2e override, long-poll
+state/status, offset/event/known-chat persistence, allowlist authorization,
+commands, chunking, notifications, websocket protocol, `/telegram` UI,
+channel-neutral chat/job source and correlation metadata, sender-scoped web
+cancellation, deterministic Telegram IDs, ingress reservation records,
+correlated final delivery, and local stub/probe coverage. Existing history and
+legacy `initiatorConn` envelopes normalize on decode/use without changing
+unrelated jobs.
+
+The implementation deliberately added no runtime dependency, SDK, webhook,
+listener, port, sidecar, Docker layer, or s6 service. Production remains fixed
+to `https://api.telegram.org`; test HTTP routing requires both guarded
+environment variables and an allowlisted host. Telegram credentials are
+resolved only through spec 031, retained only in process memory, and excluded
+from status, events, websocket frames, generated docs, DOM, and logs.
+
+Spec 007 gained both required Valkey persistence rows. `/master-update`
+reconciled README, AGENTS, develop/operate skills, the spec index, endpoint
+documentation, and privacy language. The local e2e fixture uses a mode-0600
+obviously fake runtime secret and the Node stdlib stub; no real credential,
+DNS, Telegram account, or external network is involved.

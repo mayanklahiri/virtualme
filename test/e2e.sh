@@ -13,9 +13,11 @@ DATA_DIR="$(mktemp -d)"
 export VIRTUALME_DATA="$DATA_DIR"
 MAIL_CAPTURE="$DATA_DIR/mail-capture.eml"
 MAIL_SINK_PID=""
+TELEGRAM_STUB_PID=""
 
 cleanup() {
   if [ -n "$MAIL_SINK_PID" ]; then kill "$MAIL_SINK_PID" >/dev/null 2>&1 || true; fi
+  if [ -n "$TELEGRAM_STUB_PID" ]; then kill "$TELEGRAM_STUB_PID" >/dev/null 2>&1 || true; fi
   ./cli.sh stop >/dev/null 2>&1 || true
   rm -rf "$DATA_DIR"
 }
@@ -120,6 +122,31 @@ MAIL_SINK_HOST=0.0.0.0 MAIL_SINK_ACCEPT_DELAY_MS=1500 \
 MAIL_SINK_PID=$!
 sleep 1
 kill -0 "$MAIL_SINK_PID" 2>/dev/null || fail "mail sink did not start"
+TELEGRAM_TOKEN_FILE="$DATA_DIR/telegram-token"
+printf '%s' 'obviously-fake-runtime-token' >"$TELEGRAM_TOKEN_FILE"
+chmod 600 "$TELEGRAM_TOKEN_FILE"
+cat >"$DATA_DIR/virtualme.config.yaml" <<'EOF'
+integrations:
+  telegram:
+    enabled: true
+    botToken: ${file:/home/virtualme/.virtualme/telegram-token}
+    allowedChatIds:
+      - "42"
+    allowedUserIds:
+      - "7"
+EOF
+chmod 600 "$DATA_DIR/virtualme.config.yaml"
+TELEGRAM_STUB_HOST=0.0.0.0 TELEGRAM_STUB_RECORD="$DATA_DIR/telegram-stub.jsonl" \
+  node test/telegram-stub.mjs >"$DATA_DIR/telegram-stub.log" 2>&1 &
+TELEGRAM_STUB_PID=$!
+deadline=$(( $(date +%s) + 30 ))
+until grep -q '^TELEGRAM_STUB_READY=' "$DATA_DIR/telegram-stub.log" 2>/dev/null; do
+  [ "$(date +%s)" -lt "$deadline" ] || fail "Telegram stub did not start"
+  sleep 1
+done
+TELEGRAM_STUB_PORT="$(cut -d= -f2 <"$DATA_DIR/telegram-stub.log")"
+export VM_TELEGRAM_TEST_MODE=1
+export VM_TELEGRAM_API_BASE_URL="http://vmhost:${TELEGRAM_STUB_PORT}"
 export VM_MAIL_SMARTHOST=vmhost
 export VM_MAIL_SMARTHOST_PORT=2525
 export VM_MAIL_DKIM_DOMAIN=example.test
@@ -137,12 +164,15 @@ curl -fsS "$BASE/api/config" | grep -q '"pendingRestart":false' \
 docker exec "$NAME" configctl docs --check \
   --output /opt/virtualme/docs/src/generated/config-reference.json >/dev/null \
   || fail "config documentation stale"
+curl -fsS "$BASE/telegram" | grep -q 'data-page="telegram"' || fail "Telegram SPA route missing"
+node test/telegram-probe.mjs "$BASE" || fail "Telegram local-stub probe"
+docker logs "$NAME" 2>&1 | grep -q 'obviously-fake-runtime-token' && fail "Telegram token leaked to logs"
 
 echo "e2e: [3a/21] config save conflicts, preflight failure, and restart lifecycle"
 controller_pid=$(docker exec "$NAME" pgrep -x controller)
 llama_pid=$(docker exec "$NAME" pgrep -f '/llama-server')
 docker exec -u 0 "$NAME" chmod 500 /run/virtualme
-node test/config-probe.mjs --preflight-failure "$BASE" \
+node test/config-probe.mjs --preflight-failure "$BASE" '${file:/home/virtualme/.virtualme/telegram-token}' \
   || fail "config preflight-failure probe"
 docker exec -u 0 "$NAME" chmod 700 /run/virtualme
 [ "$(docker exec "$NAME" pgrep -x controller)" = "$controller_pid" ] \
@@ -156,7 +186,7 @@ sleep 1
 
 controller_pid=$(docker exec "$NAME" pgrep -x controller)
 llama_pid=$(docker exec "$NAME" pgrep -f '/llama-server')
-node test/config-probe.mjs --restart "$BASE" || fail "config restart probe"
+node test/config-probe.mjs --restart "$BASE" '${file:/home/virtualme/.virtualme/telegram-token}' || fail "config restart probe"
 wait_healthy
 [ "$(docker exec "$NAME" pgrep -x controller)" != "$controller_pid" ] \
   || fail "controller did not respawn after config restart"
@@ -188,7 +218,7 @@ curl -fsS -o /dev/null "$BASE/js/app.js.map" || fail "app.js.map not served"
 curl -fsS -o /dev/null "$BASE/css/app.css.map" || fail "app.css.map not served"
 
 echo "e2e: [5/21] SPA history routes fall back while missing assets stay 404"
-for route in projects jobs notifications tools status speech mail desktop-view data config; do
+for route in projects jobs notifications tools status chat telegram speech mail desktop-view data config; do
   code=$(curl -s -o /tmp/e2e-route.html -w '%{http_code}' "$BASE/$route")
   [ "$code" = 200 ] && grep -q "Virtual Me" /tmp/e2e-route.html \
     || fail "SPA fallback failed for /$route"

@@ -219,3 +219,10 @@ reserves the persistence lane without adding agent runtime behavior.
 |---|---|---|---|
 | Notification history and global read state | `$VM_DATA_DIR/valkey/` AOF (`virtualme:notifications:*`) | `internal/notifications` via atomic Valkey scripts | 032 |
 | Controller lifecycle crash/clean marker | `$VM_DATA_DIR/controller-lifecycle.json` | `internal/notifications` atomic file replace + directory sync | 032 |
+
+### 2026-07-25 — Telegram integration
+
+| State | Path | Owner / mechanism | Introduced |
+|---|---|---|---|
+| Telegram next-update offset, bounded redacted event log, and authorized known-chat labels (`virtualme:telegram:*`) | `$VM_DATA_DIR/valkey/` (AOF) | `internal/telegram` via shared Valkey client | 033 |
+| Telegram ingress idempotency records (`virtualme:chat:ingress:telegram:*`, bounded 1000) | `$VM_DATA_DIR/valkey/` (AOF) | channel-neutral `internal/chat` ingress | 033 |

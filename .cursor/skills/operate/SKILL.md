@@ -43,6 +43,7 @@ precedence with a value-free deprecation warning.
 - `http://localhost:8080/config` — schema-driven master configuration, secret status, save, and restart
 - `http://localhost:8080/status` — service/GPU status, LLM token and browser-action charts, active time selectors, Quick Options toggles, and tiered metrics
 - `http://localhost:8080/chat` — shared local-model chat
+- `http://localhost:8080/telegram` — optional Telegram Bot API state, authorized test sends, and bounded events
 - `http://localhost:8080/speech` — streaming local text-to-speech
 - `http://localhost:8080/mail` — outbound-mail composer, queue, and DKIM status
 - `http://localhost:8080/desktop-view` — embedded noVNC desktop
@@ -71,6 +72,26 @@ mode `0600` (no group/other bits). Saving in `/config` validates and writes
 atomically but does not apply settings; inspect the affected-service list and
 press “Restart to update.” A failed preflight leaves the current services
 running and the pending revision retryable.
+
+## Telegram
+
+Create the bot with
+[BotFather](https://core.telegram.org/bots/features#botfather), store its token
+as a mode-0600 file or environment secret, and configure only the corresponding
+`${file:...}` or `${env:...}` reference on `/config`. Add at least one exact
+chat ID; optional user IDs are ANDed with the chat allowlist. An empty user
+allowlist admits every human sender in an allowed chat. Group privacy mode is a
+BotFather setting.
+
+After restart, inspect `/telegram` for identity, offset, last poll, retry state,
+authorized destinations, and redacted events. A 401 requires rotating or
+correcting the secret and refreshing/restarting; 409 means another poller owns
+the bot; 429 backs off according to Telegram. Disable the integration in Config
+to stop polling. Rotation never requires printing the token. The persisted
+next offset prevents replay after restart; check the event log and
+`virtualme:telegram:update-offset` only when diagnosing resume behavior.
+Telegram is an external cloud boundary even though the console remains on the
+private network.
 
 ## Console
 

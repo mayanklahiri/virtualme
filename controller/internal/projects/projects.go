@@ -283,7 +283,8 @@ func (s *Service) HandleMessage(conn *ws.Conn, payload []byte) bool {
 		body, _ := json.Marshal(map[string]any{"id": request.ID, "name": project.Name, "manual": true})
 		if _, err := s.jobs.Enqueue(jobs.Envelope{
 			ID: jobs.NewID(), Type: "project-run", Payload: body,
-			Priority: "interactive", InitiatorConn: conn.ID(),
+			Priority:  "interactive",
+			Initiator: jobs.Initiator{ID: "ws:" + conn.ID(), Kind: "web", ConnectionID: conn.ID(), CancelOnDisconnect: true},
 			ProjectID: request.ID, VisibilityTimeoutSec: 1800, MaxRetries: 1,
 		}); err != nil {
 			writeError(conn, fmt.Errorf("project enqueue failed: %w", err))
@@ -322,6 +323,7 @@ func (s *Service) Source(now time.Time) []jobs.Envelope {
 		result = append(result, jobs.Envelope{
 			ID: jobs.NewID(), Type: "project-run", Payload: body,
 			Priority: "scheduled", ProjectID: project.ID, Selector: project.Selector,
+			Initiator:            jobs.Initiator{ID: "system:projects", Kind: "system"},
 			VisibilityTimeoutSec: 1800, MaxRetries: 1,
 		})
 	}

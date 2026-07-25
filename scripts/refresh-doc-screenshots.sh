@@ -43,6 +43,7 @@ ROUTES=(
   "config|/config"
   "status|/status"
   "chat|/chat"
+  "telegram|/telegram"
   "speech|/speech"
   "mail|/mail"
   "desktop|/desktop-view"
