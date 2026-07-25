@@ -78,7 +78,19 @@
             <p><strong>Virtual Me</strong> runs a private browser, a local model, and an agent loop on this machine. Data stored on your own hard drive. Nothing leaves the box.</p>
             <p class="hero-health"><span id="home-health" class="health-pill pending">Waiting for controller</span></p>
           </div>
-          <figure class="hero-media" aria-hidden="true"><img src="/img/hero-earthrise.jpg" alt=""></figure>
+          <figure class="hero-media" aria-hidden="true">
+            <svg width="0" height="0" focusable="false" style="position:absolute">
+              <filter id="hero-wave" x="-15%" y="-15%" width="130%" height="130%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.012 0.02" numOctaves="2" seed="7" result="noise">
+                  <animate attributeName="baseFrequency" dur="16s" values="0.012 0.02;0.017 0.026;0.012 0.02" repeatCount="indefinite"/>
+                </feTurbulence>
+                <feDisplacementMap in="SourceGraphic" in2="noise" scale="10" xChannelSelector="R" yChannelSelector="G">
+                  <animate attributeName="scale" dur="7s" values="6;16;6" repeatCount="indefinite"/>
+                </feDisplacementMap>
+              </filter>
+            </svg>
+            <img src="/img/hero-earthrise.jpg" alt="">
+          </figure>
         </div>
         <section class="status-band" aria-label="Controller facts">
           <dl class="fact-grid">
