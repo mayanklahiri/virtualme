@@ -5,6 +5,9 @@ import { parseArgs } from "node:util";
 import { CONTAINER, DATA_MOUNT, IMAGE, PORT, TAG } from "../config.js";
 import { containerState, daemonUp, haveDocker, hostNvidia, run as runDocker } from "../docker.js";
 import { green, red } from "../ansi.js";
+import { run as buildRun } from "./build.js";
+
+const USAGE = "start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>] [--no-gpu] [--rebuild]";
 
 /**
  * Resolve the host data directory: --data flag > VIRTUALME_DATA > ~/.virtualme.
@@ -15,12 +18,24 @@ function resolveDataDir(flag) {
 }
 
 /**
+ * Stop and remove the container if present (idempotent).
+ * @param {(args: string[]) => number} docker
+ * @param {{ containerState: () => string }} probes
+ */
+function stopContainer(docker, probes) {
+  if (probes.containerState() === "absent") return 0;
+  const stopCode = docker(["stop", CONTAINER]);
+  if (stopCode !== 0) return stopCode;
+  return docker(["rm", CONTAINER]);
+}
+
+/**
  * @param {string[]} argv
  * @param {(args: string[]) => number} [docker]
  * @param {{ haveDocker: () => boolean, daemonUp: () => boolean, containerState: () => string, nvidiaGPU?: () => boolean }} [probes]
  */
 export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, containerState, nvidiaGPU: hostNvidia }) {
-  /** @type {{ data?: string, "no-browser-sandbox"?: boolean, gpus?: string, "no-gpu"?: boolean }} */
+  /** @type {{ data?: string, "no-browser-sandbox"?: boolean, gpus?: string, "no-gpu"?: boolean, rebuild?: boolean }} */
   let flags;
   try {
     flags = parseArgs({
@@ -30,11 +45,12 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
         "no-browser-sandbox": { type: "boolean" },
         gpus: { type: "string" },
         "no-gpu": { type: "boolean" },
+        rebuild: { type: "boolean" },
       },
     }).values;
     if (flags.gpus && flags["no-gpu"]) throw new Error("--gpus conflicts with --no-gpu");
   } catch {
-    console.error(red("error: usage: start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>] [--no-gpu]"));
+    console.error(red(`error: usage: ${USAGE}`));
     return 2;
   }
   if (!probes.haveDocker()) {
@@ -44,6 +60,12 @@ export function run(argv, docker = runDocker, probes = { haveDocker, daemonUp, c
   if (!probes.daemonUp()) {
     console.error(red("error: docker daemon is not reachable"));
     return 1;
+  }
+  if (flags.rebuild) {
+    const buildCode = buildRun([], docker);
+    if (buildCode !== 0) return buildCode;
+    const stopCode = stopContainer(docker, probes);
+    if (stopCode !== 0) return stopCode;
   }
   const state = probes.containerState();
   if (state === "running") {

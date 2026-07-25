@@ -59,7 +59,7 @@ The first start loads a ~3 GB model; allow a few minutes for `/healthz` to becom
 | `virtualme help` | Show usage and every command |
 | `virtualme version` | Print the package version |
 | `virtualme doctor` | Check Node, Docker, daemon access, hooks, CPU, and RAM |
-| `virtualme start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>] [--no-gpu]` | Run unprivileged with port 8080 and the data dir mounted rw; a detected host NVIDIA stack is passed through automatically (`--no-gpu` opts out, explicit `--gpus <spec>` overrides); optionally force Chromium's sandbox fallback |
+| `virtualme start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>] [--no-gpu] [--rebuild]` | Run unprivileged with port 8080 and the data dir mounted rw; a detected host NVIDIA stack is passed through automatically (`--no-gpu` opts out, explicit `--gpus <spec>` overrides); optionally force Chromium's sandbox fallback; `--rebuild` builds the image, stops any running container, then starts |
 | `virtualme stop` | Stop and remove the container; the data directory survives |
 | `virtualme status` | Show container state and service health |
 | `virtualme logs [-f\|--follow]` | Show or follow container logs |

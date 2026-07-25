@@ -17,7 +17,7 @@ prompts or model requests are sent to external providers.
 | `npx virtualme help` | Show usage and every command |
 | `npx virtualme version` | Print the package version |
 | `npx virtualme doctor` | Verify node/docker/daemon (+ git hooks in a checkout) |
-| `npx virtualme start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>] [--no-gpu]` | Run unprivileged with tmpfs `/run`+`/tmp`, port 8080, and the host data dir mounted rw; a detected host NVIDIA stack is auto-passed through (`--no-gpu` opts out, `--gpus <spec>` overrides); optionally force Chromium's sandbox fallback |
+| `npx virtualme start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>] [--no-gpu] [--rebuild]` | Run unprivileged with tmpfs `/run`+`/tmp`, port 8080, and the host data dir mounted rw; a detected host NVIDIA stack is auto-passed through (`--no-gpu` opts out, `--gpus <spec>` overrides); optionally force Chromium's sandbox fallback; `--rebuild` (source checkout) builds, stops, then starts |
 | `npx virtualme status` | Container state + `/healthz` per-service report |
 | `npx virtualme logs [-f\|--follow]` | Show or follow container logs |
 | `npx virtualme stop` | Stop and remove the container (data dir survives) |

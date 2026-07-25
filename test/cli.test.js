@@ -262,6 +262,42 @@ test("start rejects unknown flags as a usage error", () => {
   assert.equal(code, 2);
 });
 
+test("start --rebuild builds, stops, then starts", () => {
+  const parent = mkdtempSync(join(tmpdir(), "virtualme-test-"));
+  const dataDir = join(parent, "data");
+  try {
+    /** @type {string} */
+    let state = "running";
+    /** @type {string[][]} */
+    const calls = [];
+    const probes = {
+      haveDocker: () => true,
+      daemonUp: () => true,
+      containerState: () => state,
+      nvidiaGPU: () => false,
+    };
+    const code = start(["--data", dataDir, "--rebuild"], (args) => {
+      calls.push(args);
+      if (args[0] === "build") return 0;
+      if (args[0] === "stop" || args[0] === "rm") {
+        state = "absent";
+        return 0;
+      }
+      if (args[0] === "run") return 0;
+      return 1;
+    }, probes);
+    assert.equal(code, 0);
+    assert.equal(calls[0]?.[0], "build");
+    assert.equal(calls[1]?.[0], "stop");
+    assert.equal(calls[2]?.[0], "rm");
+    assert.equal(calls[3]?.[0], "run");
+    assert.ok(calls[3]?.includes(dataDir + ":/home/virtualme/.virtualme")
+      || calls[3]?.some((a) => a.startsWith(`${dataDir}:`)));
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
 test("soak rejects unknown flags and is listed in help", () => {
   const bad = cli(["soak", "--bogus"]);
   assert.equal(bad.status, 2);

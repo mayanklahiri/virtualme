@@ -4,7 +4,7 @@ const commands = [
   ["help", "Show this help"],
   ["version", "Print the CLI version"],
   ["doctor", "Check Node, Docker, and checkout setup"],
-  ["start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>] [--no-gpu]", "Start the container; host NVIDIA is auto-passed through unless --no-gpu"],
+  ["start [--data <dir>] [--no-browser-sandbox] [--gpus <spec>] [--no-gpu] [--rebuild]", "Start the container; host NVIDIA is auto-passed through unless --no-gpu; --rebuild builds, stops, then starts"],
   ["stop", "Stop and remove the container"],
   ["status", "Show container and service health"],
   ["logs [-f]", "Show or follow container logs"],
