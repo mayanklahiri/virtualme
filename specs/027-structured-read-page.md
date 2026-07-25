@@ -1,0 +1,340 @@
+# Spec 027: Structured `read_page` — YAML Page Digest and Collapsible Tree Rendering
+
+| | |
+|---|---|
+| Status | Accepted (2026-07-24) |
+| Depends on | `specs/008-browser-agent.md` (agent loop, tools, CDP client), `specs/012-agent-observation-soak.md` (observation caps, soak suite), `specs/021-agent-cdp-tools-console.md` (CDP observation tools, Tools console), `specs/022-system-prompt.md` (prompt references `read_page`) |
+| Produces | A `read_page` tool that returns a deterministic, hierarchically structured YAML digest of the important visible DOM (title, url, head, body) with a CSS selector per node; a hand-written deterministic YAML-subset emitter in Go and a matching zero-dependency parser in JS; a polished reusable collapsible-tree widget rendering the digest on the Tools console; unit tests against a committed raw-DOM fixture of `www.lahiri.me` |
+| Followed by | Future specs |
+
+## 0. Executor instructions
+
+- The constitution (`specs/001-constitution.md` §1) binds this spec: runtime code imports only `node:*`/Go stdlib; the SPA gains no dependencies; the YAML emitter, YAML parser, and tree widget are hand-written.
+- Every algorithm in §3–§4 is normative. Where a constant is marked *tunable* you may adjust it during execution and record the final value in an amendment; everything else is implemented exactly as written.
+- Determinism is a hard requirement: the same DOM in must produce byte-identical YAML out. No randomness, no timestamps, no map-iteration-order dependence anywhere in the pipeline.
+- Stop-on-red per section; finish with the Acceptance Checklist.
+
+## 1. Problem (evidence, 2026-07-24)
+
+`read_page` today (`controller/internal/agent/cdp.go`, `ReadPage`) evaluates
+
+```
+({url:location.href,title:document.title,text:(document.body?.innerText||"").slice(0,65536)})
+```
+
+and returns compact JSON `{"url","title","text"}`. All structure, metadata, and
+context are lost: links lose their targets, images and media are invisible,
+tables flatten into word soup, forms disappear, and there is no way for the
+model to reference any element it read. On a dense news-feed page the
+concatenated `innerText` exceeds the 16 KiB observation cap and is truncated
+blind, so the model reads an arbitrary prefix of the page. The tool is
+currently the *least* informative observation; this spec makes it the primary
+one for information extraction.
+
+## 2. Grounding: why YAML (web research, 2026-07)
+
+Tool results are model **input**. Published measurements (MightyBot format
+ranking; MarkDone "Token Tax" benchmark; WildandFree JSON-vs-YAML study;
+tensorlake TOON benchmark; dev.to Claude-format comparison) agree on:
+
+1. For **input**, YAML costs ~15–30% fewer tokens than pretty JSON on nested,
+   irregular data (no braces, no quote-and-comma tax), and its
+   indentation-as-structure reads naturally to instruction-tuned models.
+2. Uniform-table formats (TOON, CSV) beat YAML only on flat arrays of
+   identical rows. A page digest is an irregular tree — YAML's sweet spot.
+3. Strict JSON remains preferable for machine *output* contracts (tool-call
+   arguments), which this spec does not change: tool schemas stay JSON; only
+   the *result text* of `read_page` becomes YAML.
+4. Small models (the 4 GB-class deployment target) benefit most: shallower
+   punctuation nesting measurably improves extraction accuracy at fixed
+   context.
+
+## 3. The page digest
+
+### 3a. Result shape
+
+`read_page` returns one YAML document (a mapping) with exactly four top-level
+keys, always in this order:
+
+```yaml
+title: "Example Domain"
+url: "https://example.com/"
+head:
+  lang: "en"
+  description: "…"          # meta[name=description], if present
+  canonical: "https://…"    # link[rel=canonical], if present
+  og:                       # meta[property^="og:"], if any; keys sorted
+    image: "https://…"
+    title: "…"
+body:
+  - tag: "h1"
+    sel: "body > div:nth-of-type(1) > h1:nth-of-type(1)"
+    text: "Example Domain"
+  - tag: "p"
+    sel: "body > div:nth-of-type(1) > p:nth-of-type(1)"
+    text: "This domain is for use in illustrative examples…"
+    children:
+      - tag: "a"
+        sel: "body > div:nth-of-type(1) > p:nth-of-type(2) > a:nth-of-type(1)"
+        href: "https://www.iana.org/domains/example"
+        text: "More information..."
+```
+
+The previous plain-text output is **dropped entirely** — there is no `text`
+top-level key; text lives on the structured nodes.
+
+### 3b. Node schema
+
+Each digest node is a mapping. Keys are emitted in this fixed order, omitting
+absent ones (never emit empty strings, empty sequences, or empty mappings):
+
+| Key | When present | Content |
+|---|---|---|
+| `tag` | always | lowercased element tag |
+| `sel` | always | full CSS selector (§3e) |
+| `text` | element has own text | own visible text (§3d), normalized, ≤ 300 chars (*tunable*), truncated with a trailing `…` |
+| `href` | `a`, `area` | absolute resolved URL, ≤ 300 chars |
+| `src` | `img`, `video`, `audio`, `source`, `iframe`, `embed` | absolute resolved URL, ≤ 300 chars |
+| `alt` | `img` with non-empty alt | alt text, ≤ 120 chars |
+| `type`, `name`, `value`, `placeholder` | form controls | attribute values, each ≤ 120 chars (`value` omitted for `type=password`) |
+| `action`, `method` | `form` | resolved action URL and lowercased method |
+| `label` | form control with an associated `<label>` | the label's normalized text, ≤ 120 chars |
+| `rows` | `table` | sequence of sequences of cell strings (§3f) |
+| `items` | `ul`, `ol`, `dl` | sequence of item digests (§3f) |
+| `children` | node has kept descendants not otherwise absorbed | sequence of nodes |
+| `note` | truncation markers only | fixed strings defined below |
+
+### 3c. Extraction algorithm
+
+Extraction runs in the page as **one** CDP `Runtime.evaluate` with
+`returnByValue: true`. The script is not an inline Go string: it lives in a
+new committed file `controller/internal/agent/js/readpage.js`, embedded via
+`//go:embed`, written as a single expression `(() => { … })()` that reads only
+the globals `document` and `location` — this exact file is also executed by
+the Node unit tests (§7) under `node:vm` against a DOM stub, so it must use
+only the DOM APIs listed here: `document.title`, `location.href`,
+`document.documentElement`, `document.head`, `document.body`, and per element
+`tagName`, `id`, `children`, `childNodes`, `nodeType`, `nodeValue`,
+`getAttribute`, `getClientRects`, and `window.getComputedStyle(el)` returning
+at least `visibility` and `display`. Do not use `innerText`, `innerHTML`,
+`querySelectorAll`, or `checkVisibility` in this script.
+
+Traversal is a single depth-first, document-order walk of `document.body`:
+
+1. **Prune subtrees** rooted at: `script`, `style`, `noscript`, `template`,
+   `svg` (emit `svg` itself as a childless node only if it has a non-empty
+   `aria-label`), and any element with `aria-hidden="true"`.
+2. **Visibility**: an element is visible iff `getClientRects().length > 0`
+   and computed `visibility !== "hidden"`. Invisible elements are pruned with
+   their subtrees. (`display:none` yields zero client rects; no separate
+   check needed.)
+3. **Own text** (§3d) is computed from the element's direct child text nodes
+   only — descendant element text belongs to the descendants.
+4. Every visited visible element becomes a **candidate node** with the §3b
+   properties it can populate.
+5. **Wrapper collapse** (the core simplification): bottom-up, a candidate is
+   *hoisted away* — replaced in its parent's child list by its own children —
+   iff all of: it has no `text`; it populates none of `href`, `src`, `alt`,
+   `type`, `name`, `value`, `placeholder`, `action`, `rows`, `items`; and its
+   tag is not in the semantic keep-set `{h1…h6, a, img, video, audio, iframe,
+   table, form, input, select, textarea, button, label, ul, ol, dl, li, p,
+   blockquote, pre, code, time, figcaption}`. Nested content-free `div`/
+   `span`/`section`/`article` chains therefore vanish while their content is
+   promoted. Apply until fixpoint (a single bottom-up pass suffices because
+   children are collapsed before their parent is considered).
+6. **Node budget**: at most 800 kept nodes (*tunable*), counted in document
+   order. When the budget is hit, stop descending and append to `body` one
+   final marker node `note: "truncated: node budget reached"`.
+
+The script returns the digest as a plain JSON-safe object tree; the Go side
+(§4) converts it to YAML. `ReadPage` in `cdp.go` keeps its signature; the
+dispatch in `tools.go` keeps `Observe: true` with summary `Read page digest`.
+
+### 3d. Text normalization
+
+Own text = concatenation of direct child text-node values, then: collapse
+every run of Unicode whitespace to one space, trim, and if the result exceeds
+the cap, cut at the cap and append `…`. An element whose normalized own text
+is empty has no `text` key.
+
+### 3e. Selectors
+
+`sel` is a full CSS selector sufficient for `document.querySelector` to find
+the exact node, built during descent:
+
+- Segment for element `e`: if `e` has a non-empty `id`, the segment is
+  `#` + CSS-escaped id and the path **restarts** there (nearest-id
+  short-circuit); otherwise `tag:nth-of-type(k)` where `k` is the 1-based
+  index of `e` among preceding siblings of the same tag (count via
+  `children`, not `childNodes`).
+- Join segments with ` > ` from the nearest id ancestor (or `body`) down to
+  the element. `body` itself is the bare segment `body`.
+- The goal is not to enable selector-driven automation — it is provenance:
+  every extracted fact carries an exact pointer back into the live DOM that a
+  follow-up `dom_query` call can use.
+
+### 3f. Tables, lists, forms
+
+- **Tables**: `rows` holds the first 40 rows (*tunable*) as sequences of cell
+  strings (each `th`/`td` normalized as §3d, ≤ 80 chars). Nested markup
+  inside cells is flattened to the cell's full visible text (for cells,
+  descendant text is included). If rows were dropped, append one final row
+  `["…truncated"]`. A table node has no `children`.
+- **Lists**: `items` holds up to 40 item digests. An `li` whose subtree
+  contains no kept structural nodes other than inline links collapses to a
+  mapping with `text` (full visible text of the item, ≤ 300 chars) and, when
+  it contains exactly one link, that link's `href` — this keeps news-feed
+  lists one line per story. Items with richer structure recurse as normal
+  nodes. If items were dropped, append `note: "…truncated"` as the last item.
+- **Forms**: a `form` node lists its visible controls under `children`
+  (controls populate `type`/`name`/`value`/`placeholder`/`label`); buttons
+  keep their `text`.
+
+## 4. YAML subset: Go emitter, JS parser
+
+One strict subset, produced by Go and parsed by JS. Anything outside the
+subset is a bug in the emitter or a rejection in the parser.
+
+- Block-style mappings and sequences only; 2-space indentation; sequence
+  items as `- ` at the parent's indent + 2.
+- Scalars: strings are always double-quoted using JSON string escaping
+  (Go: `json.Marshal` of the string; embedded newlines become `\n` — no
+  multi-line scalars, no plain-style strings). Integers bare. No booleans,
+  null, anchors, aliases, tags, flow style, comments, or document markers.
+- Mapping keys are bare `[a-z][a-z0-9_]*` identifiers.
+- Key order: top-level `title, url, head, body`; head `lang, description,
+  canonical, og`; nodes as the §3b table order; any key not covered by a
+  priority table sorts alphabetically. The emitter takes an explicit
+  priority-ordered key list — never Go map iteration order.
+
+**Go**: new `controller/internal/agent/yaml.go` with
+`encodeYAML(v any) string` operating on `map[string]any` / `[]any` / `string`
+/ `float64` (JSON-decoded values) plus the key-priority table. New
+`readPageCap = 16000` bytes: after emission, while the document exceeds the
+cap, remove the digest's last remaining body node (deepest-last first:
+repeatedly drop the final element of the deepest trailing `children`/`items`/
+`rows`/`body` sequence) and re-emit; then append body marker node
+`note: "truncated: page digest exceeded budget"`. 16000 < the 16 KiB
+`observationTextCap` minus the `Observation from read_page:\n` prefix, so the
+model always receives a complete, well-formed YAML document — never a
+mid-document cut.
+
+**JS**: new `controller/web/static/js/yaml-lite.js` exporting
+`parseYamlLite(text)` → plain JS values, hand-written, line-based,
+indentation-driven; quoted scalars are decoded with `JSON.parse`. It throws
+on anything outside the subset (tabs, flow style, unquoted strings, bad
+indent). It is a pure module (no `document`), unit-testable under Node.
+
+## 5. Tool description and agent wiring
+
+The `Definitions()` entry for `read_page` (`controller/internal/agent/tools.go`)
+becomes (normative):
+
+> Read the current page as a structured YAML digest: title, url, head
+> metadata, and a simplified hierarchy of the important visible elements —
+> headings, text blocks, links (href), images (src, alt), media, tables
+> (rows), lists, and form structures — each with a `sel` CSS selector.
+> This is the primary tool for extracting information from a page; prefer it
+> over screenshots or dom for reading content, and use the `sel` values with
+> dom_query for follow-up detail.
+
+Schema stays the empty-object schema (no parameters). The spec-022 system
+prompt already names `read_page` in its observe-first policy; its wording is
+unchanged (no 022 amendment needed — descriptions live in tool schemas, not
+prompt files).
+
+## 6. Tools console: collapsible tree widget
+
+1. **Widget**: new reusable module `controller/web/static/js/tree.js`
+   exporting `renderTree(value, {expandDepth = 2}) → HTMLElement`. Renders any
+   parsed subset value as a nested tree: mappings and sequences become
+   collapsible branches with a disclosure `<button aria-expanded>` (rotating
+   chevron drawn in CSS, gated on `--motion`/`prefers-reduced-motion`), key
+   names styled `.tree-key`, scalar values `.tree-val`, string values quoted,
+   sequences labelled with their length (e.g. `body (12)`). Branches at depth
+   ≤ `expandDepth` start open. Built entirely with `createElement`/
+   `textContent` — never `innerHTML`. Keyboard: the disclosure buttons are
+   ordinary buttons (tab + Enter/Space work for free). Styling in `app.css`
+   under a `.tree` block using existing theme tokens (`--muted`, `--accent`,
+   `--border`, `--font-mono` for values); monospace values, 0.85 rem,
+   comfortable 1.5 line height; hovering a row highlights it with a
+   `--surface`-tinted background. The widget is generic — spec 028 reuses it
+   for the Data explorer — so it must not import from `tools.js` or reference
+   tool concepts.
+2. **Detection**: `classifyResult` (`controller/web/static/js/tools-render.js`)
+   gains a `yaml-digest` classification, tried before the existing JSON
+   branches: the text parses under `parseYamlLite` to a mapping with string
+   `title` and `url` keys where `url` matches `^https?:\/\/`. Classification
+   stays pure (no DOM) for unit tests.
+3. **Rendering**: for `yaml-digest` results, `tools.js` renders the existing
+   page-shaped header (linked title + url line, reusing `.tool-page-title`/
+   `.tool-page-url`) followed by `renderTree({head, body})`. All other result
+   shapes render exactly as today.
+
+## 7. Tests
+
+1. **Committed raw-DOM fixtures** (new, the foundation for all tool unit
+   testing): `test/fixtures/lahiri-me.dom.json` and
+   `test/fixtures/example-com.dom.json` — serialized element trees (tag, id,
+   attributes, visibility, text nodes, children) captured once from the live
+   sites and committed. New zero-dep helper `test/helpers/dom-stub.mjs`
+   builds, from such a fixture, the exact DOM API surface §3c enumerates
+   (`document`, `location`, `getComputedStyle`, elements with
+   `getClientRects` et al.) inside a `node:vm` sandbox. Deterministic, no
+   network — gate-safe.
+2. **Extraction tests** `test/readpage-extract.test.js`: run
+   `controller/internal/agent/js/readpage.js` verbatim in the stub sandbox
+   against both fixtures. Assert for lahiri.me: top-level shape; every node
+   has `tag` + `sel`; every `sel` resolves back to exactly one node in the
+   stub; all `a` nodes carry absolute `href`s; no node with a
+   collapse-eligible wrapper tag and no content survives; text nodes are
+   normalized (no runs of whitespace); byte-identical output across two runs.
+   Synthetic mini-fixtures cover: hidden/`aria-hidden` pruning, nested-div
+   hoisting, table row shaping and truncation row, list flattening with
+   single-link hoist, form control properties, password `value` omission,
+   node-budget marker.
+3. **Go tests** (`controller/internal/agent/yaml_test.go`, additions to
+   `cdp_test.go`): emitter golden tests (key priority order, quoting/escaping
+   incl. newlines and unicode, deterministic output over shuffled map
+   insertions); budget truncation drops trailing nodes and appends the marker
+   at exactly `readPageCap`; `ReadPage` sends the embedded script and
+   converts a fake-CDP JSON digest to YAML (fake CDP server pattern already
+   in `cdp_test.go`).
+4. **Node tests**: `test/yaml-lite.test.js` — parser round-trips emitter
+   output for nested fixtures (a golden YAML fixture generated by the Go
+   emitter and committed under `test/fixtures/`), rejects out-of-subset
+   documents (tabs, flow style, unquoted scalar). `test/tools-render.test.js`
+   gains `yaml-digest` classification cases (positive, and negatives: valid
+   YAML without url, valid JSON page shape still classifies as before).
+   `test/tools-ui.test.js` asserts `tree.js` exists, exports `renderTree`,
+   and contains no `innerHTML`.
+5. **Live**: the soak suite exercises the digest on `www.lahiri.me` (flow
+   defined by the spec-012 amendment of even date — structured extraction of
+   the page's links/headings/metadata is the news-feed pressure test).
+
+All unit tests run inside `scripts/check.sh` (they are deterministic and
+offline); soak stays outside the gate per constitution rule 5.
+
+## 8. Docs
+
+`README.md`, `AGENTS.md`, and the skills are reconciled by `/master-update`
+after execution (constitution rule 9): the agent-capabilities paragraph
+describes the YAML digest, the develop skill notes the YAML subset contract
+(emitter/parser pairing) and the reusable tree widget.
+
+## 9. Acceptance checklist
+
+- [ ] `npm run check` green, including the new fixture-driven extraction
+      tests, emitter/parser tests, and render classification tests.
+- [ ] `read_page` on `https://example.com` (Tools console) renders a
+      collapsible tree whose `body` contains the `h1` and the IANA link with
+      absolute `href` and working `sel`; the raw result is valid subset YAML.
+- [ ] `read_page` on `https://www.lahiri.me` yields a digest ≤ 16000 bytes
+      containing the page's headings and links with selectors; repeated calls
+      on the unchanged page are byte-identical.
+- [ ] A 4 GB-class local model, asked in chat to list the stories on a
+      news-feed-style page, extracts titles and links from a single
+      `read_page` observation without needing `dom` pagination (manual
+      verification, recorded in the execution amendment).
+- [ ] The tree widget expands/collapses with mouse and keyboard, respects
+      reduced motion, and renders no HTML from result text.
