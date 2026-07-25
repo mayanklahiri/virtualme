@@ -3,6 +3,24 @@ import test from "node:test";
 
 import { classifyResult, parseEnvBlocks } from "../controller/web/static/js/tools-render.js";
 
+test("yaml-digest results are classified before JSON page shapes", () => {
+  const payload = [
+    'title: "An Example Article"',
+    'url: "https://example.test/article"',
+    "head:",
+    '  lang: "en"',
+    "body:",
+    '  - tag: "h1"',
+    '    sel: "body > h1:nth-of-type(1)"',
+    '    text: "Heading"',
+  ].join("\n");
+  const result = classifyResult(payload);
+  assert.equal(result.kind, "yaml-digest");
+  assert.equal(result.url, "https://example.test/article");
+  assert.equal(result.title, "An Example Article");
+  assert.ok(Array.isArray(result.body));
+});
+
 test("page-shaped JSON results are classified by shape, not tool name", () => {
   const payload = JSON.stringify({
     url: "https://example.test/article",

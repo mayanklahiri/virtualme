@@ -1,5 +1,6 @@
 import { formatShortDuration } from "./duration.js";
 import { classifyResult, parseEnvBlocks } from "./tools-render.js";
+import { renderTree } from "./tree.js";
 
 /** @typedef {Record<string, any>} Data */
 
@@ -65,6 +66,21 @@ function openLightbox(src, alt) {
  */
 function appendResultText(body, text) {
   const shape = classifyResult(text);
+  if (shape.kind === "yaml-digest") {
+    const heading = document.createElement("h3");
+    heading.className = "tool-page-title";
+    const link = document.createElement("a");
+    link.href = shape.url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = shape.title || shape.url;
+    heading.append(link);
+    const url = document.createElement("p");
+    url.className = "tool-page-url";
+    url.textContent = shape.url;
+    body.append(heading, url, renderTree({ head: shape.head, body: shape.body }));
+    return;
+  }
   if (shape.kind === "page") {
     const heading = document.createElement("h3");
     heading.className = "tool-page-title";

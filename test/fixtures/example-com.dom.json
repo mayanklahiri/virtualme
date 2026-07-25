@@ -1,0 +1,35 @@
+{
+  "url": "https://example.com/",
+  "title": "Example Domain",
+  "lang": "en",
+  "head": [
+    { "tag": "meta", "attrs": { "name": "description", "content": "Example description" } },
+    { "tag": "link", "attrs": { "rel": "canonical", "href": "https://example.com/" } }
+  ],
+  "body": [
+    {
+      "tag": "div",
+      "visible": true,
+      "children": [
+        {
+          "tag": "h1",
+          "visible": true,
+          "text": "Example Domain"
+        },
+        {
+          "tag": "p",
+          "visible": true,
+          "text": "This domain is for use in illustrative examples in documents.",
+          "children": [
+            {
+              "tag": "a",
+              "visible": true,
+              "attrs": { "href": "https://www.iana.org/domains/example" },
+              "text": "More information..."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

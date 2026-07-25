@@ -1,0 +1,56 @@
+{
+  "url": "https://www.lahiri.me/",
+  "title": "Mayank Lahiri",
+  "lang": "en",
+  "head": [
+    { "tag": "meta", "attrs": { "name": "description", "content": "Mayank Lahiri homepage" } }
+  ],
+  "body": [
+    {
+      "tag": "main",
+      "visible": true,
+      "children": [
+        {
+          "tag": "h1",
+          "visible": true,
+          "text": "Mayank Lahiri"
+        },
+        {
+          "tag": "p",
+          "visible": true,
+          "text": "Works at Oracle"
+        },
+        {
+          "tag": "ul",
+          "visible": true,
+          "children": [
+            {
+              "tag": "li",
+              "visible": true,
+              "children": [
+                {
+                  "tag": "a",
+                  "visible": true,
+                  "attrs": { "href": "https://www.lahiri.me/projects/" },
+                  "text": "Projects"
+                }
+              ]
+            },
+            {
+              "tag": "li",
+              "visible": true,
+              "children": [
+                {
+                  "tag": "a",
+                  "visible": true,
+                  "attrs": { "href": "https://github.com/mayanklahiri" },
+                  "text": "GitHub"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

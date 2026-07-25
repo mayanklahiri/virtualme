@@ -1,18 +1,37 @@
 // Pure, shape-based classification of tool results (no DOM, no tool names).
 
 /**
- * @typedef {{kind: "page", url: string, title: string, text: string}
+ * @typedef {{kind: "yaml-digest", url: string, title: string, head: any, body: any}
+ *   | {kind: "page", url: string, title: string, text: string}
  *   | {kind: "json"} | {kind: "text"}} ResultShape
  */
+
+import { parseYamlLite } from "./yaml-lite.js";
 
 /**
  * Classify a tool result payload by shape. A "page" is JSON whose keys are a
  * non-empty subset of {url, title, text} with string values and a valid
- * http(s) url.
+ * http(s) url. A yaml-digest is subset YAML with title, url, head, body.
  * @param {string} payload
  * @returns {ResultShape}
  */
 export function classifyResult(payload) {
+  try {
+    const parsed = parseYamlLite(payload);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed) &&
+        typeof parsed.title === "string" && typeof parsed.url === "string" &&
+        /^https?:\/\//.test(parsed.url)) {
+      return {
+        kind: "yaml-digest",
+        url: parsed.url,
+        title: parsed.title,
+        head: parsed.head ?? {},
+        body: parsed.body ?? [],
+      };
+    }
+  } catch {
+    // fall through to JSON/text classification
+  }
   let parsed;
   try {
     parsed = JSON.parse(payload);

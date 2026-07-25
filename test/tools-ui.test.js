@@ -4,6 +4,16 @@ import test from "node:test";
 
 const root = new URL("../controller/web/static/", import.meta.url);
 
+test("tree widget module exists and avoids innerHTML", async () => {
+  const [tree, tools] = await Promise.all([
+    readFile(new URL("js/tree.js", root), "utf8"),
+    readFile(new URL("js/tools.js", root), "utf8"),
+  ]);
+  assert.match(tree, /export function renderTree/);
+  assert.match(tools, /renderTree/);
+  assert.doesNotMatch(tree, /innerHTML/);
+});
+
 test("Tools page is server-driven and schema-generated", async () => {
   const [html, app, router, tools, css] = await Promise.all([
     readFile(new URL("index.html", root), "utf8"),

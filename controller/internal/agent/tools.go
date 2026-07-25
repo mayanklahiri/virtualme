@@ -177,7 +177,7 @@ func (t *localTools) Definitions() []Tool {
 	return []Tool{
 		{Name: "screenshot", Description: "Capture the visible browser screen. Agent observations include an API-coordinate grid; manual console calls return a pure capture.", Schema: schema(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "dom", Description: "Read rendered visible DOM elements with stable refs for click_element/type_into. selectorHint is a case-insensitive substring matched against tag/text/attributes - NOT a CSS selector. Large pages paginate; pass page to continue.", Schema: schema(`{"type":"object","properties":{"selectorHint":{"type":"string","description":"substring filter (not CSS)"},"page":{"type":"integer","minimum":0}},"additionalProperties":false}`)},
-		{Name: "read_page", Description: "Read the current page URL, title, and visible text.", Schema: schema(`{"type":"object","properties":{},"additionalProperties":false}`)},
+		{Name: "read_page", Description: "Read the current page as a structured YAML digest: title, url, head metadata, and a simplified hierarchy of the important visible elements — headings, text blocks, links (href), images (src, alt), media, tables (rows), lists, and form structures — each with a sel CSS selector. This is the primary tool for extracting information from a page; prefer it over screenshots or dom for reading content, and use the sel values with dom_query for follow-up detail.", Schema: schema(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "dom_query", Description: "Extract structured text and attributes from elements matching a precise CSS selector.", Schema: schema(`{"type":"object","properties":{"selector":{"type":"string","description":"CSS selector evaluated in the page"},"attributes":{"type":"array","items":{"type":"string"},"description":"attribute names to return; default: text only"},"limit":{"type":"integer","minimum":1,"maximum":50,"default":10}},"required":["selector"],"additionalProperties":false}`)},
 		{Name: "dom_validate", Description: "Evaluate page structure and content assertions without short-circuiting.", Schema: schema(`{"type":"object","properties":{"assertions":{"type":"array","maxItems":10,"items":{"type":"object","properties":{"selector":{"type":"string"},"exists":{"type":"boolean"},"minCount":{"type":"integer"},"textContains":{"type":"string"},"attribute":{"type":"string"},"attributeEquals":{"type":"string"}},"required":["selector"],"additionalProperties":false}}},"required":["assertions"],"additionalProperties":false}`)},
 		{Name: "page_eval", Description: "Evaluate one bounded read-only JavaScript expression and return its JSON value.", Schema: schema(`{"type":"object","properties":{"expression":{"type":"string","maxLength":2000,"description":"A single JavaScript expression evaluated read-only in the page; its JSON-stringified value is returned (max 8 KiB). Mutation attempts fail."}},"required":["expression"],"additionalProperties":false}`)},
@@ -263,7 +263,7 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 		return ToolResult{Text: text, Summary: "Observed rendered DOM", Observe: true}, err
 	case "read_page":
 		text, err := t.cdp.ReadPage(ctx)
-		return ToolResult{Text: text, Summary: "Read current page", Observe: true}, err
+		return ToolResult{Text: text, Summary: "Read page digest", Observe: true}, err
 	case "dom_query":
 		return t.domQuery(ctx, raw)
 	case "dom_validate":

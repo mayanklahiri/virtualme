@@ -141,7 +141,12 @@ func TestCDPReassemblesFragmentedFrames(t *testing.T) {
 			t.Errorf("unexpected method %s", method)
 		}
 		return evaluateResult(map[string]any{
-			"url": "http://fake/page", "title": "Fake", "text": strings.Repeat("body text ", 50),
+			"title": "Fake",
+			"url":   "http://fake/page",
+			"head":  map[string]any{},
+			"body": []any{map[string]any{
+				"tag": "p", "sel": "body > p:nth-of-type(1)", "text": strings.Repeat("body text ", 50),
+			}},
 		})
 	})
 	defer server.Close()
@@ -152,6 +157,9 @@ func TestCDPReassemblesFragmentedFrames(t *testing.T) {
 	}
 	if !strings.Contains(text, "http://fake/page") || !strings.Contains(text, "body text") {
 		t.Fatalf("ReadPage = %q", text)
+	}
+	if !strings.HasPrefix(text, "title:") {
+		t.Fatalf("ReadPage should emit YAML, got %q", text[:min(40, len(text))])
 	}
 }
 

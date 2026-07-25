@@ -298,21 +298,22 @@ func readServerFrame(reader *bufio.Reader) ([]byte, byte, bool, error) {
 	return payload, header[0] & 0x0f, fin, err
 }
 
-// ReadPage returns URL, title, and visible rendered text without changing state.
+// ReadPage returns a structured YAML digest of the current page.
 func (c *CDP) ReadPage(ctx context.Context) (string, error) {
 	var result struct {
 		Result struct {
-			Value any `json:"value"`
+			Value map[string]any `json:"value"`
 		} `json:"result"`
 	}
-	expression := `({url:location.href,title:document.title,text:(document.body?.innerText||"").slice(0,65536)})`
 	if err := c.call(ctx, "Runtime.evaluate", map[string]any{
-		"expression": expression, "returnByValue": true,
+		"expression": readPageExpression(), "returnByValue": true,
 	}, &result); err != nil {
 		return "", err
 	}
-	encoded, err := json.Marshal(result.Result.Value)
-	return string(encoded), err
+	if result.Result.Value == nil {
+		return "", nil
+	}
+	return digestToYAML(result.Result.Value), nil
 }
 
 type snapshotResult struct {
