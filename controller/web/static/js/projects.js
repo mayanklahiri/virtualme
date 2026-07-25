@@ -1,3 +1,5 @@
+import { durationElement } from "./duration.js";
+
 const dayOptions = [
   ["everyday", "Every day"], ["weekday", "Weekdays"], ["weekend", "Weekend"],
   ["mon", "Mon"], ["tue", "Tue"], ["wed", "Wed"], ["thu", "Thu"],
@@ -140,8 +142,10 @@ export function initProjects(send) {
       copy.className = "project-row-copy";
       const title = document.createElement("strong");
       title.textContent = project.name;
+      title.title = project.name;
       const summary = document.createElement("span");
       summary.textContent = selectorLabel(project.selector) + (project.lastRunTs > 0 ? ` · last ran ${relativeTime(project.lastRunTs)}` : "");
+      summary.title = summary.textContent;
       copy.append(title, summary);
       const status = document.createElement("span");
       status.className = `project-status ${project.enabled ? "enabled" : "paused"}`;
@@ -338,8 +342,9 @@ export function initProjects(send) {
       const summary = document.createElement("span");
       summary.className = "run-summary";
       summary.textContent = item.summary || "No summary";
+      summary.title = item.summary || "";
       const duration = document.createElement("span");
-      duration.textContent = `${(item.durationMs / 1000).toFixed(1)} s`;
+      duration.append(durationElement(item.durationMs));
       row.append(when, outcome, summary, duration);
       runList.append(row);
     }

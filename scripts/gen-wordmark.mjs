@@ -1,11 +1,12 @@
 // Regenerate controller/web/static/brand/wordmark.svg (committed output).
 //
-// The wordmark sets "Virtual" in Archivo Black (decorative block face) and
-// "me" in Caveat (casual handwritten face, slight italic skew) filled with the
-// fixed brand red. Fonts are fetched from a pinned google/fonts commit,
-// sha256-verified, converted to outlined paths with the exact-pinned
+// The wordmark sets "Virtual" and "me" in Chakra Petch Bold (squared,
+// technical, clean-lined face; spec 026 U3), with "me" filled in the fixed
+// brand red and scaled so its lowercase body reads balanced against the
+// capitals of "Virtual". The font is fetched from a pinned google/fonts
+// commit, sha256-verified, converted to outlined paths with the exact-pinned
 // opentype.js devDependency, and never shipped or loaded at runtime
-// (constitution: zero runtime dependencies; spec 024 amendment 2026-07-24).
+// (constitution: zero runtime dependencies; spec 024 amendments).
 //
 // Usage: node scripts/gen-wordmark.mjs
 import { Buffer } from "node:buffer";
@@ -13,30 +14,22 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import opentype from "opentype.js";
 
-const FONTS = [
-  {
-    file: "ArchivoBlack-Regular.ttf",
-    url: "https://raw.githubusercontent.com/google/fonts/94a7d81318e438525a5285e07ab72c050fdfeb44/ofl/archivoblack/ArchivoBlack-Regular.ttf",
-    sha256: "dd9a89a019b4849f66ab75455fe7bdf931311042cbb0f0f97acc061539703180",
-  },
-  {
-    file: "Caveat.ttf",
-    url: "https://raw.githubusercontent.com/google/fonts/5571d84c0d8c70ec1af4f64072d8c5cf1e4e9643/ofl/caveat/Caveat%5Bwght%5D.ttf",
-    sha256: "0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988",
-  },
-];
+const FONT = {
+  file: "ChakraPetch-Bold.ttf",
+  url: "https://raw.githubusercontent.com/google/fonts/94a7d81318e438525a5285e07ab72c050fdfeb44/ofl/chakrapetch/ChakraPetch-Bold.ttf",
+  sha256: "65fbf76d95651697275e19db4d717c0e95a789ddd3476478b05292104db278a0",
+};
 
 const cacheDir = new URL("./.cache/wordmark-fonts/", import.meta.url);
 const output = new URL("../controller/web/static/brand/wordmark.svg", import.meta.url);
 
 const BRAND_RED = "#d63b2f";
 // Layout constants (SVG user units). Tuned by eye against the sidebar chrome.
-const CAP = 20; // Archivo Black cap height for "Virtual"
+const CAP = 20; // cap height for "Virtual"
 const BASELINE = 24; // shared baseline
-const ME_SIZE = 34; // Caveat renders small on the em square; oversize it
-const ME_SKEW_DEG = -7; // gentle italic lean for "me"
-const TRACKING = -0.012; // slight block-logo tightening (em) for "Virtual"
-const GAP = 2.4; // gap between the two words
+const ME_XHEIGHT_RATIO = 0.82; // "me" x-height relative to CAP (balanced, not shrunken)
+const TRACKING = -0.01; // slight block-logo tightening (em)
+const GAP = 2.2; // gap between the two words
 const PAD = 1; // outer padding
 
 async function loadFont({ file, url, sha256 }) {
@@ -56,36 +49,34 @@ async function loadFont({ file, url, sha256 }) {
   return opentype.parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
 }
 
-const [archivo, caveat] = await Promise.all(FONTS.map(loadFont));
+const chakra = await loadFont(FONT);
 
-/** Cap-height of a font in user units at a given font size. */
-function capHeight(font, size) {
-  const capGlyphPath = font.getPath("H", 0, 0, size, { kerning: false });
-  const box = capGlyphPath.getBoundingBox();
+/** Height of a glyph's ink box at a given font size. */
+function inkHeight(font, glyph, size) {
+  const box = font.getPath(glyph, 0, 0, size, { kerning: false }).getBoundingBox();
   return box.y2 - box.y1;
 }
 
 // Size "Virtual" so its cap height is exactly CAP.
-const archivoSize = (CAP / capHeight(archivo, 100)) * 100;
-const virtualPath = archivo.getPath("Virtual", 0, BASELINE, archivoSize, {
+const virtualSize = (CAP / inkHeight(chakra, "H", 100)) * 100;
+const virtualPath = chakra.getPath("Virtual", 0, BASELINE, virtualSize, {
   kerning: true,
   letterSpacing: TRACKING,
 });
 const virtualBox = virtualPath.getBoundingBox();
 
-// "me" shares the baseline; Caveat is a handwriting face so it sits smaller.
-const mePath = caveat.getPath("me", 0, BASELINE, ME_SIZE, { kerning: true });
+// Size "me" from its x-height so the lowercase body holds its own next to
+// the capitals instead of reading like an afterthought.
+const meSize = ((CAP * ME_XHEIGHT_RATIO) / inkHeight(chakra, "x", 100)) * 100;
+const meRaw = chakra.getPath("me", 0, BASELINE, meSize, { kerning: true, letterSpacing: TRACKING });
+const meRawBox = meRaw.getBoundingBox();
+const meX = virtualBox.x2 + GAP - meRawBox.x1;
+const mePath = chakra.getPath("me", meX, BASELINE, meSize, { kerning: true, letterSpacing: TRACKING });
 const meBox = mePath.getBoundingBox();
-
-const meX = virtualBox.x2 + GAP - meBox.x1;
-const skew = Math.tan((ME_SKEW_DEG * Math.PI) / 180);
-// skewX shifts points by y*tan(angle); compensate so the baseline stays put.
-const meTransform = `translate(${round(meX - skew * BASELINE)} 0) skewX(${ME_SKEW_DEG})`;
-const meRight = meX + meBox.x2 - meBox.x1 + Math.abs(skew) * (BASELINE - meBox.y1);
 
 const top = Math.min(virtualBox.y1, meBox.y1) - PAD;
 const bottom = Math.max(virtualBox.y2, meBox.y2) + PAD;
-const width = round(meRight + PAD - (virtualBox.x1 - PAD));
+const width = round(meBox.x2 + PAD - (virtualBox.x1 - PAD));
 const height = round(bottom - top);
 
 function round(value) {
@@ -110,7 +101,7 @@ function toPathData(path) {
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" class="wordmark-svg" viewBox="${round(virtualBox.x1 - PAD)} ${round(top)} ${width} ${height}">
   <path fill="var(--wordmark-fill, #7d8590)" d="${toPathData(virtualPath)}"/>
-  <path fill="${BRAND_RED}" transform="${meTransform}" d="${toPathData(mePath)}"/>
+  <path fill="${BRAND_RED}" d="${toPathData(mePath)}"/>
 </svg>
 `;
 

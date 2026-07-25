@@ -1,3 +1,5 @@
+import { formatShortDuration } from "./duration.js";
+
 /** @typedef {Record<string, any>} Data */
 
 /** @param {string} description */
@@ -80,7 +82,7 @@ export function initTools(send) {
     title.textContent = String(selected?.name ?? "");
     const status = document.createElement("span");
     status.className = `tool-result-status ${result.ok ? "ok" : "error"}`;
-    status.textContent = `${result.ok ? "ok" : "error"} · ${Number(result.durationMs) || 0} ms`;
+    status.textContent = `${result.ok ? "ok" : "error"} · ${formatShortDuration(Number(result.durationMs) || 0)}`;
     header.append(title, status);
     const body = document.createElement("div");
     body.className = "tool-output-body";

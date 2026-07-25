@@ -17,13 +17,16 @@ test("brand chrome markup and responsive contracts stay intact", async () => {
     readFile(new URL("brand/wordmark.svg", root), "utf8"),
   ]);
   assert.equal((html.match(/data-connection/g) ?? []).length, 2);
+  // Spec 026 U4: the wristwatch dial is gone; a simple status pip remains.
+  assert.doesNotMatch(html, /conn-dial|dial-hand|dial-ticks|dial-uptime/);
+  assert.match(html, /conn-pip/);
+  assert.doesNotMatch(conn, /requestAnimationFrame|dial/);
   assert.match(html, /class="status-band"/);
   assert.match(html, /id="home-address"/);
   assert.match(html, /id="home-version">Virtual Me</);
   assert.match(css, /\.quick-links\{grid-template-columns:1fr\}/);
   assert.match(css, /prefers-reduced-motion:reduce/);
   assert.match(css, /\[data-theme=contrast\] \.wordmark-svg/);
-  assert.match(conn, /requestAnimationFrame/);
   assert.match(render, /snapshot\.services\.length/);
   assert.doesNotMatch(wordmark, /<text\b/);
   assert.match(wordmark, /var\(--wordmark-fill/);

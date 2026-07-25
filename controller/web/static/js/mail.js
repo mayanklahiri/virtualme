@@ -1,3 +1,5 @@
+import { durationElement } from "./duration.js";
+
 export function initMail(send) {
   const form = document.querySelector("#mail-form");
   const to = document.querySelector("#mail-to");
@@ -49,13 +51,6 @@ export function initMail(send) {
     });
   }
 
-  function humanDuration(seconds) {
-    if (seconds < 60) return `${Math.max(0, seconds)} s`;
-    if (seconds < 3600) return `${trimDecimal(seconds / 60)} min`;
-    if (seconds < 86400) return `${trimDecimal(seconds / 3600)} h`;
-    return `${trimDecimal(seconds / 86400)} d`;
-  }
-
   function trimDecimal(value) {
     return value.toFixed(1).replace(/\.0$/, "");
   }
@@ -92,10 +87,11 @@ export function initMail(send) {
       const title = document.createElement("span");
       title.className = "mail-msg-subject";
       title.textContent = item.subject || "(no subject)";
+      title.title = item.subject || "";
       const size = document.createElement("span");
       size.textContent = humanSize(Number(item.size) || 0);
       const age = document.createElement("span");
-      age.textContent = humanDuration(Number(item.ageSec) || 0);
+      age.append(durationElement((Number(item.ageSec) || 0) * 1000));
       summary.append(dot, destination, title, size, age);
       const retrySeconds = item.nextRetrySec ?? message.nextRetrySec;
       if (Number.isFinite(retrySeconds)) {

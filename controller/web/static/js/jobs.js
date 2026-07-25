@@ -1,16 +1,9 @@
+import { durationElement, formatShortDuration } from "./duration.js";
+
 const shortTime = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
 const fullTime = new Intl.DateTimeFormat([], { dateStyle: "medium", timeStyle: "medium" });
 
 /** @typedef {Record<string, any>} Data */
-
-/** @param {number} milliseconds */
-export function formatDuration(milliseconds) {
-  const value = Math.max(0, Number(milliseconds) || 0);
-  if (value < 1000) return `${Math.round(value)} ms`;
-  if (value < 60000) return `${(value / 1000).toFixed(1)} s`;
-  const minutes = Math.floor(value / 60000);
-  return `${minutes}m ${Math.floor((value % 60000) / 1000)}s`;
-}
 
 /** @param {Data} job */
 export function queueSummary(job) {
@@ -201,14 +194,14 @@ export function initJobs(send) {
         ["Project", link],
         ["Grounding", grounding],
         ["Result", job.result?.summary || job.lastError || "Pending"],
-        ["Duration", job.result ? formatDuration(job.result.finishedTs - (job.startedTs || job.enqueuedTs)) : "…"],
+        ["Duration", job.result ? durationElement(job.result.finishedTs - (job.startedTs || job.enqueuedTs)) : "…"],
       ]));
     } else {
       const heading = document.createElement("h3");
       heading.textContent = "Payload";
       fragment.append(heading, pre(payload), definitionList([
         ["Result", job.result?.summary || job.lastError || "Pending"],
-        ["Duration", job.result ? formatDuration(job.result.finishedTs - (job.startedTs || job.enqueuedTs)) : "…"],
+        ["Duration", job.result ? durationElement(job.result.finishedTs - (job.startedTs || job.enqueuedTs)) : "…"],
       ]));
     }
     return fragment;
@@ -238,7 +231,7 @@ export function initJobs(send) {
       }
       fragment.append(definitionList([
         ["Status", data.ok ? "OK" : "Error"],
-        ["Duration", formatDuration(data.durationMs)],
+        ["Duration", durationElement(data.durationMs)],
         ["Job", event.jobId || "…"],
       ]));
     } else if (event.kind === "llm") {
@@ -247,7 +240,7 @@ export function initJobs(send) {
         ["Prompt", event.summary],
         ["Prompt tokens", data.promptTokens ?? 0],
         ["Completion tokens", data.completionTokens ?? 0],
-        ["Duration", formatDuration(data.durationMs)],
+        ["Duration", durationElement(data.durationMs)],
         ["Stopped", data.stopped ? "Yes" : "No"],
         ["Job", event.jobId || "…"],
       ]));
@@ -258,7 +251,7 @@ export function initJobs(send) {
         ["Voice", data.voice || "…"],
         ["Recipient domain", data.recipientDomain || "…"],
         ["Size", data.size ? `${data.size} bytes` : "…"],
-        ["Duration", formatDuration(data.durationMs)],
+        ["Duration", durationElement(data.durationMs)],
       ]));
     }
     return fragment;
@@ -297,8 +290,8 @@ export function initJobs(send) {
       button.append(icon("clock-3"));
     }
     button.append(chip(job.type));
-    appendText(button, "job-row-name", jobName(job));
-    appendText(button, "job-row-summary", jobSecondary(job));
+    appendText(button, "job-row-name", jobName(job)).title = jobName(job);
+    appendText(button, "job-row-summary", jobSecondary(job)).title = jobSecondary(job);
     const meta = appendText(button, "job-row-meta", "");
     if (phase === "upcoming") {
       meta.textContent = Number(job.notBeforeTs) > Date.now()
@@ -306,13 +299,13 @@ export function initJobs(send) {
         : `queued ${time(job.enqueuedTs)}`;
     } else if (phase === "running") {
       const update = () => {
-        meta.textContent = `running ${formatDuration(Date.now() - Number(job.startedTs || job.enqueuedTs))}`;
+        meta.textContent = `running ${formatShortDuration(Date.now() - Number(job.startedTs || job.enqueuedTs))}`;
       };
       update();
       button.dataset.elapsed = "";
     } else {
       const duration = Number(job.result?.finishedTs) - Number(job.startedTs || job.enqueuedTs);
-      meta.textContent = `${time(job.result?.finishedTs)} · ${formatDuration(duration)}`;
+      meta.textContent = `${time(job.result?.finishedTs)} · ${formatShortDuration(duration)}`;
     }
     button.addEventListener("click", () => openDetail("queue", job, button));
     item.append(button);
@@ -349,8 +342,8 @@ export function initJobs(send) {
     button.className = "activity-row";
     appendText(button, "activity-time", time(event.ts));
     button.append(chip(event.kind || "event"));
-    appendText(button, "activity-name", event.name || event.kind);
-    appendText(button, "activity-summary", event.summary || "");
+    appendText(button, "activity-name", event.name || event.kind).title = event.name || event.kind;
+    appendText(button, "activity-summary", event.summary || "").title = event.summary || "";
     button.addEventListener("click", () => openDetail("activity", event, button));
     item.append(button);
     return item;
@@ -385,7 +378,7 @@ export function initJobs(send) {
     const row = running.querySelector("[data-elapsed]");
     if (row && queue.running) {
       /** @type {HTMLElement} */ (row.querySelector(".job-row-meta")).textContent =
-        `running ${formatDuration(Date.now() - Number(queue.running.startedTs || queue.running.enqueuedTs))}`;
+        `running ${formatShortDuration(Date.now() - Number(queue.running.startedTs || queue.running.enqueuedTs))}`;
     }
   }, 1000);
 

@@ -1,4 +1,5 @@
 import { updateConnectionSnapshot } from "./conn.js";
+import { durationElement } from "./duration.js";
 
 const iconForService = {
   xvfb: "monitor",
@@ -41,24 +42,6 @@ function createService(name) {
   return item;
 }
 
-function formatUptime(seconds) {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const remainder = Math.floor(seconds % 60);
-  return [
-    days > 0 ? `${days}d` : "",
-    hours > 0 || days > 0 ? `${hours}h` : "",
-    minutes > 0 || hours > 0 || days > 0 ? `${minutes}m` : "",
-    `${remainder}s`,
-  ].filter(Boolean).join(" ");
-}
-
-// Short form for the home fact tiles: the two most significant units only.
-function formatUptimeShort(seconds) {
-  return formatUptime(seconds).split(" ").slice(0, 2).join(" ");
-}
-
 function gpuName(gpu) {
   const vendor = { nvidia: "NVIDIA", amd: "AMD", intel: "Intel" }[gpu?.vendor] ?? "";
   return [vendor, gpu?.model].filter(Boolean).join(" ");
@@ -76,8 +59,8 @@ export function renderState(snapshot) {
   status.className = `overall ${snapshot.ok ? "ok" : "error"}`;
   document.querySelector("#status-title").textContent = snapshot.ok ? "All systems operational" : "Service attention required";
   document.querySelector("#status-detail").textContent = snapshot.ok ? `All ${snapshot.services.length} supervised services are healthy.` : "One or more supervised services are unavailable.";
-  document.querySelector("#uptime").textContent = formatUptime(snapshot.uptimeSec);
-  document.querySelector("#home-uptime").textContent = formatUptimeShort(snapshot.uptimeSec);
+  document.querySelector("#uptime").replaceChildren(durationElement(snapshot.uptimeSec * 1000));
+  document.querySelector("#home-uptime").replaceChildren(durationElement(snapshot.uptimeSec * 1000));
   document.querySelector("#home-host").textContent = snapshot.hostname || "…";
   const port = Number(snapshot.net?.port) || 8080;
   const containerAddresses = (snapshot.net?.addrs ?? []).map((address) => addressWithPort(address, port));
