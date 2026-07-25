@@ -20,13 +20,13 @@ function makeSamples(count) {
 const modes = { tokIn: "sum" };
 
 test("small series pass through untouched", () => {
-  const samples = makeSamples(60);
+  const samples = makeSamples(30);
   const result = downsample(samples, 2, MAX_BARS, modes);
   assert.equal(result.samples, samples);
   assert.equal(result.resSec, 2);
 });
 
-test("long series merge down to at most 72 drawn buckets", () => {
+test("long series merge down to at most 36 drawn buckets", () => {
   for (const count of [73, 240, 1800, 2880]) {
     const result = downsample(makeSamples(count), 2, MAX_BARS, modes);
     assert.ok(result.samples.length <= MAX_BARS, `${count} -> ${result.samples.length}`);

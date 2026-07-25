@@ -132,7 +132,7 @@ NVIDIA Vulkan ICD requires to initialize. GPU VRAM renders in binary GB.
 Status charts share a persistent lookback, bounded boundary-aligned locale
 ticks, responsive title/control headers, timestamp-true hover selection, and
 the theme-defined `--p1` through `--p8` series ramp. Every chart downsamples
-client-side to at most 72 bars (gauges average, counters sum); GPU
+client-side to at most 36 bars (gauges average, counters sum); GPU
 utilization and memory (in GB) draw side by side, and dedicated charts track
 LLM tokens, effective token throughput, and browser actions by category from
 per-sample counters drained by the state collector. The Status top banner

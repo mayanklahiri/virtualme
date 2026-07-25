@@ -166,6 +166,12 @@ margin separating titles from the plot.
 Merge factor is now `ceil(n/72)`; no chart draws more than 72 bars at any
 lookback.
 
+### 2026-07-25 — Client-side bar cap reduced to 36
+
+`MAX_BARS` in `chart-data.js` is lowered from 72 to 36 (50% reduction).
+Merge factor is now `ceil(n/36)`; no chart draws more than 36 bars at any
+lookback.
+
 ### 2026-07-24 — CPU load and memory pair side-by-side
 
 The Status page draws GPU utilization and GPU memory side-by-side inside
