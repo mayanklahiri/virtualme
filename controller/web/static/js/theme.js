@@ -28,13 +28,15 @@ export function initTheme() {
   let theme = themeIds.includes(savedTheme) ? savedTheme : "modern";
   let preference = variants.some(([name]) => name === savedVariant) ? savedVariant : "auto";
 
-  function closePopover() {
+  function closePopover(restore = true) {
     if (popover.hidden) {
       return;
     }
     popover.hidden = true;
     themeButton.setAttribute("aria-expanded", "false");
-    themeButton.focus();
+    if (restore && popover.contains(document.activeElement)) {
+      themeButton.focus();
+    }
   }
 
   function togglePopover() {
@@ -64,6 +66,7 @@ export function initTheme() {
   }
 
   themeButton.addEventListener("click", togglePopover);
+  addEventListener("notificationpopoveropen", () => closePopover(false));
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !popover.hidden) {
       closePopover();

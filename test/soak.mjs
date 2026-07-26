@@ -174,6 +174,8 @@ const flows = [
       const framesA = [];
       /** @type {any[]} */
       const framesB = [];
+      /** @type {WebSocket|undefined} */
+      let third;
       /** @param {MessageEvent} event */
       const onA = (event) => framesA.push(JSON.parse(String(event.data)));
       /** @param {MessageEvent} event */
@@ -184,11 +186,11 @@ const flows = [
         second.addEventListener("open", resolve, { once: true });
         second.addEventListener("error", reject, { once: true });
       });
-      /** @param {any[]} frames @param {(frame: any) => boolean} predicate @param {string} label */
-      const waitFor = async (frames, predicate, label) => {
+      /** @param {any[]} frames @param {(frame: any) => boolean} predicate @param {string} label @param {number} [after] */
+      const waitFor = async (frames, predicate, label, after = 0) => {
         const deadline = Date.now() + 60_000;
         while (Date.now() < deadline) {
-          const frame = frames.find(predicate);
+          const frame = frames.slice(after).find(predicate);
           if (frame) return frame;
           await new Promise((resolve) => setTimeout(resolve, 25));
         }
@@ -220,13 +222,14 @@ const flows = [
           (frame) => frame.type === "notifications-state" && frame.notifications?.some((/** @type {any} */ item) => item.id === id), "B create");
         if (stateA.unread !== stateB.unread) problems.push("create unread counts diverged");
         second.close();
-        const third = new WebSocket(URL_WS);
+        const reconnect = new WebSocket(URL_WS);
+        third = reconnect;
         /** @type {any[]} */
         const framesC = [];
-        third.addEventListener("message", (event) => framesC.push(JSON.parse(String(event.data))));
+        reconnect.addEventListener("message", (event) => framesC.push(JSON.parse(String(event.data))));
         await new Promise((resolve, reject) => {
-          third.addEventListener("open", resolve, { once: true });
-          third.addEventListener("error", reject, { once: true });
+          reconnect.addEventListener("open", resolve, { once: true });
+          reconnect.addEventListener("error", reject, { once: true });
         });
         await waitFor(framesC,
           (frame) => frame.type === "notifications-state" && frame.notifications?.some((/** @type {any} */ item) => item.id === id && !item.readAtMs), "reconnect");
@@ -236,21 +239,32 @@ const flows = [
         const readC = await waitFor(framesC,
           (frame) => frame.type === "notifications-state" && frame.change?.kind === "read" && frame.change.id === id, "C read");
         if (!readA.change.readAtMs || readA.change.readAtMs !== readC.change.readAtMs) problems.push("read timestamps diverged");
-        third.send(JSON.stringify({ type: "notifications-read-all", requestId: randomUUID() }));
-        await waitFor(framesA, (frame) => frame.type === "notifications-state" && frame.unread === 0, "A read-all");
-        const allC = await waitFor(framesC, (frame) => frame.type === "notifications-state" && frame.unread === 0, "C read-all");
+        const itemA = readA.notifications?.find((/** @type {any} */ item) => item.id === id);
+        const itemC = readC.notifications?.find((/** @type {any} */ item) => item.id === id);
+        if (!itemA?.readAtMs || itemA.readAtMs !== itemC?.readAtMs) problems.push("read state did not converge");
+        if (readA.unread !== stateA.unread - 1 || readC.unread !== stateA.unread - 1) {
+          problems.push("read did not decrement unread count exactly once");
+        }
+        const allStartA = framesA.length;
+        const allStartC = framesC.length;
+        reconnect.send(JSON.stringify({ type: "notifications-read-all", requestId: randomUUID() }));
+        await waitFor(framesA, (frame) => frame.type === "notifications-state" && frame.unread === 0, "A read-all", allStartA);
+        const allC = await waitFor(framesC, (frame) => frame.type === "notifications-state" && frame.unread === 0, "C read-all", allStartC);
         const firstReadAt = allC.notifications.find((/** @type {any} */ item) => item.id === id)?.readAtMs;
-        third.send(JSON.stringify({ type: "notifications-read-all", requestId: randomUUID() }));
+        const repeatStart = framesC.length;
+        reconnect.send(JSON.stringify({ type: "notifications-read-all", requestId: randomUUID() }));
         const repeat = await waitFor(framesC,
           (frame) => frame.type === "notifications-state" && frame.unread === 0 &&
-            frame.notifications?.find((/** @type {any} */ item) => item.id === id)?.readAtMs === firstReadAt, "idempotent read-all");
+            frame.notifications?.find((/** @type {any} */ item) => item.id === id)?.readAtMs === firstReadAt,
+          "idempotent read-all", repeatStart);
         if (!repeat) problems.push("idempotent read-all missing");
-        third.close();
+        reconnect.close();
         flowLog(`notification ${id} converged across clients`);
       } finally {
         ws.removeEventListener("message", onA);
         second.removeEventListener("message", onB);
         second.close();
+        third?.close();
       }
       return { steps: [], reply: "", chatError: "", probeProblems: problems };
     },

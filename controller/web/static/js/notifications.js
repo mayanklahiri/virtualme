@@ -8,8 +8,9 @@ const knownIcons = new Set([
 const state = {
   connected: false, ready: false, recent: [], loaded: [], types: [],
   unread: 0, retained: 0, nextBefore: "", done: true, selected: null,
-  detail: null, typeFilter: "all", readFilter: "all", pageRequest: "",
-  detailRequest: "", error: "",
+  detail: null, typeFilter: "all", readFilter: "all", pageRequest: null,
+  detailRequest: "", readRequests: new Map(), readAllRequests: new Set(),
+  reloadAfterPage: false, error: "",
 };
 
 let sendFrame = () => {};
@@ -94,8 +95,9 @@ function addDefinition(list, label, value) {
 
 function renderGenericDetail(container, notification) {
   detailHeading(container, notification);
-  const keys = Object.keys(notification.detail?.data ?? {}).sort();
-  if (keys.length) container.append(renderTree(notification.detail.data, { expandDepth: 3 }));
+  const data = notification.detail?.data ?? {};
+  const sortedData = sortedDetailData(data);
+  if (Object.keys(sortedData).length) container.append(renderTree(sortedData, { expandDepth: 3 }));
 }
 
 function renderLifecycleDetail(container, notification) {
@@ -169,7 +171,11 @@ function updateBadges() {
   ]) button.disabled = !state.connected || state.unread === 0;
 }
 
-function sorted(items) {
+export function sortedDetailData(data) {
+  return Object.fromEntries(Object.keys(data).sort().map((key) => [key, data[key]]));
+}
+
+export function sorted(items) {
   return [...items].sort((a, b) => b.createdAtMs - a.createdAtMs || b.id.localeCompare(a.id));
 }
 
@@ -299,9 +305,12 @@ function render() {
 }
 
 function sendRead(id) {
-  const notification = [...state.recent, ...state.loaded].find((item) => item.id === id);
-  if (state.connected && notification && !notification.readAtMs) {
-    sendFrame({ type: "notification-read", requestId: requestID("read"), id });
+  const notification = [...state.recent, ...state.loaded, state.detail].find((item) => item?.id === id);
+  if (state.connected && notification && !notification.readAtMs &&
+    ![...state.readRequests.values()].includes(id)) {
+    const idempotency = requestID("read");
+    state.readRequests.set(idempotency, id);
+    sendFrame({ type: "notification-read", requestId: idempotency, id });
   }
 }
 
@@ -356,21 +365,27 @@ function listKeydown(event) {
 
 function loadPage(replace = false) {
   if (!state.connected || state.pageRequest) return;
-  state.pageRequest = requestID("page");
+  const request = {
+    id: requestID("page"),
+    replace,
+    before: replace ? "" : state.nextBefore,
+  };
+  state.pageRequest = request;
   if (replace) {
-    state.loaded = [];
     state.nextBefore = "";
   }
   sendFrame({
-    type: "notifications-page-req", requestId: state.pageRequest,
-    before: replace ? "" : state.nextBefore, limit: 50,
+    type: "notifications-page-req", requestId: request.id,
+    before: request.before, limit: 50,
   });
   render();
 }
 
 function markAll() {
   if (!state.connected || !state.unread) return;
-  sendFrame({ type: "notifications-read-all", requestId: requestID("read-all") });
+  const id = requestID("read-all");
+  state.readAllRequests.add(id);
+  sendFrame({ type: "notifications-read-all", requestId: id });
 }
 
 function applyChange(update) {
@@ -391,9 +406,23 @@ function frame(message) {
     state.unread = Number(message.unread ?? 0);
     state.retained = Number(message.retainedCount ?? 0);
     applyChange(message.change);
+    const authoritative = new Map(state.recent.map((item) => [item.id, item]));
+    state.loaded = state.loaded.map((item) => authoritative.get(item.id) ?? item);
+    for (const [requestId, id] of state.readRequests) {
+      const item = [...state.recent, ...state.loaded, state.detail].find((candidate) => candidate?.id === id);
+      if (item?.readAtMs) state.readRequests.delete(requestId);
+    }
+    if (message.change?.kind === "read-all" || state.unread === 0) {
+      state.readRequests.clear();
+      state.readAllRequests.clear();
+    }
+    if (message.change?.kind === "created" && location.pathname === "/notifications") {
+      if (state.pageRequest) state.reloadAfterPage = true;
+      else loadPage(true);
+    }
     render();
-  } else if (message.type === "notifications-page" && message.requestId === state.pageRequest) {
-    const replacing = !state.nextBefore;
+  } else if (message.type === "notifications-page" && message.requestId === state.pageRequest?.id) {
+    const replacing = state.pageRequest.replace;
     state.loaded = sorted(replacing
       ? message.notifications ?? []
       : [...state.loaded, ...(message.notifications ?? [])].filter((item, index, all) =>
@@ -401,23 +430,31 @@ function frame(message) {
     state.nextBefore = message.nextBefore ?? "";
     state.done = Boolean(message.done);
     state.retained = Number(message.retainedCount ?? state.retained);
-    state.pageRequest = "";
+    state.pageRequest = null;
+    state.error = "";
     const requested = new URL(location.href).searchParams.get("id");
     if (requested && state.loaded.some(({ id }) => id === requested)) select(requested);
+    else if (requested) select(requested);
     else if (!state.selected && !requested) chooseFirstVisible();
+    if (state.reloadAfterPage) {
+      state.reloadAfterPage = false;
+      loadPage(true);
+    }
     render();
   } else if (message.type === "notification-detail" && message.requestId === state.detailRequest) {
     state.detailRequest = "";
     state.detail = message.notification;
     state.selected = message.notification.id;
+    state.error = "";
+    sendRead(state.selected);
     const url = new URL(location.href);
     url.searchParams.set("id", state.selected);
     history.replaceState(null, "", url.pathname + url.search);
     render();
   } else if (message.type === "notification-error") {
-    if (message.requestId === state.pageRequest) {
+    if (message.requestId === state.pageRequest?.id) {
       const expired = message.code === "not_found" && Boolean(state.nextBefore);
-      state.pageRequest = "";
+      state.pageRequest = null;
       state.error = message.error ?? "Notification request failed";
       if (expired) loadPage(true);
     } else if (message.requestId === state.detailRequest) {
@@ -425,8 +462,11 @@ function frame(message) {
       state.detail = null;
       state.selected = null;
       state.error = message.code === "not_found" ? "not_found" : (message.error ?? "Notification request failed");
-    } else {
+    } else if (state.readRequests.delete(message.requestId) ||
+      state.readAllRequests.delete(message.requestId) || message.requestId === "") {
       state.error = message.error ?? "Notification request failed";
+    } else {
+      return;
     }
     render();
   }
@@ -473,7 +513,13 @@ function closeMobileDetail() {
 
 function status(connection) {
   state.connected = connection === "connected";
-  if (!state.connected) closePopover(false);
+  if (!state.connected) {
+    closePopover(false);
+    state.pageRequest = null;
+    state.detailRequest = "";
+    state.readRequests.clear();
+    state.readAllRequests.clear();
+  }
   else {
     state.error = "";
     sendFrame({ type: "notifications-req" });
@@ -486,7 +532,7 @@ function enter() {
   closePopover(false);
   if (state.connected) loadPage(true);
   const id = new URL(location.href).searchParams.get("id");
-  if (id && state.loaded.some((item) => item.id === id)) select(id);
+  if (id) select(id);
   else if (!id && state.loaded.length) chooseFirstVisible();
 }
 
@@ -521,7 +567,14 @@ export function initNotifications(send) {
     if (location.pathname !== "/notifications") return;
     const id = new URL(location.href).searchParams.get("id");
     if (id) select(id);
-    else closeMobileDetail();
+    else {
+      state.selected = null;
+      state.detail = null;
+      state.detailRequest = "";
+      state.error = "";
+      closeMobileDetail();
+      render();
+    }
   });
   render();
   return { frame, status, enter, closePopover };

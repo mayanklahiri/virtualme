@@ -58,6 +58,19 @@ func jsonObject(raw json.RawMessage) bool {
 	return len(raw) > 0 && json.Unmarshal(raw, &value) == nil && value != nil
 }
 
+type notificationSnapshotSource interface {
+	Message() ([]byte, error)
+}
+
+func sendNotificationSnapshot(source notificationSnapshotSource, write func([]byte) error) error {
+	message, err := source.Message()
+	if err != nil {
+		_ = write([]byte(`{"type":"notification-error","requestId":"","code":"persistence_failed","error":"notification state unavailable"}`))
+		return err
+	}
+	return write(message)
+}
+
 func parseResolution(value string) (int, int) {
 	parts := strings.Split(value, "x")
 	if len(parts) < 2 {
@@ -205,8 +218,12 @@ func speechHandler(client *tts.Client, activities ...jobs.ActivityRecorder) http
 			return
 		}
 		input.Input = strings.TrimSpace(input.Input)
-		if input.Input == "" || len([]rune(input.Input)) > 4096 {
-			openAIError(w, http.StatusBadRequest, "input must be 1-4096 characters")
+		if input.Input == "" || client.MaxCharacters > 0 && len([]rune(input.Input)) > client.MaxCharacters {
+			message := "input must not be empty"
+			if client.MaxCharacters > 0 {
+				message = fmt.Sprintf("input must be 1-%d characters", client.MaxCharacters)
+			}
+			openAIError(w, http.StatusBadRequest, message)
 			return
 		}
 		if input.ResponseFormat == "" {
@@ -400,7 +417,10 @@ func (t *ttsWS) write(conn *ws.Conn, value any) error {
 func main() {
 	log.SetOutput(os.Stdout)
 	log.SetFlags(0)
-	loaded, err := config.Load(config.Options{})
+	environment := os.Environ()
+	secretResolver := config.NewResolver(environment)
+	defer secretResolver.Close()
+	loaded, err := config.Load(config.Options{Env: environment, Resolver: secretResolver})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -419,8 +439,9 @@ func main() {
 	activity := jobs.NewActivity(sharedValkey, hub.Broadcast)
 	speechLog := tts.NewLog(sharedValkey, hub.Broadcast)
 	ttsClient := &tts.Client{
-		URL: "http://" + master.TTS.Address,
-		Log: speechLog,
+		URL:           "http://" + master.TTS.Address,
+		Log:           speechLog,
+		MaxCharacters: master.TTS.MaxCharacters,
 	}
 	ttsSocket := newTTSWS(ttsClient, activity)
 	desktopURL, err := url.Parse(master.Server.DesktopProxyURL)
@@ -485,24 +506,24 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var telegramAPI telegram.API
 	telegramConfig := telegram.Config{
-		Enabled: master.Integrations.Telegram.Enabled, BotToken: master.Integrations.Telegram.BotToken,
+		Enabled:            master.Integrations.Telegram.Enabled,
 		AllowedChatIDs:     master.Integrations.Telegram.AllowedChatIDs,
 		AllowedUserIDs:     master.Integrations.Telegram.AllowedUserIDs,
 		PollTimeoutSeconds: master.Integrations.Telegram.PollTimeoutSeconds,
 		MaxEventLog:        master.Integrations.Telegram.MaxEventLog,
 	}
-	if telegramConfig.Enabled {
-		telegramAPI, err = telegram.NewClient(baseURL, telegramConfig.BotToken, &http.Client{
+	telegramService := telegram.New(telegramConfig, sharedValkey, hub.Broadcast, notificationService)
+	rawIntegrations, _ := loaded.Raw["integrations"].(map[string]any)
+	rawTelegram, _ := rawIntegrations["telegram"].(map[string]any)
+	tokenReference, _ := rawTelegram["botToken"].(string)
+	telegramService.ConfigureSecret(tokenReference, secretResolver, func(token string) (telegram.API, error) {
+		return telegram.NewClient(baseURL, token, &http.Client{
 			Transport: &http.Transport{ResponseHeaderTimeout: time.Duration(telegramConfig.PollTimeoutSeconds+10) * time.Second},
 		})
-		if err != nil {
-			log.Fatal("telegram: invalid client")
-		}
-	}
-	telegramService := telegram.New(telegramConfig, telegramAPI, sharedValkey, hub.Broadcast, notificationService)
+	})
 	telegramService.SetJobState(jobManager.ChatState)
+	telegramService.SetHistoryReady(chatService.HistoryReady())
 	telegramService.SetSubmitter(func(ctx context.Context, updateID int64, chatID, userID, text string) error {
 		_, err := chatService.SubmitUserText(ctx, chat.Submission{
 			Text: text, InitiatorID: "tg:" + chatID, CorrelationID: fmt.Sprintf("telegram:update:%d", updateID),
@@ -510,8 +531,11 @@ func main() {
 		})
 		return err
 	})
-	chatService.RegisterDelivery("telegram", func(delivery chat.Delivery) error {
-		return telegramService.Deliver(context.Background(), delivery.Source.ChatID, delivery.Text)
+	chatService.RegisterTyping("telegram", func(ctx context.Context, source chat.Source) {
+		telegramService.Typing(ctx, source.ChatID)
+	})
+	chatService.RegisterDelivery("telegram", func(ctx context.Context, delivery chat.Delivery) error {
+		return telegramService.Deliver(ctx, delivery.Source.ChatID, delivery.Text, delivery.Err, delivery.Stopped)
 	})
 	width, height := parseResolution(master.Desktop.Resolution)
 	jigglerService := jiggler.New(agent.NewProcessRunner(), valkey.New(cfg.ValkeyAddr), hub.Broadcast, width, height)
@@ -693,11 +717,8 @@ func main() {
 		_ = conn.WriteText(activity.Message())
 		_ = conn.WriteText(speechLog.Message())
 		_ = conn.WriteText(toolsList)
-		if message, err := notificationService.Message(); err != nil {
+		if err := sendNotificationSnapshot(notificationService, conn.WriteText); err != nil {
 			log.Printf("notifications: on-connect snapshot: %v", err)
-			_ = conn.WriteText([]byte(`{"type":"notification-error","requestId":"","code":"persistence_failed","error":"notification state unavailable"}`))
-		} else {
-			_ = conn.WriteText(message)
 		}
 	})
 	hub.SetOnDisconnect(jobManager.DropConnection)
@@ -736,7 +757,7 @@ func main() {
 	coordinator := configapi.NewProductionCoordinator(dataDir)
 	restartRequests := make(chan []string, 1)
 	configService, err := configapi.New(configapi.Options{
-		Loaded: loaded, Broadcast: hub.Broadcast,
+		Loaded: loaded, Environment: environment, Resolver: secretResolver, Broadcast: hub.Broadcast,
 		Coordinator: coordinator,
 		Planner:     notificationLifecycle,
 		Notifier: configapi.ConfigNotifierFunc(func(ctx context.Context, notice configapi.SaveNotice) error {

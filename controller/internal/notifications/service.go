@@ -311,6 +311,12 @@ func (s *Service) broadcastStateLocked(update *change) error {
 
 // HandleMessage handles notification websocket requests.
 func (s *Service) HandleMessage(conn *ws.Conn, payload []byte) bool {
+	return s.handleMessage(conn.WriteText, payload)
+}
+
+type notificationWriter func([]byte) error
+
+func (s *Service) handleMessage(write notificationWriter, payload []byte) bool {
 	var envelope struct {
 		Type string `json:"type"`
 	}
@@ -323,37 +329,37 @@ func (s *Service) HandleMessage(conn *ws.Conn, payload []byte) bool {
 			Type string `json:"type"`
 		}
 		if decodeRequest(payload, &request) != nil {
-			s.sendError(conn, "", "invalid_request", "invalid notification request")
+			s.sendError(write, "", "invalid_request", "invalid notification request")
 			return true
 		}
 		message, err := s.Message()
 		if err != nil {
-			s.sendError(conn, "", "persistence_failed", err.Error())
+			s.sendError(write, "", "persistence_failed", err.Error())
 		} else {
-			_ = conn.WriteText(message)
+			_ = write(message)
 		}
 	case "notification-read":
-		s.handleRead(conn, payload)
+		s.handleRead(write, payload)
 	case "notifications-read-all":
-		s.handleReadAll(conn, payload)
+		s.handleReadAll(write, payload)
 	case "notifications-page-req":
-		s.handlePage(conn, payload)
+		s.handlePage(write, payload)
 	case "notification-detail-req":
-		s.handleDetail(conn, payload)
+		s.handleDetail(write, payload)
 	default:
-		return false
+		s.sendError(write, "", "invalid_request", "unknown notification request")
 	}
 	return true
 }
 
-func (s *Service) handleRead(conn *ws.Conn, payload []byte) {
+func (s *Service) handleRead(write notificationWriter, payload []byte) {
 	var request struct {
 		Type      string `json:"type"`
 		RequestID string `json:"requestId"`
 		ID        string `json:"id"`
 	}
 	if decodeRequest(payload, &request) != nil || !validRequestID(request.RequestID) || !validULID(request.ID) {
-		s.sendError(conn, request.RequestID, "invalid_request", "invalid notification read request")
+		s.sendError(write, request.RequestID, "invalid_request", "invalid notification read request")
 		return
 	}
 	s.mu.Lock()
@@ -361,28 +367,28 @@ func (s *Service) handleRead(conn *ws.Conn, payload []byte) {
 	readAt := s.clock().UnixMilli()
 	reply, err := s.client.Eval(markOneScript, []string{itemsKey, readKey}, request.ID, strconv.FormatInt(readAt, 10))
 	if err != nil {
-		s.sendError(conn, request.RequestID, "persistence_failed", err.Error())
+		s.sendError(write, request.RequestID, "persistence_failed", err.Error())
 		return
 	}
 	changed, err := expectInteger("mark one", reply)
 	if err != nil {
-		s.sendError(conn, request.RequestID, "persistence_failed", err.Error())
+		s.sendError(write, request.RequestID, "persistence_failed", err.Error())
 	} else if changed < 0 {
-		s.sendError(conn, request.RequestID, "not_found", "notification not found")
+		s.sendError(write, request.RequestID, "not_found", "notification not found")
 	} else if changed == 0 {
-		s.sendSnapshotLocked(conn, request.RequestID)
+		s.sendSnapshotLocked(write, request.RequestID)
 	} else if err := s.broadcastStateLocked(&change{Kind: "read", ID: request.ID, ReadAtMS: readAt}); err != nil {
-		s.sendError(conn, request.RequestID, "persistence_failed", err.Error())
+		s.sendError(write, request.RequestID, "persistence_failed", err.Error())
 	}
 }
 
-func (s *Service) handleReadAll(conn *ws.Conn, payload []byte) {
+func (s *Service) handleReadAll(write notificationWriter, payload []byte) {
 	var request struct {
 		Type      string `json:"type"`
 		RequestID string `json:"requestId"`
 	}
 	if decodeRequest(payload, &request) != nil || !validRequestID(request.RequestID) {
-		s.sendError(conn, request.RequestID, "invalid_request", "invalid mark-all request")
+		s.sendError(write, request.RequestID, "invalid_request", "invalid mark-all request")
 		return
 	}
 	s.mu.Lock()
@@ -390,29 +396,29 @@ func (s *Service) handleReadAll(conn *ws.Conn, payload []byte) {
 	readAt := s.clock().UnixMilli()
 	reply, err := s.client.Eval(markAllScript, []string{orderKey, itemsKey, readKey}, strconv.FormatInt(readAt, 10))
 	if err != nil {
-		s.sendError(conn, request.RequestID, "persistence_failed", err.Error())
+		s.sendError(write, request.RequestID, "persistence_failed", err.Error())
 		return
 	}
 	changed, err := expectInteger("mark all", reply)
 	if err != nil {
-		s.sendError(conn, request.RequestID, "persistence_failed", err.Error())
+		s.sendError(write, request.RequestID, "persistence_failed", err.Error())
 	} else if changed == 0 {
-		s.sendSnapshotLocked(conn, request.RequestID)
+		s.sendSnapshotLocked(write, request.RequestID)
 	} else if err := s.broadcastStateLocked(&change{Kind: "read-all", ReadAtMS: readAt}); err != nil {
-		s.sendError(conn, request.RequestID, "persistence_failed", err.Error())
+		s.sendError(write, request.RequestID, "persistence_failed", err.Error())
 	}
 }
 
-func (s *Service) sendSnapshotLocked(conn *ws.Conn, requestID string) {
+func (s *Service) sendSnapshotLocked(write notificationWriter, requestID string) {
 	message, err := s.messageLocked(nil)
 	if err != nil {
-		s.sendError(conn, requestID, "persistence_failed", err.Error())
+		s.sendError(write, requestID, "persistence_failed", err.Error())
 	} else {
-		_ = conn.WriteText(message)
+		_ = write(message)
 	}
 }
 
-func (s *Service) handlePage(conn *ws.Conn, payload []byte) {
+func (s *Service) handlePage(write notificationWriter, payload []byte) {
 	var request struct {
 		Type      string `json:"type"`
 		RequestID string `json:"requestId"`
@@ -421,14 +427,14 @@ func (s *Service) handlePage(conn *ws.Conn, payload []byte) {
 	}
 	if decodeRequest(payload, &request) != nil || !validRequestID(request.RequestID) ||
 		(request.Before != "" && !validULID(request.Before)) || request.Limit < 1 || request.Limit > 50 {
-		s.sendError(conn, request.RequestID, "invalid_request", "invalid notification page request")
+		s.sendError(write, request.RequestID, "invalid_request", "invalid notification page request")
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	snapshot, err := s.snapshotLocked()
 	if err != nil {
-		s.sendError(conn, request.RequestID, "persistence_failed", err.Error())
+		s.sendError(write, request.RequestID, "persistence_failed", err.Error())
 		return
 	}
 	start := 0
@@ -441,7 +447,7 @@ func (s *Service) handlePage(conn *ws.Conn, payload []byte) {
 			}
 		}
 		if start < 0 {
-			s.sendError(conn, request.RequestID, "not_found", "notification cursor not found")
+			s.sendError(write, request.RequestID, "not_found", "notification cursor not found")
 			return
 		}
 	}
@@ -472,24 +478,24 @@ func (s *Service) handlePage(conn *ws.Conn, payload []byte) {
 		frame["nextBefore"] = summaries[len(summaries)-1].ID
 		encoded, _ = json.Marshal(frame)
 	}
-	_ = conn.WriteText(encoded)
+	_ = write(encoded)
 }
 
-func (s *Service) handleDetail(conn *ws.Conn, payload []byte) {
+func (s *Service) handleDetail(write notificationWriter, payload []byte) {
 	var request struct {
 		Type      string `json:"type"`
 		RequestID string `json:"requestId"`
 		ID        string `json:"id"`
 	}
 	if decodeRequest(payload, &request) != nil || !validRequestID(request.RequestID) || !validULID(request.ID) {
-		s.sendError(conn, request.RequestID, "invalid_request", "invalid notification detail request")
+		s.sendError(write, request.RequestID, "invalid_request", "invalid notification detail request")
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	snapshot, err := s.snapshotLocked()
 	if err != nil {
-		s.sendError(conn, request.RequestID, "persistence_failed", err.Error())
+		s.sendError(write, request.RequestID, "persistence_failed", err.Error())
 		return
 	}
 	for _, item := range snapshot.Notifications {
@@ -497,14 +503,14 @@ func (s *Service) handleDetail(conn *ws.Conn, payload []byte) {
 			message, _ := json.Marshal(map[string]any{
 				"type": "notification-detail", "requestId": request.RequestID, "notification": item,
 			})
-			_ = conn.WriteText(message)
+			_ = write(message)
 			return
 		}
 	}
-	s.sendError(conn, request.RequestID, "not_found", "notification not found")
+	s.sendError(write, request.RequestID, "not_found", "notification not found")
 }
 
-func (s *Service) sendError(conn *ws.Conn, requestID, code, message string) {
+func (s *Service) sendError(write notificationWriter, requestID, code, message string) {
 	message = sanitizeText(message)
 	if runes := []rune(message); len(runes) > 240 {
 		message = string(runes[:240])
@@ -512,7 +518,7 @@ func (s *Service) sendError(conn *ws.Conn, requestID, code, message string) {
 	frame, _ := json.Marshal(map[string]any{
 		"type": "notification-error", "requestId": requestID, "code": code, "error": message,
 	})
-	_ = conn.WriteText(frame)
+	_ = write(frame)
 }
 
 func decodeRequest(payload []byte, target any) error {

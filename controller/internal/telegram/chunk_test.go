@@ -28,3 +28,18 @@ func TestChunkTextLosslessUTF16Bound(t *testing.T) {
 		}
 	}
 }
+
+func TestChunkTextBoundaryPriority(t *testing.T) {
+	prefix := strings.Repeat("a", 3100)
+	input := prefix + " " + strings.Repeat("b", 100) + "\n" + strings.Repeat("c", 100) + "\n\n" + strings.Repeat("d", 1000)
+	chunks := ChunkText(input)
+	wantEnd := prefix + " " + strings.Repeat("b", 100) + "\n" + strings.Repeat("c", 100) + "\n\n"
+	if len(chunks) < 2 || chunks[0] != wantEnd {
+		t.Fatalf("double-newline boundary was not preferred: first length=%d", len([]rune(chunks[0])))
+	}
+	longToken := strings.Repeat("😀", 2049)
+	chunks = ChunkText(longToken)
+	if len(chunks) != 2 || len(utf16.Encode([]rune(chunks[0]))) != 4096 {
+		t.Fatalf("long token chunks = %v", []int{len(utf16.Encode([]rune(chunks[0]))), len(utf16.Encode([]rune(chunks[1])))})
+	}
+}

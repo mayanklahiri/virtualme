@@ -431,9 +431,10 @@ func isSpace(r rune) bool {
 
 // Client streams events from ttsd.
 type Client struct {
-	URL  string
-	HTTP *http.Client
-	Log  *Log
+	URL           string
+	HTTP          *http.Client
+	Log           *Log
+	MaxCharacters int
 }
 
 // Synthesize posts a request and invokes onEvent for every stream event.

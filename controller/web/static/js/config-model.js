@@ -24,7 +24,7 @@ export function parseEditorValue(value, setting) {
     if (setting.constraints?.uniqueItems && new Set(value).size !== value.length) {
       throw new Error("List rows must be unique.");
     }
-    return value.map((item) => String(item));
+    return value.map((item) => validateStringItem(String(item), setting.item));
   }
   if (setting.type === "integer") {
     if (!/^-?(0|[1-9][0-9]*)$/.test(String(value))) {
@@ -41,10 +41,33 @@ export function parseEditorValue(value, setting) {
   return String(value);
 }
 
+export function validateStringItem(value, item) {
+  if (!item || item.type !== "string") return value;
+  const rules = item.constraints ?? {};
+  const length = [...value].length;
+  if (rules.minLength !== undefined && length < rules.minLength) {
+    throw new Error(`List row must contain at least ${rules.minLength} characters.`);
+  }
+  if (rules.maxLength !== undefined && length > rules.maxLength) {
+    throw new Error(`List row must contain at most ${rules.maxLength} characters.`);
+  }
+  if (rules.pattern && !new RegExp(rules.pattern).test(value)) {
+    throw new Error("List row does not match the required pattern.");
+  }
+  return value;
+}
+
 export function validateSecretReference(value) {
   return value === "" ||
     /^\$\{env:[A-Z][A-Z0-9_]*\}$/.test(value) ||
     /^\$\{file:\/[^{}]*\}$/.test(value);
+}
+
+export function secretStatusLabel(secret) {
+  if (!secret?.configured) return "Not configured";
+  if (secret.status === "inactive") return "Inactive";
+  if (secret.resolved) return "Resolved";
+  return secret.error ? `Unavailable (${secret.error})` : "Unresolved";
 }
 
 export function setConfigPath(root, dotted, value) {

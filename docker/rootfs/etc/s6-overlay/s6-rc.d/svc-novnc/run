@@ -1,4 +1,13 @@
 #!/command/with-contenv bash
 source /run/virtualme/config.env
+format_address() {
+  if [[ "$1" == *:* ]]; then
+    printf '[%s]:%s' "$1" "$2"
+  else
+    printf '%s:%s' "$1" "$2"
+  fi
+}
+listen_address="$(format_address "$VM_EFFECTIVE_NOVNC_HOST" "$VM_EFFECTIVE_NOVNC_PORT")"
+upstream_address="$(format_address "$VM_EFFECTIVE_NOVNC_UPSTREAM_HOST" "$VM_EFFECTIVE_NOVNC_UPSTREAM_PORT")"
 exec websockify --web=/usr/share/novnc \
-  "$VM_EFFECTIVE_NOVNC_ADDRESS" "$VM_EFFECTIVE_NOVNC_UPSTREAM"
+  "$listen_address" "$upstream_address"

@@ -1364,3 +1364,39 @@ reconciled README, AGENTS, develop/operate skills, the spec index, endpoint
 documentation, and privacy language. The local e2e fixture uses a mode-0600
 obviously fake runtime secret and the Node stdlib stub; no real credential,
 DNS, Telegram account, or external network is involved.
+
+### 2026-07-25 — Corrective reimplementation
+
+The initial execution above was subsequently audited and found incomplete.
+It did not implement the normative five-stage ingress transaction,
+secret-generation replacement, retry-safe offset advancement, notification
+suppression state, running-only typing, failure delivery, or the required
+executable service/e2e coverage. Its statement that all prescribed behavior
+and tests had been completed was therefore inaccurate.
+
+The corrective implementation:
+
+- moved Telegram ingress into the channel-neutral chat/jobs persistence
+  boundary with exact `reserved`, `message`, `stats`, `job`, and `complete`
+  JSON records; fixed reservation/history/statistics/enqueue Lua transitions;
+  complete-only indexed eviction; deterministic envelopes; response-loss
+  repair; and before/after failure injection for every transition;
+- retained the old in-memory update offset until the candidate next offset was
+  durably stored, surfaced malformed offsets, loaded/deduplicated known chats,
+  and made event append/trim plus known-chat replacement atomic;
+- integrated the process-lifetime spec 031 resolver subscription and
+  `notifications.Creator`, including cancellable credential generations,
+  stale-generation guards, reauthentication, explicit unavailable/auth states,
+  persistent Telegram-owned notification episodes and cooldowns, and shutdown
+  silence;
+- completed transient `getMe` retries, random injectable jitter, Retry-After,
+  401/409 behavior, suspension/recovery, status timing/counters, UTF-16 command
+  entities, strict WebSocket validation, final/error/stopped delivery,
+  execution-scoped typing, and explicit queue delivery summaries;
+- replaced the status-only container probe with a local-file-driven Bot API
+  scenario covering authorization denial, commands, edits, bot/non-text
+  updates, two correlated source chats, typing/final delivery, 409/429
+  recovery, restart offset/history behavior, and credential non-disclosure.
+
+The acceptance checklist remains normative; an item is complete only when its
+corresponding executable gate passes.

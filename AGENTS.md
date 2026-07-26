@@ -119,7 +119,10 @@ answers back only to their originating chat. Its offset, bounded events, known
 chats, notification suppression, and ingress records persist in Valkey, while
 `/telegram` uses sender-scoped `telegram-*` websocket frames for status,
 details, and test sends. Enabling Telegram deliberately crosses the local
-privacy boundary.
+privacy boundary. Telegram ingress advances through atomic
+`reserved`/`message`/`stats`/`job`/`complete` stages, and active secret
+revisions cancel and replace one authenticated polling generation without
+resetting persistent state.
 Configuration saves and the agent's `notify` tool use narrow typed producer
 seams; notification creation itself does not duplicate activity-ledger events.
 Chat renders GFM pipe tables, buffers the latest task's agent steps

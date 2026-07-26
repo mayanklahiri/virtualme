@@ -1218,7 +1218,7 @@ benchmark, energy measurement, release date, or compatibility promise.
       permission; actions use audited full SHAs and no Pages action.
 - [ ] Repository Pages is manually configured once for `docs` `/ (root)` and
       `https://mayanklahiri.github.io/virtualme/` serves the deployed commit.
-- [ ] Spec 031 has replaced the placeholder with an export containing
+- [x] Spec 031 has replaced the placeholder with an export containing
       `schemaSha256`; every
       configuration section/option is deep-linkable and exposes exemplar
       YAML, values/constraints, defaults, examples, details, and tradeoffs.
@@ -1284,3 +1284,41 @@ documented one-time administrator action after the workflow first publishes
 the orphan branch; this execution did not contact GitHub or mutate repository
 settings. The complete generated configuration reference remains blocked on
 accepted, unimplemented spec 031 exactly as §8 requires.
+
+### 2026-07-25 — Post-031 implementation-audit remediation
+
+After specs 031–033 executed, a read-only audit found that the generated
+configuration artifact was current but the public page rendered only a subset
+of its fields. The remediation now renders choices, constraints, secret
+policy, examples, tradeoffs, links, and local-console deep links; adds desktop
+and mobile section navigation, focusable fragments, active-section state, and
+literal query filtering; and closes the spec-031 acceptance item above.
+
+The same audit removed the docs script's duplicate authored theme-ID registry,
+made analytics verification accept any valid committed or environment ID,
+completed static-output resource/fragment/budget checks, expanded browser
+accessibility and interaction coverage, added exporter fidelity checks to both
+documentation workflow jobs, and completed POSIX signal propagation for the
+source-checkout CLI. The hard-coded Markdown base path was replaced by a
+base-aware generated link.
+
+Browser contrast checks exposed three pre-existing light-mode accent pairs
+below WCAG AA: Arctic, Solar, and Studio. Their canonical accents were darkened
+to the existing `p1` shades (and Solar's accent foreground changed to white),
+then all five generated theme outputs were regenerated. This deliberately
+changes those three extracted tokens after the original extraction-only
+acceptance while preserving the one-source generation contract.
+
+The manual GitHub Pages item remains open. This remediation did not commit,
+push, deploy, contact an external service, or alter repository settings.
+
+Final remediation verification:
+
+| Command | Result |
+|---|---|
+| `node --test test/docs*.test.js` | Exit 0; all 11 docs CLI/build/workflow contracts passed. |
+| `npm --prefix docs run check` | Exit 0; Astro check and the 9-route/21-file verified static build passed. |
+| `./cli.sh docs build` | Exit 0; source-checkout build and complete output verification passed. |
+| `npm --prefix docs run test:browser` | Exit 0; all 5 expanded desktop/mobile, focus, interaction, theme, configuration, no-script, zoom, target-size, and reduced-motion suites passed. |
+| `npm run check` | Exit 0; all canonical gates, 108 Node tests, docs build, SPA build, and Go tests passed. |
+| `git diff --check` | Exit 0. |

@@ -251,8 +251,11 @@ guarded local-stub override exists only for offline e2e. Authorized messages
 enter shared chat with durable source, initiator, and correlation metadata;
 final-only delivery routes by envelope source. Persistent
 `virtualme:telegram:*` and bounded `virtualme:chat:ingress:telegram:*` keys are
-covered by spec 007. Run Telegram Go tests, the static UI test, and the local
-stub/probe before full gates.
+covered by spec 007. Ingress uses five recoverable stages and four fixed atomic
+Lua transitions across chat/jobs; resolver revisions replace a cancellable
+authenticated generation without resetting offset/events/chats. Run Telegram
+Go tests, the executable UI helpers, and the local stub/probe before full
+gates.
 
 ## How to add things
 

@@ -1,12 +1,28 @@
 import { createServer } from "node:http";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 
 const token = process.env.TELEGRAM_STUB_TOKEN || "obviously-fake-runtime-token";
 const record = process.env.TELEGRAM_STUB_RECORD || "";
 const script = process.env.TELEGRAM_STUB_UPDATES || "";
+const control = process.env.TELEGRAM_STUB_CONTROL || "";
 /** @type {any[]} */
 let updates = [];
+/** @type {any[]} */
+let actions = [];
+let controlLines = 0;
 if (script) updates = JSON.parse(readFileSync(script, "utf8"));
+
+function loadControl() {
+  if (!control) return;
+  let lines;
+  try { lines = readFileSync(control, "utf8").split("\n").filter(Boolean); } catch { return; }
+  for (const line of lines.slice(controlLines)) {
+    const action = JSON.parse(line);
+    if (action.update) updates.push(action.update);
+    else actions.push(action);
+  }
+  controlLines = lines.length;
+}
 
 /**
  * @param {import("node:http").ServerResponse} response
@@ -32,11 +48,21 @@ const server = createServer((request, response) => {
       return reply(response, 404, { ok: false, error_code: 404 });
     }
     const method = request.url.slice(prefix.length);
-    if (record) appendFileSync(record, `${JSON.stringify({ method, body })}\n`, { mode: 0o600 });
+    if (record) appendFileSync(record, `${JSON.stringify({ method, body, ts: Date.now() })}\n`, { mode: 0o600 });
     if (method === "getMe") {
       return reply(response, 200, { ok: true, result: { id: 123456, is_bot: true, first_name: "Virtual Me Test", username: "virtualme_test_bot" } });
     }
     if (method === "getUpdates") {
+      loadControl();
+      const action = actions.shift();
+      if (action?.error) {
+        if (record) appendFileSync(record, `${JSON.stringify({
+          method: "getUpdatesResult", error: action.error,
+          retry_after: action.retry_after, ts: Date.now(),
+        })}\n`, { mode: 0o600 });
+        const parameters = action.retry_after ? { retry_after: action.retry_after } : undefined;
+        return reply(response, action.error, { ok: false, error_code: action.error, parameters });
+      }
       const offset = Number(body.offset || 0);
       const ready = updates.filter((item) => item.update_id >= offset);
       updates = updates.filter((item) => item.update_id < offset);
@@ -54,6 +80,7 @@ server.listen(Number(process.env.TELEGRAM_STUB_PORT || 0), process.env.TELEGRAM_
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Telegram stub has no TCP address");
   process.stdout.write(`TELEGRAM_STUB_READY=${address.port}\n`);
+  if (control) writeFileSync(control, "", { mode: 0o600 });
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

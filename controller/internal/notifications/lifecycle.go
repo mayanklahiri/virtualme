@@ -30,11 +30,55 @@ type Lifecycle struct {
 	service *Service
 	path    string
 	marker  lifecycleMarker
+	fs      lifecycleFS
+}
+
+type syncFile interface {
+	Write([]byte) (int, error)
+	Sync() error
+	Close() error
+}
+
+type syncDir interface {
+	Sync() error
+	Close() error
+}
+
+type lifecycleFS struct {
+	mkdirAll func(string, os.FileMode) error
+	readFile func(string) ([]byte, error)
+	openTemp func(string, string) (syncFile, string, error)
+	rename   func(string, string) error
+	remove   func(string) error
+	openDir  func(string) (syncDir, error)
+}
+
+func defaultLifecycleFS() lifecycleFS {
+	return lifecycleFS{
+		mkdirAll: os.MkdirAll,
+		readFile: os.ReadFile,
+		openTemp: func(dir, pattern string) (syncFile, string, error) {
+			file, err := os.CreateTemp(dir, pattern)
+			if err != nil {
+				return nil, "", err
+			}
+			return file, file.Name(), nil
+		},
+		rename: os.Rename,
+		remove: os.Remove,
+		openDir: func(path string) (syncDir, error) {
+			return os.Open(path)
+		},
+	}
 }
 
 // NewLifecycle binds lifecycle evidence to a notification service.
 func NewLifecycle(service *Service) *Lifecycle {
-	return &Lifecycle{service: service, path: filepath.Join(service.dataDir, lifecycleFileName)}
+	return &Lifecycle{
+		service: service,
+		path:    filepath.Join(service.dataDir, lifecycleFileName),
+		fs:      defaultLifecycleFS(),
+	}
 }
 
 // Startup recovers prior evidence and starts a new run.
@@ -111,9 +155,18 @@ func (l *Lifecycle) uncleanRecovery(ctx context.Context, previous lifecycleMarke
 	if err != nil {
 		return err
 	}
+	markerRunID := previous.RunID
+	markerStartedAt := previous.StartedAtMS
+	if !validULID(markerRunID) || markerStartedAt <= 0 {
+		markerRunID, err = l.service.ids.next()
+		if err != nil {
+			return err
+		}
+		markerStartedAt = now
+	}
 	pending := lifecycleMarker{
-		Version: 1, State: "clean-pending", RunID: previous.RunID,
-		StartedAtMS: previous.StartedAtMS, UpdatedAtMS: now,
+		Version: 1, State: "clean-pending", RunID: markerRunID,
+		StartedAtMS: markerStartedAt, UpdatedAtMS: now,
 		Reason: "unclean-recovery", NotificationID: notification.ID,
 		PendingNotification: &notification,
 	}
@@ -247,38 +300,100 @@ func marshalDetail(value any) json.RawMessage {
 }
 
 func (l *Lifecycle) readMarker() (lifecycleMarker, string, error) {
-	data, err := os.ReadFile(l.path)
+	data, err := l.fs.readFile(l.path)
 	if err != nil {
 		return lifecycleMarker{}, "absent", err
 	}
 	var marker lifecycleMarker
-	if json.Unmarshal(data, &marker) != nil || marker.Version != 1 ||
-		!validULID(marker.RunID) || marker.StartedAtMS <= 0 || marker.UpdatedAtMS <= 0 {
-		return lifecycleMarker{}, "malformed", nil
-	}
-	switch marker.State {
-	case "running", "planned-restart", "clean-pending", "clean":
-	default:
+	if json.Unmarshal(data, &marker) != nil || validateLifecycleMarker(marker) != nil {
 		return lifecycleMarker{}, "malformed", nil
 	}
 	return marker, "valid", nil
 }
 
+func validateLifecycleMarker(marker lifecycleMarker) error {
+	if marker.Version != 1 || !validULID(marker.RunID) ||
+		marker.StartedAtMS <= 0 || marker.UpdatedAtMS < marker.StartedAtMS {
+		return errors.New("invalid lifecycle marker")
+	}
+	noNotification := marker.NotificationID == "" && marker.PendingNotification == nil
+	switch marker.State {
+	case "running":
+		if marker.Reason != "" || marker.DeadlineMS != 0 || !noNotification {
+			return errors.New("invalid running lifecycle marker")
+		}
+	case "planned-restart":
+		if marker.Reason != "config-restart" || marker.DeadlineMS != marker.UpdatedAtMS+120000 ||
+			!noNotification {
+			return errors.New("invalid planned-restart lifecycle marker")
+		}
+	case "clean":
+		if (marker.Reason != "container-stop" && marker.Reason != "config-restart") ||
+			marker.DeadlineMS != 0 || !validULID(marker.NotificationID) ||
+			marker.PendingNotification != nil {
+			return errors.New("invalid clean lifecycle marker")
+		}
+	case "clean-pending":
+		if marker.DeadlineMS != 0 || !validULID(marker.NotificationID) ||
+			marker.PendingNotification == nil ||
+			marker.NotificationID != marker.PendingNotification.ID ||
+			validateExact(*marker.PendingNotification) != nil {
+			return errors.New("invalid clean-pending lifecycle marker")
+		}
+		expected, ok := map[string]struct {
+			notificationType string
+			subtype          string
+			title            string
+			summary          string
+		}{
+			"unclean-recovery": {
+				"error", "unclean-startup", "Controller restarted unexpectedly",
+				"The previous controller run did not shut down cleanly.",
+			},
+			"container-stop": {
+				"info", "clean-shutdown", "Controller shutting down",
+				"The controller received a shutdown request and saved its state.",
+			},
+			"config-restart": {
+				"info", "config-restart-shutdown", "Controller restarting",
+				"The controller is restarting to apply configuration changes.",
+			},
+			"config-restart-startup": {
+				"success", "config-restart-startup", "Configuration restart complete",
+				"The controller restarted cleanly after configuration changed.",
+			},
+		}[marker.Reason]
+		pending := marker.PendingNotification
+		if !ok || pending.Type != expected.notificationType || pending.Subtype != expected.subtype ||
+			pending.Sender != "controller" || pending.Title != expected.title ||
+			pending.Summary != expected.summary || pending.Detail.Renderer != "lifecycle" {
+			return errors.New("invalid clean-pending lifecycle reason")
+		}
+	default:
+		return errors.New("invalid lifecycle state")
+	}
+	return nil
+}
+
 func (l *Lifecycle) writeMarker(marker lifecycleMarker) error {
-	if err := os.MkdirAll(filepath.Dir(l.path), 0o700); err != nil {
+	if err := validateLifecycleMarker(marker); err != nil {
+		return err
+	}
+	dirPath := filepath.Dir(l.path)
+	if err := l.fs.mkdirAll(dirPath, 0o700); err != nil {
 		return err
 	}
 	encoded, err := json.Marshal(marker)
 	if err != nil {
 		return err
 	}
-	temp, err := os.OpenFile(l.path+".tmp", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	temp, tempPath, err := l.fs.openTemp(dirPath, "."+filepath.Base(l.path)+".tmp-*")
 	if err != nil {
 		return err
 	}
 	cleanup := func(writeErr error) error {
 		_ = temp.Close()
-		_ = os.Remove(l.path + ".tmp")
+		_ = l.fs.remove(tempPath)
 		return writeErr
 	}
 	if _, err := temp.Write(append(encoded, '\n')); err != nil {
@@ -290,10 +405,10 @@ func (l *Lifecycle) writeMarker(marker lifecycleMarker) error {
 	if err := temp.Close(); err != nil {
 		return cleanup(err)
 	}
-	if err := os.Rename(l.path+".tmp", l.path); err != nil {
-		return err
+	if err := l.fs.rename(tempPath, l.path); err != nil {
+		return cleanup(err)
 	}
-	dir, err := os.Open(filepath.Dir(l.path))
+	dir, err := l.fs.openDir(dirPath)
 	if err != nil {
 		return err
 	}

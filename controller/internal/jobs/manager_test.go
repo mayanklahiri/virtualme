@@ -333,6 +333,23 @@ func TestDropInitiatorCancelsAndPreservesScheduled(t *testing.T) {
 	}
 }
 
+func TestDropConnectionNormalizesLegacyRunningEnvelope(t *testing.T) {
+	server := newMemoryRESP(t)
+	manager := New(valkey.New(server.addr), func([]byte) {})
+	ctx, cancel := context.WithCancelCause(context.Background())
+	manager.running = &runningJob{
+		env:    Envelope{ID: "legacy", Type: "chat", InitiatorConn: "c1"},
+		cancel: cancel,
+	}
+	manager.DropConnection("c1")
+	if cause := context.Cause(ctx); cause == nil || !strings.Contains(cause.Error(), "disconnected") {
+		t.Fatalf("legacy running job was not canceled: %v", cause)
+	}
+	if manager.running.env.Initiator.ID != "ws:c1" || manager.running.env.InitiatorConn != "" {
+		t.Fatalf("legacy running envelope not normalized: %+v", manager.running.env)
+	}
+}
+
 func TestSchedulerPauseSkipsPromotion(t *testing.T) {
 	manager, server := newTestManager(t)
 	manager.RegisterSource(func(now time.Time) []Envelope {

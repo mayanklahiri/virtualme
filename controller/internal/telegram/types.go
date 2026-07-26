@@ -35,10 +35,11 @@ type Message struct {
 }
 
 type Update struct {
-	UpdateID      int64           `json:"update_id"`
-	Message       *Message        `json:"message,omitempty"`
-	EditedMessage *Message        `json:"edited_message,omitempty"`
-	Raw           json.RawMessage `json:"-"`
+	UpdateID           int64           `json:"update_id"`
+	Message            *Message        `json:"message,omitempty"`
+	EditedMessage      *Message        `json:"edited_message,omitempty"`
+	UnsupportedPresent bool            `json:"-"`
+	Raw                json.RawMessage `json:"-"`
 }
 
 func (u *Update) UnmarshalJSON(raw []byte) error {
@@ -49,6 +50,16 @@ func (u *Update) UnmarshalJSON(raw []byte) error {
 	}
 	*u = Update(value)
 	u.Raw = append(u.Raw[:0], raw...)
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return err
+	}
+	for key := range fields {
+		if key != "update_id" && key != "message" && key != "edited_message" {
+			u.UnsupportedPresent = true
+			break
+		}
+	}
 	return nil
 }
 
@@ -82,7 +93,6 @@ type Response[T any] struct {
 
 type Config struct {
 	Enabled            bool
-	BotToken           string
 	AllowedChatIDs     []string
 	AllowedUserIDs     []string
 	PollTimeoutSeconds int

@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Schema struct {
@@ -77,6 +78,10 @@ func (s *Schema) metaValidate() error {
 	if s.root["$id"] != "https://virtualme.local/schemas/config-v1.json" {
 		return errors.New("$id must identify config v1")
 	}
+	if strings.TrimSpace(stringValue(s.root["title"])) == "" ||
+		strings.TrimSpace(stringValue(s.root["description"])) == "" {
+		return errors.New("root title and description must be non-empty strings")
+	}
 	envPaths := map[string]string{}
 	if err := s.metaNode(s.root, "", envPaths, map[string]bool{}); err != nil {
 		return err
@@ -126,6 +131,9 @@ func (s *Schema) metaNode(node map[string]any, path string, envPaths map[string]
 	if !ok || !allowedTypes[kind] {
 		return fmt.Errorf("%s: invalid type", path)
 	}
+	if err := validateKeywordShapes(node, kind, path); err != nil {
+		return err
+	}
 	if pattern, ok := node["pattern"].(string); ok {
 		if _, err := regexp.Compile(pattern); err != nil {
 			return fmt.Errorf("%s: bad pattern: %w", path, err)
@@ -138,11 +146,15 @@ func (s *Schema) metaNode(node map[string]any, path string, envPaths map[string]
 		if !contains([]string{"none", "controller", "ttsd", "llama", "desktop", "valkey", "mail", "all"}, restart) {
 			return fmt.Errorf("%s: invalid x-vm-restart", path)
 		}
+		ui, _ := node["x-vm-ui"].(map[string]any)
+		if restart == "none" && stringValue(ui["component"]) != "vm-readonly-field" {
+			return fmt.Errorf("%s: x-vm-restart none requires display-only metadata", path)
+		}
 	} else if kind != "object" {
 		return fmt.Errorf("%s: leaf missing x-vm-restart", path)
 	}
 	if path != "" {
-		if err := validateDoc(node["x-vm-doc"], path); err != nil {
+		if err := validateDoc(node["x-vm-doc"], node["enum"], path); err != nil {
 			return err
 		}
 		if err := validateUI(node["x-vm-ui"], kind, path); err != nil {
@@ -305,9 +317,115 @@ func (s *Schema) metaNode(node map[string]any, path string, envPaths map[string]
 	return nil
 }
 
-func validateDoc(raw any, path string) error {
+func validateKeywordShapes(node map[string]any, kind, path string) error {
+	for _, name := range []string{"title", "description"} {
+		if value, exists := node[name]; exists {
+			if _, ok := value.(string); !ok {
+				return fmt.Errorf("%s: %s must be a string", path, name)
+			}
+		}
+	}
+	rootOnly := []string{"$schema", "$id", "$defs"}
+	for _, name := range rootOnly {
+		if _, exists := node[name]; exists && path != "" {
+			return fmt.Errorf("%s: %s is only valid at the schema root", path, name)
+		}
+	}
+	if defs, exists := node["$defs"]; exists {
+		if _, ok := defs.(map[string]any); !ok {
+			return fmt.Errorf("%s: $defs must be an object", path)
+		}
+	}
+	applicability := map[string]string{
+		"properties": "object", "required": "object", "additionalProperties": "object",
+		"items": "array", "uniqueItems": "array",
+		"minLength": "string", "maxLength": "string", "pattern": "string",
+	}
+	for keyword, requiredKind := range applicability {
+		if _, exists := node[keyword]; exists && kind != requiredKind {
+			return fmt.Errorf("%s: %s is not valid for type %s", path, keyword, kind)
+		}
+	}
+	for _, keyword := range []string{"minimum", "maximum"} {
+		if value, exists := node[keyword]; exists {
+			if kind != "integer" && kind != "number" {
+				return fmt.Errorf("%s: %s is not valid for type %s", path, keyword, kind)
+			}
+			number, ok := numberValue(value)
+			if !ok || math.IsNaN(number) || math.IsInf(number, 0) {
+				return fmt.Errorf("%s: %s must be a finite number", path, keyword)
+			}
+		}
+	}
+	if minimum, minimumOK := numberValue(node["minimum"]); minimumOK {
+		if maximum, maximumOK := numberValue(node["maximum"]); maximumOK && minimum > maximum {
+			return fmt.Errorf("%s: minimum exceeds maximum", path)
+		}
+	}
+	for _, keyword := range []string{"minLength", "maxLength"} {
+		if value, exists := node[keyword]; exists {
+			length, ok := integerValue(value)
+			if !ok || length < 0 {
+				return fmt.Errorf("%s: %s must be a non-negative integer", path, keyword)
+			}
+		}
+	}
+	if minimum, minimumOK := integerValue(node["minLength"]); minimumOK {
+		if maximum, maximumOK := integerValue(node["maxLength"]); maximumOK && minimum > maximum {
+			return fmt.Errorf("%s: minLength exceeds maxLength", path)
+		}
+	}
+	if pattern, exists := node["pattern"]; exists {
+		if _, ok := pattern.(string); !ok {
+			return fmt.Errorf("%s: pattern must be a string", path)
+		}
+	}
+	if choices, exists := node["enum"]; exists {
+		values, ok := choices.([]any)
+		if !ok || len(values) == 0 {
+			return fmt.Errorf("%s: enum must be a non-empty array", path)
+		}
+		seen := map[string]bool{}
+		for _, value := range values {
+			encoded, err := json.Marshal(normalizeNumber(value))
+			if err != nil || seen[string(encoded)] {
+				return fmt.Errorf("%s: enum values must be valid and unique", path)
+			}
+			seen[string(encoded)] = true
+			if issues := (&Schema{}).validateNode(map[string]any{"type": kind}, value, path, nil); len(issues) > 0 {
+				return fmt.Errorf("%s: enum value has the wrong type", path)
+			}
+		}
+	}
+	if value, exists := node["uniqueItems"]; exists && value != true {
+		return fmt.Errorf("%s: uniqueItems must be true", path)
+	}
+	if value, exists := node["x-vm-env"]; exists {
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("%s: x-vm-env must be a string", path)
+		}
+	}
+	if value, exists := node["x-vm-sensitive"]; exists {
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("%s: x-vm-sensitive must be a string", path)
+		}
+	}
+	if value, exists := node["x-vm-restart"]; exists {
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("%s: x-vm-restart must be a string", path)
+		}
+	}
+	return nil
+}
+
+func validateDoc(raw, enumRaw any, path string) error {
 	doc, ok := raw.(map[string]any)
-	if !ok || !exactKeys(doc, "overview", "details", "tradeoffs", "examples", "links", "order") {
+	enum := anyArray(enumRaw)
+	keys := []string{"overview", "details", "tradeoffs", "examples", "links", "order"}
+	if len(enum) > 0 {
+		keys = append(keys, "choices")
+	}
+	if !ok || !exactKeys(doc, keys...) {
 		return fmt.Errorf("%s: malformed x-vm-doc", path)
 	}
 	if strings.TrimSpace(stringValue(doc["overview"])) == "" {
@@ -355,6 +473,20 @@ func validateDoc(raw any, path string) error {
 					!(strings.HasPrefix(href, "https://") || strings.HasPrefix(href, "../") || strings.HasPrefix(href, "./")) {
 					return fmt.Errorf("%s: invalid x-vm-doc link", path)
 				}
+			}
+		}
+	}
+	if len(enum) > 0 {
+		choices, ok := doc["choices"].([]any)
+		if !ok || len(choices) != len(enum) {
+			return fmt.Errorf("%s: x-vm-doc choices must explain every enum value", path)
+		}
+		for index, rawChoice := range choices {
+			choice, ok := rawChoice.(map[string]any)
+			if !ok || !exactKeys(choice, "value", "description") ||
+				!reflect.DeepEqual(normalizeTree(choice["value"]), normalizeTree(enum[index])) ||
+				strings.TrimSpace(stringValue(choice["description"])) == "" {
+				return fmt.Errorf("%s: malformed x-vm-doc choice at index %d", path, index)
 			}
 		}
 	}
@@ -435,6 +567,22 @@ func (s *Schema) nodeAtPath(dotted string) (map[string]any, error) {
 		node = next
 	}
 	return node, nil
+}
+
+func (s *Schema) SecretTTL(dotted string) (time.Duration, error) {
+	node, err := s.nodeAtPath(dotted)
+	if err != nil {
+		return 0, err
+	}
+	secret, ok := node["x-vm-secret"].(map[string]any)
+	if !ok {
+		return 0, fmt.Errorf("%s is not a secret field", dotted)
+	}
+	seconds, ok := integerValue(secret["cacheTtlSeconds"])
+	if !ok {
+		return 0, fmt.Errorf("%s has invalid secret TTL", dotted)
+	}
+	return time.Duration(seconds) * time.Second, nil
 }
 
 func (s *Schema) validateExamples() error {

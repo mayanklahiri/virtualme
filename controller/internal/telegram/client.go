@@ -54,7 +54,9 @@ func NewClient(base, token string, client *http.Client) (*Client, error) {
 
 func (c *Client) GetMe(ctx context.Context) (User, error) {
 	var result User
-	err := c.call(ctx, "getMe", struct{}{}, &result)
+	child, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	err := c.call(child, "getMe", struct{}{}, &result)
 	return result, err
 }
 

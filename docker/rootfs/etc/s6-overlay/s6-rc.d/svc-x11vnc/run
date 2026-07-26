@@ -2,6 +2,11 @@
 source /run/virtualme/config.env
 export DISPLAY="$VM_EFFECTIVE_DISPLAY"
 until xdpyinfo >/dev/null 2>&1; do sleep 0.2; done
-vnc_port="${VM_EFFECTIVE_VNC_ADDRESS##*:}"
-exec x11vnc -display "$VM_EFFECTIVE_DISPLAY" -forever -shared -nopw -localhost \
-  -rfbport "$vnc_port" -noxdamage -cursor most -quiet
+if [[ "$VM_EFFECTIVE_VNC_HOST" == *:* ]]; then
+  listen_flags=(-6 -noipv4 -listen6 "$VM_EFFECTIVE_VNC_HOST" -rfbportv6 "$VM_EFFECTIVE_VNC_PORT")
+else
+  listen_flags=(-no6 -listen "$VM_EFFECTIVE_VNC_HOST" -rfbport "$VM_EFFECTIVE_VNC_PORT")
+fi
+exec x11vnc -display "$VM_EFFECTIVE_DISPLAY" -forever -shared -nopw \
+  "${listen_flags[@]}" \
+  -noxdamage -cursor most -quiet

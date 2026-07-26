@@ -34,7 +34,7 @@
           "type": "string",
           "default": "UTC",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 128,
             "minLength": 1
@@ -89,7 +89,7 @@
           "type": "string",
           "default": ":8080",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 255,
             "minLength": 1
@@ -117,7 +117,7 @@
           "type": "string",
           "default": "http://127.0.0.1:6080",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 2048,
             "minLength": 1
@@ -171,7 +171,7 @@
           "type": "string",
           "default": ":99",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "pattern": "^:[0-9]+$"
           },
@@ -198,7 +198,7 @@
           "type": "string",
           "default": "1600x900x24",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "pattern": "^[0-9]+x[0-9]+x(16|24|32)$"
           },
@@ -225,7 +225,7 @@
           "type": "string",
           "default": "/tmp/.X11-unix",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 1
@@ -233,6 +233,7 @@
           "restart": "desktop",
           "legacyEnv": "VM_X11_SOCKET_DIR",
           "secret": false,
+          "sensitivity": "path",
           "overview": "Locates X11 Unix sockets.",
           "details": [],
           "tradeoffs": [],
@@ -253,7 +254,7 @@
           "type": "string",
           "default": "127.0.0.1:5900",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 255,
             "minLength": 1
@@ -281,7 +282,7 @@
           "type": "string",
           "default": "127.0.0.1:6080",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 255,
             "minLength": 1
@@ -308,7 +309,7 @@
           "type": "string",
           "default": "127.0.0.1:5900",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 255,
             "minLength": 1
@@ -335,7 +336,7 @@
           "type": "string",
           "default": "http://127.0.0.1:6080/vnc.html",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 2048,
             "minLength": 1
@@ -363,7 +364,7 @@
           "type": "string",
           "default": "http://127.0.0.1:9222",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 2048,
             "minLength": 1
@@ -390,7 +391,7 @@
           "type": "integer",
           "default": 3,
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maximum": 30,
             "minimum": 1
@@ -443,7 +444,7 @@
           "type": "string",
           "default": "127.0.0.1:6379",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 255,
             "minLength": 1
@@ -504,7 +505,7 @@
           "type": "string",
           "default": "127.0.0.1:8081",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 255,
             "minLength": 1
@@ -532,7 +533,7 @@
           "type": "integer",
           "default": 32768,
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maximum": 131072,
             "minimum": 2048
@@ -568,7 +569,7 @@
           "type": "string",
           "default": "/opt/models/gemma-4-E2B-it-Q4_0.gguf",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 1
@@ -576,6 +577,7 @@
           "restart": "llama",
           "legacyEnv": "VM_MODEL_PATH",
           "secret": false,
+          "sensitivity": "path",
           "overview": "Selects the pinned local model.",
           "details": [],
           "tradeoffs": [],
@@ -596,7 +598,7 @@
           "type": "string",
           "default": "/opt/models/mmproj-gemma-4-E2B-F16.gguf",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 1
@@ -604,6 +606,7 @@
           "restart": "llama",
           "legacyEnv": "VM_MMPROJ_PATH",
           "secret": false,
+          "sensitivity": "path",
           "overview": "Selects the model's vision projector.",
           "details": [],
           "tradeoffs": [],
@@ -624,7 +627,7 @@
           "type": "integer",
           "default": 0,
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maximum": 1024,
             "minimum": 0
@@ -652,7 +655,7 @@
           "type": "string",
           "default": "http://127.0.0.1:8081/v1/chat/completions",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 2048,
             "minLength": 1
@@ -704,7 +707,7 @@
           "type": "string",
           "default": "127.0.0.1:8082",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 255,
             "minLength": 1
@@ -732,7 +735,7 @@
           "type": "string",
           "default": "http://127.0.0.1:8082/healthz",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 2048,
             "minLength": 1
@@ -760,7 +763,7 @@
           "type": "string",
           "default": "/opt/sherpa-onnx",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 1
@@ -768,6 +771,7 @@
           "restart": "ttsd",
           "legacyEnv": "VM_SHERPA_DIR",
           "secret": false,
+          "sensitivity": "path",
           "overview": "Locates the speech runtime.",
           "details": [],
           "tradeoffs": [],
@@ -788,7 +792,7 @@
           "type": "string",
           "default": "/opt/models/tts",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 1
@@ -796,6 +800,7 @@
           "restart": "ttsd",
           "legacyEnv": "VM_TTS_MODEL_DIR",
           "secret": false,
+          "sensitivity": "path",
           "overview": "Locates the pinned voice model.",
           "details": [],
           "tradeoffs": [],
@@ -816,7 +821,7 @@
           "type": "string",
           "default": "${data}/tts-cache",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 1
@@ -824,6 +829,7 @@
           "restart": "ttsd",
           "legacyEnv": "VM_TTS_CACHE_DIR",
           "secret": false,
+          "sensitivity": "path",
           "overview": "Stores disposable rendered sentences.",
           "details": [],
           "tradeoffs": [],
@@ -844,7 +850,7 @@
           "type": "integer",
           "default": 256,
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maximum": 65536,
             "minimum": 1
@@ -872,7 +878,7 @@
           "type": "integer",
           "default": 4096,
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maximum": 65536,
             "minimum": 1
@@ -925,7 +931,7 @@
           "type": "integer",
           "default": 500,
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maximum": 5000,
             "minimum": 1
@@ -953,7 +959,7 @@
           "type": "integer",
           "default": 20,
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maximum": 1000,
             "minimum": 1
@@ -981,7 +987,7 @@
           "type": "string",
           "default": "xdotool",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 1
@@ -989,6 +995,7 @@
           "restart": "controller",
           "legacyEnv": "VM_XDOTOOL",
           "secret": false,
+          "sensitivity": "path",
           "overview": "Provides OS-level browser input.",
           "details": [],
           "tradeoffs": [],
@@ -1009,13 +1016,14 @@
           "type": "string",
           "default": "scrot",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 1
           },
           "restart": "controller",
           "secret": false,
+          "sensitivity": "path",
           "overview": "Captures the virtual desktop.",
           "details": [],
           "tradeoffs": [],
@@ -1036,13 +1044,14 @@
           "type": "string",
           "default": "convert",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 1
           },
           "restart": "controller",
           "secret": false,
+          "sensitivity": "path",
           "overview": "Prepares screenshots for vision.",
           "details": [],
           "tradeoffs": [],
@@ -1063,13 +1072,14 @@
           "type": "string",
           "default": "bash",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 1
           },
           "restart": "controller",
           "secret": false,
+          "sensitivity": "path",
           "overview": "Runs bounded local shell tools.",
           "details": [],
           "tradeoffs": [],
@@ -1090,13 +1100,14 @@
           "type": "string",
           "default": "/opt/agent/system-manifest.json",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 1
           },
           "restart": "controller",
           "secret": false,
+          "sensitivity": "path",
           "overview": "Grounds the agent in installed capabilities.",
           "details": [],
           "tradeoffs": [],
@@ -1144,7 +1155,7 @@
           "type": "string",
           "default": "",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 255,
             "minLength": 0
@@ -1172,7 +1183,7 @@
           "type": "string",
           "default": "",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 320,
             "minLength": 0
@@ -1200,7 +1211,7 @@
           "type": "string",
           "default": "",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 255,
             "minLength": 0
@@ -1228,7 +1239,7 @@
           "type": "integer",
           "default": 587,
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maximum": 65535,
             "minimum": 1
@@ -1256,7 +1267,7 @@
           "type": "string",
           "default": "",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 512,
             "minLength": 0
@@ -1264,6 +1275,7 @@
           "restart": "mail",
           "legacyEnv": "VM_MAIL_SMARTHOST_USER",
           "secret": false,
+          "sensitivity": "credential",
           "overview": "Authenticates to the relay.",
           "details": [],
           "tradeoffs": [],
@@ -1284,7 +1296,7 @@
           "type": "string",
           "default": "",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 0
@@ -1292,6 +1304,12 @@
           "restart": "mail",
           "legacyEnv": "VM_MAIL_SMARTHOST_PASS",
           "secret": true,
+          "secretPolicy": {
+            "allowEnv": true,
+            "allowFile": true,
+            "cacheTtlSeconds": 300
+          },
+          "sensitivity": "credential",
           "overview": "References relay credentials without persisting bytes.",
           "details": [],
           "tradeoffs": [],
@@ -1312,7 +1330,7 @@
           "type": "string",
           "default": "",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 255,
             "minLength": 0
@@ -1340,7 +1358,7 @@
           "type": "string",
           "default": "virtualme",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 63,
             "minLength": 1,
@@ -1369,7 +1387,7 @@
           "type": "integer",
           "default": 60,
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maximum": 86400,
             "minimum": 5
@@ -1397,7 +1415,7 @@
           "type": "string",
           "default": "/usr/sbin/sendmail",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 1
@@ -1405,6 +1423,7 @@
           "restart": "controller",
           "legacyEnv": "VM_SENDMAIL_PATH",
           "secret": false,
+          "sensitivity": "path",
           "overview": "Submits composed messages to dma.",
           "details": [],
           "tradeoffs": [],
@@ -1425,7 +1444,7 @@
           "type": "string",
           "default": "${data}/mail/spool",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 1
@@ -1433,6 +1452,7 @@
           "restart": "mail",
           "legacyEnv": "VM_MAIL_SPOOL_DIR",
           "secret": false,
+          "sensitivity": "path",
           "overview": "Stores queued outbound messages.",
           "details": [],
           "tradeoffs": [],
@@ -1478,7 +1498,7 @@
           "type": "string",
           "default": "http://127.0.0.1:8081/health",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 2048,
             "minLength": 1
@@ -1506,7 +1526,7 @@
           "type": "string",
           "default": "xdotool",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 1
@@ -1514,6 +1534,7 @@
           "restart": "controller",
           "legacyEnv": "VM_XDOTOOL",
           "secret": false,
+          "sensitivity": "path",
           "overview": "Checks desktop input capability.",
           "details": [],
           "tradeoffs": [],
@@ -1556,7 +1577,7 @@
           "type": "boolean",
           "default": false,
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {},
           "restart": "controller",
           "secret": false,
@@ -1580,13 +1601,23 @@
           "type": "string",
           "default": "",
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maxLength": 4096,
             "minLength": 0
           },
           "restart": "controller",
           "secret": true,
+          "secretPolicy": {
+            "allowEnv": true,
+            "allowFile": true,
+            "cacheTtlSeconds": 300,
+            "resolveWhen": {
+              "equals": true,
+              "path": "integrations.telegram.enabled"
+            }
+          },
+          "sensitivity": "credential",
           "overview": "References the BotFather token without persisting credential bytes.",
           "details": [
             "A non-empty whole-scalar environment or file reference is required while enabled."
@@ -1614,12 +1645,29 @@
           "type": "array",
           "default": [],
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "uniqueItems": true
           },
           "restart": "controller",
           "secret": false,
+          "item": {
+            "type": "string",
+            "default": "1",
+            "choices": [],
+            "constraints": {
+              "pattern": "^-?[1-9][0-9]*$"
+            },
+            "overview": "Canonical decimal Telegram chat ID.",
+            "details": [],
+            "ui": {
+              "advanced": false,
+              "component": "vm-text-field",
+              "control": "text",
+              "order": 1,
+              "section": "Integrations"
+            }
+          },
           "overview": "Required chat allowlist; every inbound and test-send chat must match.",
           "details": [
             "This list is ANDed with the optional user allowlist."
@@ -1642,12 +1690,29 @@
           "type": "array",
           "default": [],
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "uniqueItems": true
           },
           "restart": "controller",
           "secret": false,
+          "item": {
+            "type": "string",
+            "default": "1",
+            "choices": [],
+            "constraints": {
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "overview": "Canonical positive decimal Telegram user ID.",
+            "details": [],
+            "ui": {
+              "advanced": false,
+              "component": "vm-text-field",
+              "control": "text",
+              "order": 1,
+              "section": "Integrations"
+            }
+          },
           "overview": "Optional user allowlist applied in addition to the chat allowlist.",
           "details": [
             "When empty, every human sender in an allowed chat is authorized."
@@ -1670,7 +1735,7 @@
           "type": "integer",
           "default": 30,
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maximum": 50,
             "minimum": 1
@@ -1703,7 +1768,7 @@
           "type": "integer",
           "default": 200,
           "required": true,
-          "choices": null,
+          "choices": [],
           "constraints": {
             "maximum": 1000,
             "minimum": 20

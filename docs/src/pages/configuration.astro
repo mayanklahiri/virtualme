@@ -4,36 +4,136 @@ import CodeBlock from "../components/CodeBlock.astro";
 import reference from "../generated/config-reference.json";
 import "../styles/docs.css";
 const complete = "schemaSha256" in reference;
+interface Link { href: string; label: string; }
+interface Example { label: string; yaml: string; }
+interface Tradeoff { choice: string; benefit: string; cost: string; }
+interface SecretPolicy {
+  allowEnv: boolean; allowFile: boolean; cacheTtlSeconds: number;
+  resolveWhen?: { path: string; equals: unknown };
+}
+interface Choice { value: unknown; description: string; }
+interface Item {
+  type: string; default: unknown; choices: Choice[]; constraints: Record<string, unknown>;
+  overview: string; details: string[];
+}
 interface Setting {
   path: string; anchor: string; type: string; default: unknown; required: boolean;
-  restart: string; legacyEnv?: string; overview: string; details: string[];
+  choices: Choice[]; constraints: Record<string, unknown>; restart: string;
+  legacyEnv?: string; secret: boolean; secretPolicy?: SecretPolicy; sensitivity?: string;
+  item?: Item;
+  overview: string; details: string[]; tradeoffs: Tradeoff[]; examples: Example[];
+  links: Link[]; consoleDeepLink: string;
 }
 interface Section {
-  anchor: string; title: string; overview: string; details: string[];
-  exemplarYaml: string; settings: Setting[];
+  anchor: string; title: string; overview: string; details: string[]; tradeoffs: Tradeoff[];
+  examples: Example[]; links: Link[]; exemplarYaml: string; settings: Setting[];
+  consoleDeepLink: string;
 }
 const sections = reference.sections as Section[];
+const value = (input: unknown) => JSON.stringify(input);
+const consoleURL = (path: string) => `http://localhost:8080${path}`;
 ---
 <DocsLayout title="Configuration" description="Generated Virtual Me configuration reference and operational guidance." path="configuration/">
   <p class="eyebrow">Generated reference</p><h1>Configuration, with every tradeoff attached.</h1>
   {!complete ? <div class="pending"><h2 id="pending">Pending spec 031</h2><p>The authoritative generated option reference is pending spec 031. No options are invented here. Until then, use the current <a href="https://github.com/mayanklahiri/virtualme#readme">README configuration guidance</a>.</p></div> :
   <div class="reference-layout">
-    <aside class="reference-rail"><label for="config-filter">Filter exact option text</label><input id="config-filter" type="search" /><p id="config-count"></p><nav aria-label="Configuration sections">{sections.map((section) => <a href={`#${section.anchor}`}>{section.title}</a>)}</nav></aside>
-    <div>{sections.map((section) => <section id={section.anchor} data-config-section tabindex="-1"><h2>{section.title} <a class="permalink" href={`#${section.anchor}`} aria-label={`Permalink to ${section.title}`}>#</a></h2><p>{section.overview}</p>{section.details.map((detail) => <p>{detail}</p>)}<CodeBlock code={section.exemplarYaml} label={`Copy ${section.title} YAML`} />{section.settings.map((setting) => <article id={setting.anchor} class="reference-card" data-config-card data-search={`${setting.path} ${setting.overview}`.toLowerCase()} tabindex="-1"><h3><code>{setting.path}</code> <a class="permalink" href={`#${setting.anchor}`} aria-label={`Permalink to ${setting.path}`}>#</a></h3><p>{setting.overview}</p><dl><dt>Type</dt><dd>{setting.type}</dd><dt>Presence</dt><dd>{setting.required ? "Required" : "Optional"}</dd><dt>Default</dt><dd><code>{JSON.stringify(setting.default)}</code></dd><dt>Restart</dt><dd>{setting.restart}</dd>{setting.legacyEnv && <><dt>Legacy environment variable</dt><dd><code>{setting.legacyEnv}</code></dd></>}</dl>{setting.details.map((detail) => <p>{detail}</p>)}</article>)}</section>)}</div>
+    <aside class="reference-rail">
+      <label for="config-filter">Filter exact option text</label>
+      <input id="config-filter" type="search" autocomplete="off" />
+      <p id="config-count" role="status" aria-live="polite" aria-atomic="true"></p>
+      <label class="mobile-section-label" for="config-section-picker">Configuration section</label>
+      <select id="config-section-picker" class="mobile-section-picker">
+        {sections.map((section) => <option value={section.anchor}>{section.title}</option>)}
+      </select>
+      <nav class="reference-sections" aria-label="Configuration sections">
+        {sections.map((section) => <a data-section-link={section.anchor} href={`#${section.anchor}`}>{section.title}</a>)}
+      </nav>
+    </aside>
+    <div>{sections.map((section) =>
+      <section id={section.anchor} data-config-section tabindex="-1">
+        <h2>{section.title} <a class="permalink" href={`#${section.anchor}`} aria-label={`Permalink to ${section.title}`}>#</a></h2>
+        <p>{section.overview}</p>
+        {section.details.map((detail) => <p>{detail}</p>)}
+        <p><a href={consoleURL(section.consoleDeepLink)}>Open {section.title} in the local console</a></p>
+        {section.tradeoffs.length > 0 && <div class="reference-facts"><h3>Tradeoffs</h3><ul>{section.tradeoffs.map((item) => <li><strong>{item.choice}:</strong> {item.benefit} <span>{item.cost}</span></li>)}</ul></div>}
+        {section.links.length > 0 && <div class="reference-facts"><h3>Related links</h3><ul>{section.links.map((link) => <li><a href={link.href}>{link.label}</a></li>)}</ul></div>}
+        <CodeBlock code={section.exemplarYaml} label={`Copy ${section.title} YAML`} />
+        {section.examples.map((example) => <div class="reference-example"><h3>{example.label}</h3><CodeBlock code={example.yaml} label={`Copy ${example.label} example`} /></div>)}
+        {section.settings.map((setting) =>
+          <article id={setting.anchor} class="reference-card" data-config-card data-search={`${setting.path} ${setting.overview} ${setting.item?.overview ?? ""}`.toLowerCase()} tabindex="-1">
+            <h3><code>{setting.path}</code> <a class="permalink" href={`#${setting.anchor}`} aria-label={`Permalink to ${setting.path}`}>#</a></h3>
+            <p>{setting.overview}</p>
+            <p><a href={consoleURL(setting.consoleDeepLink)}>Open this option in the local console</a></p>
+            <dl>
+              <dt>Type</dt><dd>{setting.type}</dd>
+              <dt>Presence</dt><dd>{setting.required ? "Required" : "Optional"}</dd>
+              <dt>Default</dt><dd><code>{value(setting.default)}</code></dd>
+              <dt>Allowed values</dt><dd>{setting.choices.length ? <ul>{setting.choices.map((choice) => <li><code>{value(choice.value)}</code>: {choice.description}</li>)}</ul> : "Any value satisfying the constraints"}</dd>
+              <dt>Constraints</dt><dd><code>{Object.keys(setting.constraints).length ? value(setting.constraints) : "None"}</code></dd>
+              <dt>Restart</dt><dd>{setting.restart}</dd>
+              <dt>Secret</dt><dd>{setting.secret ? `Yes${setting.sensitivity ? ` (${setting.sensitivity})` : ""}` : "No"}</dd>
+              {setting.legacyEnv && <><dt>Legacy environment variable</dt><dd><code>{setting.legacyEnv}</code></dd></>}
+            </dl>
+            {setting.item && <div class="reference-facts" data-array-item>
+              <h4>Array item</h4>
+              <p>{setting.item.overview}</p>
+              {setting.item.details.map((detail) => <p>{detail}</p>)}
+              <dl>
+                <dt>Type</dt><dd>{setting.item.type}</dd>
+                <dt>Default</dt><dd><code>{value(setting.item.default)}</code></dd>
+                <dt>Allowed values</dt><dd>{setting.item.choices.length ? <ul>{setting.item.choices.map((choice) => <li><code>{value(choice.value)}</code>: {choice.description}</li>)}</ul> : "Any value satisfying the constraints"}</dd>
+                <dt>Constraints</dt><dd><code>{Object.keys(setting.item.constraints).length ? value(setting.item.constraints) : "None"}</code></dd>
+              </dl>
+            </div>}
+            {setting.secretPolicy && <div class="reference-facts"><h4>Secret reference policy</h4><ul><li>Environment references: {setting.secretPolicy.allowEnv ? "allowed" : "not allowed"}</li><li>File references: {setting.secretPolicy.allowFile ? "allowed" : "not allowed"}</li><li>Cache TTL: {setting.secretPolicy.cacheTtlSeconds} seconds</li>{setting.secretPolicy.resolveWhen && <li>Resolved when <code>{setting.secretPolicy.resolveWhen.path}</code> equals <code>{value(setting.secretPolicy.resolveWhen.equals)}</code></li>}</ul></div>}
+            {setting.details.map((detail) => <p>{detail}</p>)}
+            {setting.tradeoffs.length > 0 && <div class="reference-facts"><h4>Tradeoffs</h4><ul>{setting.tradeoffs.map((item) => <li><strong>{item.choice}:</strong> {item.benefit} <span>{item.cost}</span></li>)}</ul></div>}
+            {setting.examples.map((example) => <div class="reference-example"><h4>{example.label}</h4><CodeBlock code={example.yaml} label={`Copy ${setting.path} ${example.label} example`} /></div>)}
+            {setting.links.length > 0 && <div class="reference-facts"><h4>Related links</h4><ul>{setting.links.map((link) => <li><a href={link.href}>{link.label}</a></li>)}</ul></div>}
+          </article>
+        )}
+      </section>
+    )}</div>
   </div>}
 </DocsLayout>
 {complete && <script>
   const input = document.querySelector<HTMLInputElement>("#config-filter");
   const count = document.querySelector<HTMLElement>("#config-count");
   const cards = [...document.querySelectorAll<HTMLElement>("[data-config-card]")];
-  const update = () => {
+  const sections = [...document.querySelectorAll<HTMLElement>("[data-config-section]")];
+  const sectionLinks = [...document.querySelectorAll<HTMLAnchorElement>("[data-section-link]")];
+  const picker = document.querySelector<HTMLSelectElement>("#config-section-picker");
+  const update = (announce = true) => {
     const query = input?.value.trim().toLowerCase() ?? "";
     let shown = 0;
     cards.forEach((card) => { const match = !query || card.dataset.search?.includes(query); card.hidden = !match; if (match) shown += 1; });
-    if (count) count.textContent = query ? `${shown} matching options` : "";
-    if (query) history.replaceState(null, "", `${location.pathname}?q=${encodeURIComponent(query)}`);
+    sections.forEach((section) => { section.hidden = Boolean(query) && !section.querySelector("[data-config-card]:not([hidden])"); });
+    if (count) count.textContent = announce && query ? `${shown} matching options` : "";
+    const next = new URL(location.href);
+    if (query) next.searchParams.set("q", query); else next.searchParams.delete("q");
+    history.replaceState(null, "", `${next.pathname}${next.search}${next.hash}`);
   };
-  if (input) { input.value = new URLSearchParams(location.search).get("q") ?? ""; input.addEventListener("input", update); update(); }
+  if (input) {
+    input.value = new URLSearchParams(location.search).get("q") ?? "";
+    input.addEventListener("input", () => update(true));
+    update(false);
+  }
   const focusHash = () => { if (location.hash) document.querySelector<HTMLElement>(location.hash)?.focus(); };
   addEventListener("hashchange", focusHash); focusHash();
+  const setActive = (id: string) => {
+    sectionLinks.forEach((link) => link.setAttribute("aria-current", link.dataset.sectionLink === id ? "true" : "false"));
+    if (picker && picker.value !== id) picker.value = id;
+  };
+  picker?.addEventListener("change", () => {
+    location.hash = picker.value;
+    document.getElementById(picker.value)?.focus();
+  });
+  if ("IntersectionObserver" in window) {
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      if (visible?.target.id) setActive(visible.target.id);
+    }, { rootMargin: "-20% 0px -65% 0px" });
+    sections.forEach((section) => observer.observe(section));
+  }
+  setActive(location.hash.slice(1) || sections[0]?.id || "");
 </script>}

@@ -317,6 +317,10 @@ destinations, and a bounded event log. Telegram is an external cloud boundary:
 authorized text, replies, chat actions, and Bot API metadata leave the host.
 Group privacy mode is managed with
 [BotFather](https://core.telegram.org/bots/features#botfather).
+The next update offset and staged ingress record survive restart, so a
+partially accepted update repairs to one history message, query statistic, and
+queued job. Refreshing the configured secret cancels the active long poll,
+authenticates a new client generation, and preserves offsets and diagnostics.
 
 ### Local speech
 
@@ -342,9 +346,11 @@ First start creates `~/.virtualme/virtualme.config.yaml` from the embedded
 schema, with stable schema-derived comments and mode `0600`. Use `/config` for
 schema-driven editing, or edit the YAML while the container is stopped.
 Configuration is strict: unknown keys, unsupported YAML syntax, invalid types,
-unresolved references, and semantic conflicts stop startup before long-running
-services. Saving rewrites the complete canonical file; Save and Restart are
-separate operations.
+malformed references, and semantic conflicts stop startup before long-running
+services. An unavailable enabled Telegram token is retained as redacted
+`secret_unavailable` state so the controller and Config UI remain recoverable;
+Telegram stays disconnected until refresh succeeds. Saving rewrites the
+complete canonical file; Save and Restart are separate operations.
 
 Precedence is explicit legacy environment override, then YAML, then schema
 default. Secret fields accept only empty values or whole `${env:NAME}` and

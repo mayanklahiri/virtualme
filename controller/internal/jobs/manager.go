@@ -29,6 +29,24 @@ const (
 	schedulerPaused  = "virtualme:scheduler:paused"
 )
 
+const telegramEnqueueScript = `
+local current = redis.call('GET', KEYS[1])
+if not current then return redis.error_reply('missing ingress record') end
+local record = cjson.decode(current)
+if record.stage ~= 'stats' then
+  if record.stage == 'job' or record.stage == 'complete' then
+    return {0, tonumber(record.ahead or 0)}
+  end
+  return redis.error_reply('invalid ingress stage')
+end
+local ahead = redis.call('LLEN', KEYS[2]) + redis.call('LLEN', KEYS[3])
+if redis.call('EXISTS', KEYS[4]) == 1 then ahead = ahead + 1 end
+redis.call('RPUSH', KEYS[2], ARGV[1])
+record.stage = 'job'
+record.ahead = ahead
+redis.call('SET', KEYS[1], cjson.encode(record))
+return {1, ahead}`
+
 // Result is the terminal summary persisted with a job.
 type Result struct {
 	OK         bool   `json:"ok"`
@@ -180,6 +198,37 @@ func (m *Manager) Enqueue(env Envelope) (int, error) {
 	}
 	m.broadcastState()
 	return ahead, nil
+}
+
+// EnqueueTelegram atomically advances one Telegram ingress record from stats
+// to job while appending its deterministic envelope exactly once.
+func (m *Manager) EnqueueTelegram(env Envelope, ingressKey string) (int, bool, error) {
+	normalize(&env, m.now())
+	encoded, err := json.Marshal(env)
+	if err != nil {
+		return 0, false, err
+	}
+	reply, err := m.client.Eval(
+		telegramEnqueueScript,
+		[]string{ingressKey, readyInteractive, readyScheduled, inflightKey},
+		string(encoded),
+	)
+	if err != nil {
+		return 0, false, err
+	}
+	values, ok := reply.([]any)
+	if !ok || len(values) != 2 {
+		return 0, false, fmt.Errorf("jobs: Telegram enqueue reply is %T", reply)
+	}
+	mutated, okMutated := values[0].(int64)
+	ahead, okAhead := values[1].(int64)
+	if !okMutated || !okAhead || (mutated != 0 && mutated != 1) {
+		return 0, false, fmt.Errorf("jobs: invalid Telegram enqueue reply")
+	}
+	if mutated == 1 {
+		m.broadcastState()
+	}
+	return int(ahead), mutated == 1, nil
 }
 
 func (m *Manager) depth() (int, error) {
@@ -546,8 +595,11 @@ func (m *Manager) CancelRunningConnection(connID, jobType, reason string) bool {
 // DropConnection cancels only disconnect-scoped work owned by connID.
 func (m *Manager) DropConnection(connID string) {
 	m.mu.Lock()
-	if m.running != nil && m.running.env.Initiator.CancelOnDisconnect && m.running.env.Initiator.ConnectionID == connID {
-		m.running.cancel(errors.New("initiator disconnected"))
+	if m.running != nil {
+		m.running.env.NormalizeLegacy()
+		if m.running.env.Initiator.CancelOnDisconnect && m.running.env.Initiator.ConnectionID == connID {
+			m.running.cancel(errors.New("initiator disconnected"))
+		}
 	}
 	m.mu.Unlock()
 	for _, key := range []string{readyInteractive, readyScheduled} {

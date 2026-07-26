@@ -1,5 +1,4 @@
 #!/command/with-contenv bash
 source /run/virtualme/config.env
-valkey_host="${VM_EFFECTIVE_VALKEY_ADDRESS%:*}"
-valkey_port="${VM_EFFECTIVE_VALKEY_ADDRESS##*:}"
-exec valkey-server --bind "$valkey_host" --port "$valkey_port" --save "" --appendonly yes --dir "$VM_DATA_DIR/valkey"
+exec valkey-server --bind "$VM_EFFECTIVE_VALKEY_HOST" --port "$VM_EFFECTIVE_VALKEY_PORT" \
+  --save "" --appendonly yes --dir "$VM_DATA_DIR/valkey"

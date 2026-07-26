@@ -5,6 +5,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -51,30 +53,69 @@ func preflight(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := config.AtomicWrite(*serviceEnv, serviceEnvironment(loaded)); err != nil {
+	serviceContent, err := serviceEnvironment(loaded)
+	if err != nil {
+		return fmt.Errorf("service environment: %w", err)
+	}
+	if err := config.AtomicWrite(*serviceEnv, serviceContent); err != nil {
 		return fmt.Errorf("service environment: %w", err)
 	}
 	return writeMail(loaded, *mailDir)
 }
 
-func serviceEnvironment(loaded *config.Loaded) []byte {
+func serviceEnvironment(loaded *config.Loaded) ([]byte, error) {
 	cfg := loaded.Config
+	vncHost, vncPort, err := splitAddress(cfg.Desktop.VNCAddress)
+	if err != nil {
+		return nil, err
+	}
+	noVNCHost, noVNCPort, err := splitAddress(cfg.Desktop.NoVNCAddress)
+	if err != nil {
+		return nil, err
+	}
+	upstreamHost, upstreamPort, err := splitAddress(cfg.Desktop.NoVNCUpstreamAddress)
+	if err != nil {
+		return nil, err
+	}
+	cdpHost, cdpPort, err := splitURL(cfg.Desktop.CDPURL)
+	if err != nil {
+		return nil, err
+	}
+	valkeyHost, valkeyPort, err := splitAddress(cfg.Valkey.Address)
+	if err != nil {
+		return nil, err
+	}
+	llamaHost, llamaPort, err := splitAddress(cfg.Llama.Address)
+	if err != nil {
+		return nil, err
+	}
+	ttsHost, ttsPort, err := splitAddress(cfg.TTS.Address)
+	if err != nil {
+		return nil, err
+	}
 	values := [][2]string{
 		{"VM_EFFECTIVE_DISPLAY", cfg.Desktop.Display},
 		{"VM_EFFECTIVE_RESOLUTION", cfg.Desktop.Resolution},
 		{"VM_EFFECTIVE_X11_SOCKET_DIR", cfg.Desktop.X11SocketDirectory},
-		{"VM_EFFECTIVE_VNC_ADDRESS", cfg.Desktop.VNCAddress},
-		{"VM_EFFECTIVE_NOVNC_ADDRESS", cfg.Desktop.NoVNCAddress},
-		{"VM_EFFECTIVE_NOVNC_UPSTREAM", cfg.Desktop.NoVNCUpstreamAddress},
-		{"VM_EFFECTIVE_CDP_URL", cfg.Desktop.CDPURL},
+		{"VM_EFFECTIVE_VNC_HOST", vncHost},
+		{"VM_EFFECTIVE_VNC_PORT", vncPort},
+		{"VM_EFFECTIVE_NOVNC_HOST", noVNCHost},
+		{"VM_EFFECTIVE_NOVNC_PORT", noVNCPort},
+		{"VM_EFFECTIVE_NOVNC_UPSTREAM_HOST", upstreamHost},
+		{"VM_EFFECTIVE_NOVNC_UPSTREAM_PORT", upstreamPort},
+		{"VM_EFFECTIVE_CDP_HOST", cdpHost},
+		{"VM_EFFECTIVE_CDP_PORT", cdpPort},
 		{"VM_EFFECTIVE_CHROMIUM_WATCHDOG_GRACE", strconv.Itoa(cfg.Desktop.ChromiumWatchdogGrace)},
-		{"VM_EFFECTIVE_VALKEY_ADDRESS", cfg.Valkey.Address},
-		{"VM_EFFECTIVE_LLAMA_ADDRESS", cfg.Llama.Address},
+		{"VM_EFFECTIVE_VALKEY_HOST", valkeyHost},
+		{"VM_EFFECTIVE_VALKEY_PORT", valkeyPort},
+		{"VM_EFFECTIVE_LLAMA_HOST", llamaHost},
+		{"VM_EFFECTIVE_LLAMA_PORT", llamaPort},
 		{"VM_EFFECTIVE_LLAMA_CONTEXT", strconv.Itoa(cfg.Llama.ContextTokens)},
 		{"VM_EFFECTIVE_MODEL_PATH", cfg.Llama.ModelPath},
 		{"VM_EFFECTIVE_PROJECTOR_PATH", cfg.Llama.ProjectorPath},
 		{"VM_EFFECTIVE_LLAMA_THREADS", strconv.Itoa(cfg.Llama.Threads)},
-		{"VM_EFFECTIVE_TTS_ADDRESS", cfg.TTS.Address},
+		{"VM_EFFECTIVE_TTS_HOST", ttsHost},
+		{"VM_EFFECTIVE_TTS_PORT", ttsPort},
 		{"VM_EFFECTIVE_MAIL_FLUSH_SECONDS", strconv.Itoa(cfg.Mail.FlushSeconds)},
 		{"TZ", cfg.System.Timezone},
 	}
@@ -86,7 +127,23 @@ func serviceEnvironment(loaded *config.Loaded) []byte {
 		output.WriteString(shellQuote(item[1]))
 		output.WriteByte('\n')
 	}
-	return []byte(output.String())
+	return []byte(output.String()), nil
+}
+
+func splitAddress(address string) (string, string, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return "", "", fmt.Errorf("split address %q: %w", address, err)
+	}
+	return host, port, nil
+}
+
+func splitURL(value string) (string, string, error) {
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return "", "", fmt.Errorf("split URL: %w", err)
+	}
+	return splitAddress(parsed.Host)
 }
 
 func writeMail(loaded *config.Loaded, directory string) error {

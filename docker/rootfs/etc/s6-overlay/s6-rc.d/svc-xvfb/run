@@ -1,3 +1,22 @@
 #!/command/with-contenv bash
+set -euo pipefail
 source /run/virtualme/config.env
+default_socket_dir=/tmp/.X11-unix
+socket_dir="$VM_EFFECTIVE_X11_SOCKET_DIR"
+if [ "$socket_dir" != "$default_socket_dir" ]; then
+  install -d -m 1777 "$socket_dir"
+  if [ -L "$default_socket_dir" ]; then
+    [ "$(readlink "$default_socket_dir")" = "$socket_dir" ] || rm "$default_socket_dir"
+  elif [ -d "$default_socket_dir" ]; then
+    rm -f "$default_socket_dir"/X*
+    rmdir "$default_socket_dir"
+  elif [ -e "$default_socket_dir" ]; then
+    echo "svc-xvfb: default X11 socket path is not a directory" >&2
+    exit 1
+  fi
+  [ -L "$default_socket_dir" ] || ln -s "$socket_dir" "$default_socket_dir"
+else
+  if [ -L "$default_socket_dir" ]; then rm "$default_socket_dir"; fi
+  install -d -m 1777 "$default_socket_dir"
+fi
 exec Xvfb "$VM_EFFECTIVE_DISPLAY" -screen 0 "$VM_EFFECTIVE_RESOLUTION" -ac -noreset -nolisten tcp

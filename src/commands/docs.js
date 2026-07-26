@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { constants } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -57,8 +58,6 @@ export function parseArgs(argv) {
 }
 
 const docsDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "../../docs");
-/** @type {Record<string, number>} */
-const signalNumber = { SIGHUP: 1, SIGINT: 2, SIGQUIT: 3, SIGKILL: 9, SIGTERM: 15 };
 
 /** @param {string[]} argv @param {DocsDependencies} [dependencies] */
 export async function runWith(argv, dependencies = {}) {
@@ -96,7 +95,10 @@ export async function runWith(argv, dependencies = {}) {
     error(`docs failed to start: ${child.error.message}`);
     return 1;
   }
-  if (child?.signal) return 128 + (signalNumber[child.signal] ?? 0);
+  if (child?.signal) {
+    const signal = /** @type {keyof typeof constants.signals} */ (child.signal);
+    return 128 + (constants.signals[signal] ?? 0);
+  }
   return child?.status === 0 ? 0 : 1;
 }
 

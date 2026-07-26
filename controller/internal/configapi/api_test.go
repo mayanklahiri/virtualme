@@ -29,6 +29,19 @@ type fakePlanner struct {
 	err   error
 }
 
+type blockingCoordinator struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (b *blockingCoordinator) Preflight(context.Context) error {
+	close(b.entered)
+	<-b.release
+	return nil
+}
+
+func (b *blockingCoordinator) Restart(context.Context, []string) error { return nil }
+
 func (f *fakePlanner) PlanConfigRestart(context.Context) error {
 	f.calls++
 	return f.err
@@ -83,7 +96,8 @@ func TestConfigAPIProjectionSaveConflictAndRestart(t *testing.T) {
 	service.Mount(mux)
 
 	response := request(t, mux, http.MethodGet, "/api/config", nil)
-	if response.Code != http.StatusOK || bytes.Contains(response.Body.Bytes(), []byte("DO_NOT_LEAK_031")) {
+	if response.Code != http.StatusOK || bytes.Contains(response.Body.Bytes(), []byte("DO_NOT_LEAK_031")) ||
+		bytes.Contains(response.Body.Bytes(), []byte("0001-01-01")) {
 		t.Fatalf("bad GET: %d %s", response.Code, response.Body.String())
 	}
 	var initial map[string]any
@@ -263,6 +277,123 @@ func TestConfigAPISecretRefreshNeverReturnsBytes(t *testing.T) {
 	if strings.Contains(get.Body.String(), sentinel) || !strings.Contains(get.Body.String(), `"password":null`) {
 		t.Fatalf("secret GET leaked: %s", get.Body.String())
 	}
+}
+
+func TestRestartSerializesPUTAndRejectsItAfterAcceptance(t *testing.T) {
+	loaded, err := config.Load(config.Options{DataDir: t.TempDir(), Env: []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordinator := &blockingCoordinator{entered: make(chan struct{}), release: make(chan struct{})}
+	service, err := New(Options{Loaded: loaded, Environment: []string{}, Coordinator: coordinator})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	service.Mount(mux)
+	raw := cloneRaw(t, loaded.Raw)
+	raw["agent"].(map[string]any)["maxSteps"] = float64(501)
+	save := request(t, mux, http.MethodPut, "/api/config", map[string]any{"baseHash": loaded.Hash, "config": raw})
+	var saved map[string]any
+	decodeBody(t, save, &saved)
+	pendingHash := saved["fileHash"].(string)
+	restartDone := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		restartDone <- request(t, mux, http.MethodPost, "/api/config/restart", map[string]any{"pendingHash": pendingHash})
+	}()
+	<-coordinator.entered
+	raw["agent"].(map[string]any)["maxSteps"] = float64(502)
+	putDone := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		putDone <- request(t, mux, http.MethodPut, "/api/config", map[string]any{"baseHash": pendingHash, "config": raw})
+	}()
+	select {
+	case <-putDone:
+		t.Fatal("PUT was not serialized behind restart preflight")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(coordinator.release)
+	if response := <-restartDone; response.Code != http.StatusAccepted {
+		t.Fatalf("restart status=%d body=%s", response.Code, response.Body.String())
+	}
+	if response := <-putDone; response.Code != http.StatusConflict ||
+		!strings.Contains(response.Body.String(), "config_restarting") {
+		t.Fatalf("PUT after restart status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestRestartRevalidatesFileHashAfterPreflight(t *testing.T) {
+	root := t.TempDir()
+	loaded, err := config.Load(config.Options{DataDir: root, Env: []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordinator := &blockingCoordinator{entered: make(chan struct{}), release: make(chan struct{})}
+	planner := new(fakePlanner)
+	service, _ := New(Options{Loaded: loaded, Environment: []string{}, Coordinator: coordinator, Planner: planner})
+	mux := http.NewServeMux()
+	service.Mount(mux)
+	raw := cloneRaw(t, loaded.Raw)
+	raw["agent"].(map[string]any)["maxSteps"] = float64(501)
+	save := request(t, mux, http.MethodPut, "/api/config", map[string]any{"baseHash": loaded.Hash, "config": raw})
+	var saved map[string]any
+	decodeBody(t, save, &saved)
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		done <- request(t, mux, http.MethodPost, "/api/config/restart", map[string]any{"pendingHash": saved["fileHash"]})
+	}()
+	<-coordinator.entered
+	if err := os.WriteFile(filepath.Join(root, config.FileName), []byte("# externally changed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	close(coordinator.release)
+	response := <-done
+	if response.Code != http.StatusConflict || planner.calls != 0 {
+		t.Fatalf("changed file restart status=%d planner=%d body=%s", response.Code, planner.calls, response.Body.String())
+	}
+}
+
+func TestConcurrentGETAndSecretRefreshIsRaceFree(t *testing.T) {
+	root := t.TempDir()
+	secret := filepath.Join(root, "secret")
+	if err := os.WriteFile(secret, []byte("value\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resolver := config.NewResolver(nil)
+	defer resolver.Close()
+	loaded, err := config.Load(config.Options{DataDir: root, Env: []string{}, Resolver: resolver})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, _ := New(Options{Loaded: loaded, Environment: []string{}, Resolver: resolver})
+	mux := http.NewServeMux()
+	service.Mount(mux)
+	raw := cloneRaw(t, loaded.Raw)
+	smart := raw["mail"].(map[string]any)["smarthost"].(map[string]any)
+	smart["host"], smart["username"], smart["password"] = "smtp.example", "user", "${file:"+secret+"}"
+	save := request(t, mux, http.MethodPut, "/api/config", map[string]any{"baseHash": loaded.Hash, "config": raw})
+	if save.Code != http.StatusOK {
+		t.Fatalf("save status=%d body=%s", save.Code, save.Body.String())
+	}
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			if response := request(t, mux, http.MethodGet, "/api/config", nil); response.Code != http.StatusOK {
+				t.Errorf("GET status=%d", response.Code)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			response := request(t, mux, http.MethodPost, "/api/config/secrets/refresh",
+				map[string]any{"path": "mail.smarthost.password"})
+			if response.Code != http.StatusOK {
+				t.Errorf("refresh status=%d body=%s", response.Code, response.Body.String())
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func request(t *testing.T, handler http.Handler, method, path string, body any) *httptest.ResponseRecorder {

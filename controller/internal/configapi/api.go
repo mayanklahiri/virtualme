@@ -2,6 +2,7 @@ package configapi
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,9 +49,11 @@ func (fn RestartPlannerFunc) PlanConfigRestart(ctx context.Context) error { retu
 
 type Service struct {
 	mu          sync.RWMutex
+	operationMu sync.Mutex
 	schema      *config.Schema
 	startup     *config.Loaded
 	current     *config.Loaded
+	restarting  bool
 	environment []string
 	resolver    *config.Resolver
 	notifier    ConfigNotifier
@@ -148,8 +151,13 @@ func (s *Service) get(w http.ResponseWriter) {
 		"fileHash": current.Hash, "startupHash": startup.Hash,
 		"pendingRestart": current.Hash != startup.Hash, "restartServices": services,
 	}
+	payload, err := json.Marshal(response)
 	s.mu.RUnlock()
-	writeJSON(w, http.StatusOK, response)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "config_state", "configuration state is unavailable", nil)
+		return
+	}
+	writeJSONBytes(w, http.StatusOK, payload)
 }
 
 func (s *Service) put(w http.ResponseWriter, r *http.Request) {
@@ -161,8 +169,14 @@ func (s *Service) put(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "config_invalid", err.Error(), nil)
 		return
 	}
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.restarting {
+		writeError(w, http.StatusConflict, "config_restarting", "configuration restart is already in progress", nil)
+		return
+	}
 	if request.BaseHash != s.current.Hash {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{
 			"code": "config_conflict", "message": "configuration changed", "currentHash": s.current.Hash,
@@ -213,15 +227,29 @@ func (s *Service) refreshHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "config_invalid", err.Error(), nil)
 		return
 	}
-	s.mu.RLock()
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	s.mu.Lock()
 	status, exists := s.current.Secrets[request.Path]
-	s.mu.RUnlock()
 	if !exists || !status.Configured {
+		s.mu.Unlock()
 		writeError(w, http.StatusBadRequest, "secret_not_configured", "secret is not configured", nil)
 		return
 	}
-	refreshed, err := s.resolver.Refresh(status.Reference, 5*time.Minute)
+	ttl, err := s.schema.SecretTTL(request.Path)
+	s.mu.Unlock()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "secret_not_configured", "secret metadata is unavailable", nil)
+		return
+	}
+	refreshed, err := s.resolver.Refresh(status.Reference, ttl)
 	s.mu.Lock()
+	currentStatus, currentExists := s.current.Secrets[request.Path]
+	if !currentExists || currentStatus.Reference != status.Reference {
+		s.mu.Unlock()
+		writeError(w, http.StatusConflict, "config_conflict", "secret reference changed during refresh", nil)
+		return
+	}
 	s.current.Secrets[request.Path] = refreshed
 	s.mu.Unlock()
 	if err != nil {
@@ -243,11 +271,13 @@ func (s *Service) restartHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "config_invalid", err.Error(), nil)
 		return
 	}
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
 	s.mu.RLock()
 	current := s.current
 	startup := s.startup
 	services := config.RestartServices(s.schema, startup.Raw, current.Raw)
-	pending := current.Hash != startup.Hash && current.Hash == request.PendingHash
+	pending := !s.restarting && current.Hash != startup.Hash && current.Hash == request.PendingHash
 	s.mu.RUnlock()
 	if !pending {
 		writeError(w, http.StatusConflict, "config_conflict", "pending hash changed or no restart is pending", nil)
@@ -264,10 +294,20 @@ func (s *Service) restartHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "config_preflight_failed", config.RedactError(err.Error()).Error(), nil)
 		return
 	}
+	if !s.pendingRevisionMatches(request.PendingHash) {
+		writeError(w, http.StatusConflict, "config_conflict", "pending hash changed during preflight", nil)
+		return
+	}
+	s.mu.Lock()
+	s.restarting = true
+	s.mu.Unlock()
 	planCtx, planCancel := context.WithTimeout(r.Context(), 3*time.Second)
 	err = s.planner.PlanConfigRestart(planCtx)
 	planCancel()
 	if err != nil {
+		s.mu.Lock()
+		s.restarting = false
+		s.mu.Unlock()
 		writeError(w, http.StatusServiceUnavailable, "restart_preparation_failed", config.RedactError(err.Error()).Error(), nil)
 		return
 	}
@@ -284,6 +324,23 @@ func (s *Service) restartHandler(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(250 * time.Millisecond)
 		s.shutdown(services)
 	}()
+}
+
+func (s *Service) pendingRevisionMatches(expected string) bool {
+	s.mu.RLock()
+	current := s.current
+	startup := s.startup
+	matches := !s.restarting && current.Hash == expected && current.Hash != startup.Hash
+	s.mu.RUnlock()
+	if !matches {
+		return false
+	}
+	content, err := os.ReadFile(current.File)
+	if err != nil {
+		return false
+	}
+	sum := sha256.Sum256(content)
+	return fmt.Sprintf("%x", sum[:]) == expected
 }
 
 type CommandCoordinator struct {

@@ -88,6 +88,9 @@ func Load(options Options) (*Loaded, error) {
 	if err := resolveTree(schema.root, effective, raw, "", root, env, resolver, secrets, effective); err != nil {
 		return nil, withLocations(file, err, locations)
 	}
+	if err := schema.Validate(resolvedValidationTree(schema.root, effective, raw)); err != nil {
+		return nil, withLocations(file, err, locations)
+	}
 	if err := ValidateSemantic(effective); err != nil {
 		return nil, withLocations(file, err, locations)
 	}
@@ -309,12 +312,20 @@ func valueIsAbsentOrDefault(schema map[string]any, dotted string, value any) boo
 
 func resolveTree(schema map[string]any, effective, raw map[string]any, path, dataRoot string,
 	env map[string]string, resolver *Resolver, secrets map[string]SecretStatus, rootEffective map[string]any) error {
+	if err := resolveNonSecrets(schema, effective, path, dataRoot, env); err != nil {
+		return err
+	}
+	return resolveSecrets(schema, effective, raw, path, resolver, secrets, rootEffective)
+}
+
+func resolveNonSecrets(schema map[string]any, effective map[string]any, path, dataRoot string,
+	env map[string]string) error {
 	props, _ := schema["properties"].(map[string]any)
 	for key, rawSchema := range props {
 		child := rawSchema.(map[string]any)
 		childPath := joinPath(path, key)
 		if child["type"] == "object" {
-			if err := resolveTree(child, effective[key].(map[string]any), raw[key].(map[string]any), childPath, dataRoot, env, resolver, secrets, rootEffective); err != nil {
+			if err := resolveNonSecrets(child, effective[key].(map[string]any), childPath, dataRoot, env); err != nil {
 				return err
 			}
 			continue
@@ -325,7 +336,9 @@ func resolveTree(schema map[string]any, effective, raw map[string]any, path, dat
 			}
 			continue
 		}
-		rawValue := raw[key]
+		if _, secret := child["x-vm-secret"]; secret {
+			continue
+		}
 		value := effective[key]
 		if text, ok := value.(string); ok && strings.HasPrefix(text, "${data}") {
 			if sourcesTokenAllowed(childPath, text) {
@@ -334,44 +347,6 @@ func resolveTree(schema map[string]any, effective, raw map[string]any, path, dat
 			} else {
 				return validationIssue(childPath, "${data} is only valid in documented defaults")
 			}
-		}
-		if secretMeta, secret := child["x-vm-secret"].(map[string]any); secret {
-			text, _ := value.(string)
-			if text == "" {
-				secrets[childPath] = SecretStatus{Configured: false, Error: ""}
-				continue
-			}
-			if sourcesValue := stringValueFromAny(rawValue); sourcesValue != text && sourcesValue != "" {
-				text = sourcesValue
-			}
-			if envReferencePattern.FindStringSubmatch(text) == nil && fileReferencePattern.FindStringSubmatch(text) == nil {
-				if sourcesValue := stringValueFromAny(rawValue); sourcesValue == "" && effective[key] != "" {
-					// Temporary literal legacy adapter; effective only.
-					secrets[childPath] = SecretStatus{Configured: true, Resolved: true, Source: "legacy-env", Error: ""}
-					continue
-				}
-				return validationIssue(childPath, "secret must be empty or a whole ${env:...}/${file:...} reference")
-			}
-			if condition, ok := secretMeta["resolveWhen"].(map[string]any); ok {
-				expected, _ := condition["equals"].(bool)
-				actual, actualOK := valueAtPath(rootEffective, stringValue(condition["path"])).(bool)
-				if !actualOK || actual != expected {
-					secrets[childPath] = SecretStatus{
-						Reference: text, Configured: true, Resolved: false, Status: "inactive", Error: "",
-					}
-					effective[key] = ""
-					continue
-				}
-			}
-			ttl, _ := integerValue(secretMeta["cacheTtlSeconds"])
-			bytes, status, err := resolver.Resolve(text, time.Duration(ttl)*time.Second)
-			secrets[childPath] = status
-			if err != nil {
-				return validationIssue(childPath, status.Error)
-			}
-			effective[key] = string(bytes)
-			zero(bytes)
-			continue
 		}
 		if text, ok := value.(string); ok {
 			if strings.Contains(text, "${") {
@@ -392,6 +367,87 @@ func resolveTree(schema map[string]any, effective, raw map[string]any, path, dat
 		}
 	}
 	return nil
+}
+
+func resolveSecrets(schema map[string]any, effective, raw map[string]any, path string,
+	resolver *Resolver, secrets map[string]SecretStatus, rootEffective map[string]any) error {
+	props, _ := schema["properties"].(map[string]any)
+	for key, rawSchema := range props {
+		child := rawSchema.(map[string]any)
+		childPath := joinPath(path, key)
+		if child["type"] == "object" {
+			if err := resolveSecrets(child, effective[key].(map[string]any), raw[key].(map[string]any),
+				childPath, resolver, secrets, rootEffective); err != nil {
+				return err
+			}
+			continue
+		}
+		secretMeta, secret := child["x-vm-secret"].(map[string]any)
+		if !secret {
+			continue
+		}
+		rawValue := raw[key]
+		value := effective[key]
+		text, _ := value.(string)
+		if text == "" {
+			secrets[childPath] = SecretStatus{Configured: false, Error: ""}
+			continue
+		}
+		if sourcesValue := stringValueFromAny(rawValue); sourcesValue != text && sourcesValue != "" {
+			text = sourcesValue
+		}
+		if envReferencePattern.FindStringSubmatch(text) == nil && fileReferencePattern.FindStringSubmatch(text) == nil {
+			if sourcesValue := stringValueFromAny(rawValue); sourcesValue == "" && effective[key] != "" {
+				// Temporary literal legacy adapter; effective only.
+				secrets[childPath] = SecretStatus{Configured: true, Resolved: true, Source: "legacy-env", Error: ""}
+				continue
+			}
+			return validationIssue(childPath, "secret must be empty or a whole ${env:...}/${file:...} reference")
+		}
+		if condition, ok := secretMeta["resolveWhen"].(map[string]any); ok {
+			expected, _ := condition["equals"].(bool)
+			actual, actualOK := valueAtPath(rootEffective, stringValue(condition["path"])).(bool)
+			if !actualOK || actual != expected {
+				secrets[childPath] = SecretStatus{
+					Reference: text, Configured: true, Resolved: false, Status: "inactive", Error: "",
+				}
+				effective[key] = ""
+				continue
+			}
+		}
+		ttl, _ := integerValue(secretMeta["cacheTtlSeconds"])
+		bytes, status, err := resolver.Resolve(text, time.Duration(ttl)*time.Second)
+		secrets[childPath] = status
+		if err != nil {
+			if childPath == "integrations.telegram.botToken" {
+				effective[key] = ""
+				continue
+			}
+			return validationIssue(childPath, status.Error)
+		}
+		effective[key] = string(bytes)
+		zero(bytes)
+	}
+	return nil
+}
+
+func resolvedValidationTree(schema map[string]any, effective, raw any) any {
+	if _, secret := schema["x-vm-secret"]; secret {
+		return deepCopy(raw)
+	}
+	switch schema["type"] {
+	case "object":
+		result := map[string]any{}
+		effectiveObject := objectValue(effective)
+		rawObject := objectValue(raw)
+		properties, _ := schema["properties"].(map[string]any)
+		for key, child := range properties {
+			result[key] = resolvedValidationTree(child.(map[string]any), effectiveObject[key], rawObject[key])
+		}
+		return result
+	default:
+		return deepCopy(effective)
+	}
 }
 
 func validationIssue(path, message string) error {

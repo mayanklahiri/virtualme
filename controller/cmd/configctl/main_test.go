@@ -22,11 +22,50 @@ func TestServiceEnvironmentContainsNoSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	output := serviceEnvironment(loaded)
+	output, err := serviceEnvironment(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if bytes.Contains(output, []byte("DO_NOT_LEAK_031")) ||
 		bytes.Contains(output, []byte("VM_MAIL_SMARTHOST")) ||
 		!bytes.Contains(output, []byte("VM_EFFECTIVE_LLAMA_CONTEXT='32768'")) {
 		t.Fatalf("unsafe/incomplete service environment:\n%s", output)
+	}
+}
+
+func TestServiceEnvironmentSplitsIPv6Addresses(t *testing.T) {
+	loaded, err := config.Load(config.Options{DataDir: t.TempDir(), Env: []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded.Config.Desktop.VNCAddress = "[::1]:5900"
+	loaded.Config.Desktop.NoVNCAddress = "[::1]:6080"
+	loaded.Config.Desktop.NoVNCUpstreamAddress = "[::1]:5900"
+	loaded.Config.Desktop.CDPURL = "http://[::1]:9222"
+	loaded.Config.Valkey.Address = "[::1]:6379"
+	loaded.Config.Llama.Address = "[::1]:8081"
+	loaded.Config.TTS.Address = "[::1]:8082"
+	output, err := serviceEnvironment(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		"VM_EFFECTIVE_VNC_HOST='::1'",
+		"VM_EFFECTIVE_VNC_PORT='5900'",
+		"VM_EFFECTIVE_NOVNC_HOST='::1'",
+		"VM_EFFECTIVE_CDP_HOST='::1'",
+		"VM_EFFECTIVE_CDP_PORT='9222'",
+		"VM_EFFECTIVE_VALKEY_HOST='::1'",
+		"VM_EFFECTIVE_LLAMA_HOST='::1'",
+		"VM_EFFECTIVE_TTS_HOST='::1'",
+	} {
+		if !bytes.Contains(output, []byte(expected)) {
+			t.Fatalf("service environment missing %q:\n%s", expected, output)
+		}
+	}
+	loaded.Config.Llama.Address = "::1:8081"
+	if _, err := serviceEnvironment(loaded); err == nil {
+		t.Fatal("unbracketed IPv6 address was not rejected by export")
 	}
 }
 

@@ -3,10 +3,13 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestClientBotAPIContractAndSanitizedErrors(t *testing.T) {
@@ -29,8 +32,16 @@ func TestClientBotAPIContractAndSanitizedErrors(t *testing.T) {
 			}
 			_, _ = w.Write([]byte(`{"ok":true,"result":[]}`))
 		case strings.HasSuffix(r.URL.Path, "/sendMessage"):
+			var request SendMessageRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.ChatID != "42" || request.Text != "hello" {
+				t.Fatalf("wrong send request: %+v %v", request, err)
+			}
 			_, _ = w.Write([]byte(`{"ok":false,"error_code":401,"description":"FAKE_TOKEN remote secret"}`))
 		case strings.HasSuffix(r.URL.Path, "/sendChatAction"):
+			var request SendChatActionRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.ChatID != "42" || request.Action != "typing" {
+				t.Fatalf("wrong action request: %+v %v", request, err)
+			}
 			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
 		}
 	}))
@@ -57,6 +68,59 @@ func TestClientBotAPIContractAndSanitizedErrors(t *testing.T) {
 	}
 	if len(paths) != 4 {
 		t.Fatalf("calls=%v", paths)
+	}
+}
+
+func TestClientErrorClassificationsAndRetryAfter(t *testing.T) {
+	for status, code := range map[int]string{
+		400: "protocol_error", 401: "authentication_failed", 403: "api_rejected",
+		409: "poll_conflict", 429: "rate_limited", 500: "remote_unavailable",
+	} {
+		t.Run(code, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(status)
+				_, _ = w.Write([]byte(fmt.Sprintf(`{"ok":false,"error_code":%d,"description":"must not escape","parameters":{"retry_after":7}}`, status)))
+			}))
+			defer server.Close()
+			client, _ := NewClient(server.URL, "FAKE_TOKEN", server.Client())
+			_, err := client.GetUpdates(context.Background(), GetUpdatesRequest{})
+			var apiErr *APIError
+			if !errors.As(err, &apiErr) || apiErr.Code != code || apiErr.Status != status ||
+				apiErr.RetryAfter != 7*time.Second || strings.Contains(err.Error(), "escape") {
+				t.Fatalf("classification = %#v, %v", apiErr, err)
+			}
+		})
+	}
+}
+
+func TestClientCancellationInterruptsLongPoll(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		close(started)
+		select {
+		case <-request.Context().Done():
+		case <-release:
+		}
+	}))
+	defer server.Close()
+	defer close(release)
+	client, _ := NewClient(server.URL, "FAKE_TOKEN", server.Client())
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := client.GetUpdates(ctx, GetUpdatesRequest{})
+		done <- err
+	}()
+	<-started
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancel error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("long poll did not cancel")
 	}
 }
 

@@ -132,11 +132,13 @@ integrations:
     botToken: ${file:/home/virtualme/.virtualme/telegram-token}
     allowedChatIds:
       - "42"
+      - "-100"
     allowedUserIds:
       - "7"
 EOF
 chmod 600 "$DATA_DIR/virtualme.config.yaml"
 TELEGRAM_STUB_HOST=0.0.0.0 TELEGRAM_STUB_RECORD="$DATA_DIR/telegram-stub.jsonl" \
+  TELEGRAM_STUB_CONTROL="$DATA_DIR/telegram-control.jsonl" \
   node test/telegram-stub.mjs >"$DATA_DIR/telegram-stub.log" 2>&1 &
 TELEGRAM_STUB_PID=$!
 deadline=$(( $(date +%s) + 30 ))
@@ -165,7 +167,8 @@ docker exec "$NAME" configctl docs --check \
   --output /opt/virtualme/docs/src/generated/config-reference.json >/dev/null \
   || fail "config documentation stale"
 curl -fsS "$BASE/telegram" | grep -q 'data-page="telegram"' || fail "Telegram SPA route missing"
-node test/telegram-probe.mjs "$BASE" || fail "Telegram local-stub probe"
+node test/telegram-probe.mjs "$BASE" "$DATA_DIR/telegram-control.jsonl" "$DATA_DIR/telegram-stub.jsonl" \
+  || fail "Telegram local-stub probe"
 docker logs "$NAME" 2>&1 | grep -q 'obviously-fake-runtime-token' && fail "Telegram token leaked to logs"
 
 echo "e2e: [3a/21] config save conflicts, preflight failure, and restart lifecycle"
@@ -188,6 +191,8 @@ controller_pid=$(docker exec "$NAME" pgrep -x controller)
 llama_pid=$(docker exec "$NAME" pgrep -f '/llama-server')
 node test/config-probe.mjs --restart "$BASE" '${file:/home/virtualme/.virtualme/telegram-token}' || fail "config restart probe"
 wait_healthy
+node test/telegram-probe.mjs "$BASE" "$DATA_DIR/telegram-control.jsonl" "$DATA_DIR/telegram-stub.jsonl" --restart \
+  || fail "Telegram restart-resume probe"
 [ "$(docker exec "$NAME" pgrep -x controller)" != "$controller_pid" ] \
   || fail "controller did not respawn after config restart"
 [ "$(docker exec "$NAME" pgrep -f '/llama-server')" != "$llama_pid" ] \

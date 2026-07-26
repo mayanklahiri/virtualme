@@ -51,3 +51,28 @@ func TestTelegramSchemaAndSecretOnlyStorage(t *testing.T) {
 		t.Fatal("resolved token leaked to persisted config")
 	}
 }
+
+func TestTelegramUnavailableSecretKeepsControllerConfigLoadable(t *testing.T) {
+	schema, err := EmbeddedSchema()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := schema.Defaults()
+	telegram := raw["integrations"].(map[string]any)["telegram"].(map[string]any)
+	telegram["enabled"] = true
+	telegram["allowedChatIds"] = []any{"42"}
+	telegram["botToken"] = "${env:VM_MISSING_TELEGRAM_TOKEN}"
+	dataDir := t.TempDir()
+	yaml, _ := schema.Emit(raw)
+	if err := os.WriteFile(filepath.Join(dataDir, FileName), yaml, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(Options{DataDir: dataDir, Env: []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Config.Integrations.Telegram.BotToken != "" ||
+		loaded.Secrets["integrations.telegram.botToken"].Error != "secret_unavailable" {
+		t.Fatalf("unavailable secret state = %+v", loaded.Secrets["integrations.telegram.botToken"])
+	}
+}

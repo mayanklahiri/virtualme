@@ -11,6 +11,7 @@ import {
   parseEditorValue,
   restartComplete,
   restartMessage,
+  secretStatusLabel,
   setConfigPath,
   validateSecretReference,
 } from "./config-model.js";
@@ -35,6 +36,7 @@ function constraints(setting, input) {
   if (rules.minLength !== undefined) input.minLength = rules.minLength;
   if (rules.maxLength !== undefined) input.maxLength = rules.maxLength;
   if (rules.pattern) input.pattern = rules.pattern;
+  if (rules.pattern || rules.minLength > 0) input.required = true;
 }
 
 export function initConfig() {
@@ -132,12 +134,37 @@ export function initConfig() {
       ["Default", JSON.stringify(setting.default)],
     ];
     if (!setting.secret && effective !== unresolved) values.splice(1, 0, ["Effective", String(effective)]);
+    const secret = setting.secret ? snapshot.secrets?.[setting.path] : null;
+    if (secret) {
+      values.splice(1, 0, ["Secret status", secretStatusLabel(secret)]);
+      if (secret.source) values.splice(2, 0, ["Secret source", secret.source]);
+      if (secret.lastRefreshAt) values.splice(3, 0, ["Last refresh", secret.lastRefreshAt]);
+    }
     for (const [label, value] of values) {
       const row = element("div");
       row.append(element("dt", "", label), element("dd", "", value));
       list.append(row);
     }
     card.append(list);
+    if (secret?.configured && secret.status !== "inactive") {
+      const refresh = element("button", "config-secret-refresh", "Refresh secret");
+      refresh.type = "button";
+      refresh.addEventListener("click", async () => {
+        refresh.disabled = true;
+        status.textContent = `Refreshing ${setting.path}…`;
+        try {
+          await request("/api/config/secrets/refresh", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: setting.path }),
+          });
+          await load();
+        } catch (error) {
+          status.textContent = error.message;
+          refresh.disabled = false;
+        }
+      });
+      card.append(refresh);
+    }
     return card;
   }
 
@@ -190,9 +217,10 @@ export function initConfig() {
       };
       const draw = () => {
         editor.replaceChildren();
+        controls.delete(setting.path);
         values.forEach((value, index) => {
           const line = element("div", "config-list-row");
-          const input = makeInput(setting, value, "text");
+          const input = makeInput({ constraints: setting.item?.constraints }, value, "text");
           input.dataset.configPath = setting.path;
           input.addEventListener("input", () => {
             values[index] = input.value;
@@ -218,7 +246,6 @@ export function initConfig() {
         add.type = "button";
         add.addEventListener("click", () => {
           values.push("");
-          sync();
           draw();
         });
         editor.append(add);
@@ -329,6 +356,12 @@ export function initConfig() {
     render();
   });
   saveButton.addEventListener("click", async () => {
+    const invalid = root.querySelector("[data-config-path]:invalid");
+    if (invalid) {
+      invalid.reportValidity();
+      invalid.focus();
+      return;
+    }
     status.textContent = "Saving…";
     try {
       await request("/api/config", {
@@ -347,14 +380,26 @@ export function initConfig() {
     if (!confirm(restartMessage(snapshot.restartServices))) return;
     status.textContent = "Restarting services…";
     try {
-      await request("/api/config/restart", {
+      const response = await request("/api/config/restart", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pendingHash: snapshot.fileHash }),
       });
+      beginRestart(response.pendingHash);
     } catch (error) {
       status.textContent = error.message;
     }
   });
+
+  function beginRestart(pendingHash) {
+    expectedRestartHash = pendingHash;
+    status.textContent = "Restart accepted. Waiting for the controller to reconnect…";
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => {
+      if (status.textContent.startsWith("Restart accepted")) {
+        status.textContent = "Restart has not completed. Retry when services are healthy.";
+      }
+    }, 60_000);
+  }
 
   return {
     show(page) {
@@ -363,15 +408,8 @@ export function initConfig() {
     saved() {
       if (!editing) load();
     },
-    restarting() {
-      expectedRestartHash = snapshot.fileHash;
-      status.textContent = "Restart accepted. Waiting for the controller to reconnect…";
-      clearTimeout(restartTimer);
-      restartTimer = setTimeout(() => {
-        if (status.textContent.startsWith("Restart accepted")) {
-          status.textContent = "Restart has not completed. Retry when services are healthy.";
-        }
-      }, 60_000);
+    restarting(message) {
+      beginRestart(message?.pendingHash ?? snapshot.fileHash);
     },
     async connection(state) {
       if (state !== "live" || !expectedRestartHash) return;

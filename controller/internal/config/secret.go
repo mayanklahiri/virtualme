@@ -1,13 +1,16 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -22,7 +25,7 @@ type SecretStatus struct {
 	Resolved      bool      `json:"resolved"`
 	Source        string    `json:"source,omitempty"`
 	Status        string    `json:"status,omitempty"`
-	LastRefreshAt time.Time `json:"lastRefreshAt,omitempty"`
+	LastRefreshAt time.Time `json:"lastRefreshAt,omitempty,omitzero"`
 	Error         string    `json:"error"`
 }
 
@@ -38,7 +41,6 @@ type secretEntry struct {
 	expires  time.Time
 	revision uint64
 	status   SecretStatus
-	loading  chan struct{}
 }
 
 type Resolver struct {
@@ -49,25 +51,26 @@ type Resolver struct {
 	serial      map[string]*sync.Mutex
 	nextSub     uint64
 	now         func() time.Time
+	reader      func(string) ([]byte, SecretStatus, error)
 }
 
 func NewResolver(environment []string) *Resolver {
-	return &Resolver{
+	resolver := &Resolver{
 		env: environmentMap(environment), cache: map[string]*secretEntry{},
 		subscribers: map[string]map[uint64]func(SecretRevision){},
 		serial:      map[string]*sync.Mutex{}, now: time.Now,
 	}
+	resolver.reader = resolver.read
+	return resolver
 }
 
 func (r *Resolver) Resolve(reference string, ttl time.Duration) ([]byte, SecretStatus, error) {
+	serial := r.serialFor(reference)
+	serial.Lock()
+	defer serial.Unlock()
+
 	r.mu.Lock()
 	if entry := r.cache[reference]; entry != nil {
-		if entry.loading != nil {
-			wait := entry.loading
-			r.mu.Unlock()
-			<-wait
-			return r.Resolve(reference, ttl)
-		}
 		if len(entry.value) > 0 && r.now().Before(entry.expires) {
 			value := append([]byte(nil), entry.value...)
 			status := entry.status
@@ -80,20 +83,16 @@ func (r *Resolver) Resolve(reference string, ttl time.Duration) ([]byte, SecretS
 		entry = &secretEntry{}
 		r.cache[reference] = entry
 	}
-	entry.loading = make(chan struct{})
-	wait := entry.loading
 	r.mu.Unlock()
 
-	value, status, err := r.read(reference)
+	value, status, err := r.reader(reference)
 	r.mu.Lock()
-	entry.loading = nil
 	if err == nil {
 		zero(entry.value)
 		entry.value = append([]byte(nil), value...)
 		entry.expires = r.now().Add(ttl)
 		entry.status = status
 	}
-	close(wait)
 	r.mu.Unlock()
 	if err != nil {
 		return nil, status, err
@@ -124,12 +123,28 @@ func (r *Resolver) read(reference string) ([]byte, SecretStatus, error) {
 		status.Error = "secret_path_invalid"
 		return nil, status, errors.New("secret path is not clean")
 	}
-	info, err := os.Lstat(path)
+	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		if errors.Is(err, syscall.ELOOP) {
+			status.Error = "secret_file_type"
+			return nil, status, errors.New("secret file must be regular and not a symlink")
+		}
+		status.Error = "secret_unavailable"
+		return nil, status, errors.New("secret file is unavailable")
+	}
+	file := os.NewFile(uintptr(fd), path)
+	if file == nil {
+		_ = syscall.Close(fd)
+		status.Error = "secret_unavailable"
+		return nil, status, errors.New("secret file is unavailable")
+	}
+	defer file.Close()
+	info, err := file.Stat()
 	if err != nil {
 		status.Error = "secret_unavailable"
 		return nil, status, errors.New("secret file is unavailable")
 	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+	if !info.Mode().IsRegular() {
 		status.Error = "secret_file_type"
 		return nil, status, errors.New("secret file must be regular and not a symlink")
 	}
@@ -141,12 +156,21 @@ func (r *Resolver) read(reference string) ([]byte, SecretStatus, error) {
 		status.Error = "secret_file_size"
 		return nil, status, errors.New("secret file exceeds 64 KiB")
 	}
-	value, err := os.ReadFile(path)
+	value, err := io.ReadAll(io.LimitReader(file, 64*1024+1))
 	if err != nil {
 		status.Error = "secret_unavailable"
 		return nil, status, errors.New("secret file is unavailable")
 	}
-	value = []byte(strings.TrimSuffix(strings.TrimSuffix(string(value), "\n"), "\r"))
+	if len(value) > 64*1024 {
+		zero(value)
+		status.Error = "secret_file_size"
+		return nil, status, errors.New("secret file exceeds 64 KiB")
+	}
+	if bytes.HasSuffix(value, []byte("\r\n")) {
+		value = bytes.TrimSuffix(value, []byte("\r\n"))
+	} else {
+		value = bytes.TrimSuffix(value, []byte("\n"))
+	}
 	if len(value) == 0 {
 		status.Error = "secret_empty"
 		return nil, status, errors.New("secret file is empty")
@@ -156,17 +180,11 @@ func (r *Resolver) read(reference string) ([]byte, SecretStatus, error) {
 }
 
 func (r *Resolver) Refresh(reference string, ttl time.Duration) (SecretStatus, error) {
-	r.mu.Lock()
-	serial := r.serial[reference]
-	if serial == nil {
-		serial = new(sync.Mutex)
-		r.serial[reference] = serial
-	}
-	r.mu.Unlock()
+	serial := r.serialFor(reference)
 	serial.Lock()
 	defer serial.Unlock()
 
-	value, status, err := r.read(reference)
+	value, status, err := r.reader(reference)
 	r.mu.Lock()
 	entry := r.cache[reference]
 	if entry == nil {
@@ -194,6 +212,17 @@ func (r *Resolver) Refresh(reference string, ttl time.Duration) (SecretStatus, e
 		callback(event)
 	}
 	return status, err
+}
+
+func (r *Resolver) serialFor(reference string) *sync.Mutex {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	serial := r.serial[reference]
+	if serial == nil {
+		serial = new(sync.Mutex)
+		r.serial[reference] = serial
+	}
+	return serial
 }
 
 func (r *Resolver) Subscribe(reference string, fn func(SecretRevision)) func() {

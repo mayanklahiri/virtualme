@@ -3,21 +3,26 @@ package telegram
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf16"
 
+	"github.com/mayanklahiri/virtualme/controller/internal/config"
 	"github.com/mayanklahiri/virtualme/controller/internal/jobs"
 	"github.com/mayanklahiri/virtualme/controller/internal/notifications"
-	"github.com/mayanklahiri/virtualme/controller/internal/valkey"
 	"github.com/mayanklahiri/virtualme/controller/internal/ws"
 )
 
@@ -25,14 +30,28 @@ const (
 	offsetKey       = "virtualme:telegram:update-offset"
 	eventsKey       = "virtualme:telegram:events"
 	chatsKey        = "virtualme:telegram:known-chats"
-	ingressIndexKey = "virtualme:chat:ingress:telegram:index"
+	notificationKey = "virtualme:telegram:notification-state"
 )
 
-const reserveIngressScript = `
-if redis.call('EXISTS', KEYS[1]) == 1 then return redis.call('GET', KEYS[1]) end
-redis.call('SET', KEYS[1], ARGV[1])
-redis.call('RPUSH', KEYS[2], ARGV[2])
-return ARGV[1]`
+const appendEventScript = `
+redis.call('RPUSH', KEYS[1], ARGV[1])
+redis.call('LTRIM', KEYS[1], -tonumber(ARGV[2]), -1)
+return redis.call('LLEN', KEYS[1])`
+
+const upsertChatScript = `
+local rows = redis.call('LRANGE', KEYS[1], 0, -1)
+for _, row in ipairs(rows) do
+  local ok, item = pcall(cjson.decode, row)
+  if ok and item.chatId == ARGV[1] then redis.call('LREM', KEYS[1], 0, row) end
+end
+redis.call('RPUSH', KEYS[1], ARGV[2])
+redis.call('LTRIM', KEYS[1], -200, -1)
+return 1`
+
+var (
+	canonicalChatID = regexp.MustCompile(`^-?[1-9][0-9]*$`)
+	requestID       = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
+)
 
 type Clock interface {
 	Now() time.Time
@@ -54,54 +73,104 @@ func (realClock) Sleep(ctx context.Context, delay time.Duration) error {
 }
 
 type Jitter func() float64
+type APIFactory func(string) (API, error)
+
+type secretResolver interface {
+	Resolve(string, time.Duration) ([]byte, config.SecretStatus, error)
+	Subscribe(string, func(config.SecretRevision)) func()
+}
+
+type telegramStore interface {
+	Get(string) (*string, error)
+	Set(string, string) error
+	LRange(string, int, int) ([]string, error)
+	LLen(string) (int64, error)
+	Eval(string, []string, ...string) (any, error)
+	HGetAll(string) (map[string]string, error)
+	HSet(string, ...string) (int64, error)
+	HDel(string, ...string) (int64, error)
+}
+
+type KnownChat struct {
+	ChatID     string `json:"chatId"`
+	Type       string `json:"type"`
+	Label      string `json:"label"`
+	Username   string `json:"username"`
+	LastSeenTs int64  `json:"lastSeenTs"`
+}
 
 type Service struct {
 	mu        sync.Mutex
+	notifyMu  sync.Mutex
 	config    Config
-	api       API
-	store     *valkey.Client
+	store     telegramStore
 	broadcast func([]byte)
-	notify    *notifications.Service
+	notify    notifications.Creator
 	clock     Clock
 	jitter    Jitter
 	status    Status
-	known     map[string]Destination
+	known     map[string]KnownChat
 	inflight  map[string]struct{}
 	submit    func(context.Context, int64, string, string, string) error
 	jobState  func() string
+	history   <-chan struct{}
+
+	reference         string
+	resolver          secretResolver
+	factory           APIFactory
+	revisions         chan config.SecretRevision
+	cancelGen         context.CancelFunc
+	generation        uint64
+	root              context.Context
+	activeAPI         API
+	activeCtx         context.Context
+	activeToken       string
+	unsubscribe       func()
+	connectedNotified bool
 }
 
-func New(config Config, api API, store *valkey.Client, broadcast func([]byte), notify *notifications.Service) *Service {
+func cryptoJitter() float64 {
+	var raw [8]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return 0.5
+	}
+	return float64(binary.LittleEndian.Uint64(raw[:])>>11) / (1 << 53)
+}
+
+func New(cfg Config, store telegramStore, broadcast func([]byte), notify notifications.Creator) *Service {
 	if broadcast == nil {
 		broadcast = func([]byte) {}
 	}
-	state := "disabled"
-	detail := "Telegram is disabled"
-	if config.Enabled {
+	state, detail := "disabled", "Telegram is disabled"
+	if cfg.Enabled {
 		state, detail = "connecting", "Connecting to Telegram"
 	}
 	return &Service{
-		config: config, api: api, store: store, broadcast: broadcast, notify: notify,
-		clock: realClock{}, jitter: func() float64 { return 0.5 }, known: map[string]Destination{},
-		inflight: map[string]struct{}{}, status: Status{
-			Enabled: config.Enabled, State: state, Detail: detail,
-			Poll:        PollStatus{TimeoutSeconds: config.PollTimeoutSeconds},
-			MaxEventLog: config.MaxEventLog,
+		config: cfg, store: store, broadcast: broadcast, notify: notify,
+		clock: realClock{}, jitter: cryptoJitter, known: map[string]KnownChat{},
+		inflight: map[string]struct{}{}, revisions: make(chan config.SecretRevision, 1),
+		status: Status{
+			Enabled: cfg.Enabled, State: state, Detail: detail,
+			Poll: PollStatus{TimeoutSeconds: cfg.PollTimeoutSeconds}, MaxEventLog: cfg.MaxEventLog,
 		},
 	}
+}
+
+func (s *Service) ConfigureSecret(reference string, resolver secretResolver, factory APIFactory) {
+	s.reference, s.resolver, s.factory = reference, resolver, factory
 }
 
 func (s *Service) SetSubmitter(fn func(context.Context, int64, string, string, string) error) {
 	s.submit = fn
 }
+func (s *Service) SetJobState(fn func() string)          { s.jobState = fn }
+func (s *Service) SetHistoryReady(ready <-chan struct{}) { s.history = ready }
 
-func (s *Service) SetJobState(fn func() string) { s.jobState = fn }
-
-func Authorized(config Config, chatID, userID string, isBot bool) bool {
-	if isBot || chatID == "" || userID == "" || !contains(config.AllowedChatIDs, chatID) {
+func Authorized(cfg Config, chatID, userID string, isBot bool) bool {
+	if isBot || chatID == "" || userID == "" || !contains(cfg.AllowedChatIDs, chatID) {
 		return false
 	}
-	return len(config.AllowedUserIDs) == 0 || contains(config.AllowedUserIDs, userID)
+	return len(cfg.AllowedUserIDs) == 0 || contains(cfg.AllowedUserIDs, userID)
 }
 
 func contains(values []string, value string) bool {
@@ -113,45 +182,84 @@ func contains(values []string, value string) bool {
 	return false
 }
 
-func NewEvent(update Update, outcome, activeToken string) Event {
-	event := Event{
-		ID: jobs.NewID(), Ts: time.Now().UnixMilli(), UpdateID: update.UpdateID,
-		Kind: "message", Outcome: outcome, Detail: eventDetail(outcome), RawUpdate: json.RawMessage(`{}`),
-	}
-	message := update.Message
-	if update.EditedMessage != nil {
-		message, event.Kind = update.EditedMessage, "edited_message"
-	}
-	if message != nil {
-		if message.Chat != nil {
-			event.ChatID = strconv.FormatInt(message.Chat.ID, 10)
-			event.ChatType = sanitize(message.Chat.Type, 128)
-			event.ChatLabel = chatLabel(*message.Chat)
+func sanitize(value string, limit int) string {
+	out := make([]rune, 0, min(len([]rune(value)), limit))
+	for _, char := range value {
+		if unicode.IsControl(char) {
+			char = '\uFFFD'
 		}
-		if message.From != nil {
-			event.UserID = strconv.FormatInt(message.From.ID, 10)
-			event.Username = sanitize(message.From.Username, 128)
-		}
-		event.MessageID = message.MessageID
-		if outcome == "accepted" || outcome == "rejected_too_long" {
-			event.TextPreview = preview(message.Text, 160)
+		out = append(out, char)
+		if len(out) == limit {
+			break
 		}
 	}
-	raw := bytes.TrimSpace(update.Raw)
+	return string(out)
+}
+
+func preview(value string, limit int) string {
+	clean := make([]rune, 0, len([]rune(value)))
+	for _, char := range value {
+		if unicode.IsControl(char) && char != '\n' && char != '\t' {
+			char = '\uFFFD'
+		}
+		clean = append(clean, char)
+	}
+	collapsed := []rune(strings.Join(strings.Fields(string(clean)), " "))
+	if len(collapsed) <= limit {
+		return string(collapsed)
+	}
+	if limit <= 1 {
+		return "…"
+	}
+	return string(collapsed[:limit-1]) + "…"
+}
+
+func chatLabel(chat Chat) string {
+	switch {
+	case chat.Title != "":
+		return sanitize(chat.Title, 128)
+	case chat.Username != "":
+		return sanitize("@"+chat.Username, 128)
+	case strings.TrimSpace(chat.FirstName+" "+chat.LastName) != "":
+		return sanitize(strings.TrimSpace(chat.FirstName+" "+chat.LastName), 128)
+	default:
+		return "Chat " + strconv.FormatInt(chat.ID, 10)
+	}
+}
+
+func eventDetail(outcome string) string {
+	return map[string]string{
+		"accepted": "Message accepted", "denied": "Update was not authorized",
+		"ignored_edit": "Edited messages are ignored", "ignored_bot": "Bot-authored messages are ignored",
+		"ignored_non_text": "Non-text messages are ignored", "ignored_malformed": "Malformed update ignored",
+		"ignored_unsupported": "Unsupported update ignored", "command": "Command handled",
+		"unknown_command": "Unknown command handled", "rejected_too_long": "Message exceeded 4096 characters",
+		"raw_omitted": "Raw update exceeded the retention cap", "offset_reset": "Stored update offset was reset",
+		"reply_send_failed": "Final Telegram reply could not be delivered",
+		"typing_failed":     "Telegram typing action failed",
+	}[outcome]
+}
+
+func decodeRawObject(raw []byte) (any, json.RawMessage, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 {
+		return nil, json.RawMessage(`{}`), false
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
 	var object map[string]any
-	valid := len(raw) <= 16384 && json.Unmarshal(raw, &object) == nil && object != nil &&
-		(activeToken == "" || !recursiveContains(object, activeToken))
-	if valid {
-		compacted, _ := json.Marshal(object)
-		if len(compacted) <= 16384 {
-			event.RawUpdate = compacted
-		} else {
-			event.RawOmitted = true
-		}
-	} else if len(raw) > 0 {
-		event.RawOmitted = true
+	if decoder.Decode(&object) != nil || object == nil {
+		return nil, json.RawMessage(`{}`), false
 	}
-	return event
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return nil, json.RawMessage(`{}`), false
+	}
+	var compact bytes.Buffer
+	if json.Compact(&compact, raw) != nil || compact.Len() > 16384 {
+		return object, json.RawMessage(`{}`), false
+	}
+	return object, append(json.RawMessage(nil), compact.Bytes()...), true
 }
 
 func recursiveContains(value any, sentinel string) bool {
@@ -174,77 +282,117 @@ func recursiveContains(value any, sentinel string) bool {
 	return false
 }
 
-func sanitize(value string, capRunes int) string {
-	out := []rune(value)
-	for index, char := range out {
-		if unicode.IsControl(char) && char != '\n' && char != '\t' {
-			out[index] = '\uFFFD'
+func NewEventAt(now time.Time, update Update, outcome, activeToken string) Event {
+	event := Event{
+		ID: jobs.NewID(), Ts: now.UnixMilli(), UpdateID: update.UpdateID, Kind: "message",
+		Outcome: outcome, Detail: eventDetail(outcome), RawUpdate: json.RawMessage(`{}`),
+	}
+	message := update.Message
+	if update.EditedMessage != nil {
+		message, event.Kind = update.EditedMessage, "edited_message"
+	}
+	if message != nil {
+		if message.Chat != nil {
+			event.ChatID = strconv.FormatInt(message.Chat.ID, 10)
+			event.ChatType, event.ChatLabel = sanitize(message.Chat.Type, 128), chatLabel(*message.Chat)
+		}
+		if message.From != nil {
+			event.UserID, event.Username = strconv.FormatInt(message.From.ID, 10), sanitize(message.From.Username, 128)
+		}
+		event.MessageID = message.MessageID
+		if outcome == "accepted" || outcome == "rejected_too_long" {
+			event.TextPreview = preview(message.Text, 160)
 		}
 	}
-	if len(out) > capRunes {
-		out = out[:capRunes]
+	object, compact, retained := decodeRawObject(update.Raw)
+	if retained && (activeToken == "" || !recursiveContains(object, activeToken)) {
+		event.RawUpdate = compact
+	} else if len(bytes.TrimSpace(update.Raw)) > 0 {
+		event.RawOmitted = true
+		event.Outcome, event.Detail = "raw_omitted", eventDetail("raw_omitted")
 	}
-	return string(out)
+	return event
 }
 
-func preview(value string, limit int) string {
-	value = strings.Join(strings.Fields(sanitize(value, limit+1)), " ")
-	runes := []rune(value)
-	if len(runes) > limit {
-		return string(runes[:limit]) + "…"
+func NewEvent(update Update, outcome, activeToken string) Event {
+	return NewEventAt(time.Now(), update, outcome, activeToken)
+}
+
+func (s *Service) appendEvent(event Event) error {
+	return s.appendEventFor(context.Background(), 0, event)
+}
+
+func (s *Service) appendEventFor(ctx context.Context, generation uint64, event Event) error {
+	if generation != 0 && !s.generationCurrent(ctx, generation) {
+		return context.Canceled
 	}
-	return value
+	if s.store == nil {
+		return errors.New("storage unavailable")
+	}
+	encoded, _ := json.Marshal(event)
+	reply, err := s.store.Eval(appendEventScript, []string{eventsKey}, string(encoded), strconv.Itoa(s.config.MaxEventLog))
+	if err != nil {
+		return err
+	}
+	count, ok := reply.(int64)
+	if !ok {
+		return errors.New("invalid event append reply")
+	}
+	if generation != 0 && !s.generationCurrent(ctx, generation) {
+		return context.Canceled
+	}
+	s.updateStatus(generation, func(status *Status) {
+		status.EventCount = int(count)
+	})
+	if generation != 0 && !s.generationCurrent(ctx, generation) {
+		return context.Canceled
+	}
+	frame, _ := json.Marshal(map[string]any{"type": "telegram-event", "event": event})
+	s.broadcast(frame)
+	return nil
 }
 
-func chatLabel(chat Chat) string {
-	switch {
-	case chat.Title != "":
-		return sanitize(chat.Title, 128)
-	case chat.Username != "":
-		return sanitize("@"+chat.Username, 128)
-	case strings.TrimSpace(chat.FirstName+" "+chat.LastName) != "":
-		return sanitize(strings.TrimSpace(chat.FirstName+" "+chat.LastName), 128)
-	default:
-		return "Chat " + strconv.FormatInt(chat.ID, 10)
+func (s *Service) appendSystem(outcome, code string) {
+	s.appendSystemFor(context.Background(), 0, outcome, code)
+}
+
+func (s *Service) appendSystemFor(ctx context.Context, generation uint64, outcome, code string) {
+	event := Event{
+		ID: jobs.NewID(), Ts: s.clock.Now().UnixMilli(), Kind: "system", Outcome: outcome,
+		Detail: eventDetail(outcome), RawUpdate: json.RawMessage(`{}`),
+	}
+	if event.Detail == "" {
+		event.Detail = sanitize(code, 256)
+	}
+	if err := s.appendEventFor(ctx, generation, event); err != nil && !errors.Is(err, context.Canceled) {
+		log.Printf("telegram: event: storage_unavailable")
 	}
 }
 
-func eventDetail(outcome string) string {
-	table := map[string]string{
-		"accepted": "Message accepted", "denied": "Update was not authorized",
-		"ignored_edit": "Edited messages are ignored", "ignored_bot": "Bot-authored messages are ignored",
-		"ignored_non_text": "Non-text messages are ignored", "ignored_malformed": "Malformed update ignored",
-		"ignored_unsupported": "Unsupported update ignored", "command": "Command handled",
-		"unknown_command": "Unknown command handled", "rejected_too_long": "Message exceeded 4096 characters",
+func (s *Service) loadEvents(limit int) []Event {
+	if s.store == nil {
+		return nil
 	}
-	return table[outcome]
-}
-
-func (s *Service) StatusMessage() []byte {
-	s.mu.Lock()
-	status := s.status
-	status.Destinations = s.destinationsLocked()
-	s.mu.Unlock()
-	body, _ := json.Marshal(map[string]any{"type": "telegram-status", "status": status})
-	return body
-}
-
-func (s *Service) destinationsLocked() []Destination {
-	result := make([]Destination, 0, len(s.config.AllowedChatIDs))
-	for _, id := range s.config.AllowedChatIDs {
-		if observed, ok := s.known[id]; ok {
-			result = append(result, observed)
-		} else {
-			result = append(result, Destination{ChatID: id, Label: "Chat " + id})
+	rows, err := s.store.LRange(eventsKey, -limit, -1)
+	if err != nil {
+		return nil
+	}
+	result := make([]Event, 0, len(rows))
+	for _, row := range rows {
+		var event Event
+		if json.Unmarshal([]byte(row), &event) == nil {
+			result = append(result, event)
 		}
 	}
 	return result
 }
 
-func (s *Service) EventsMessage() []byte {
-	events := s.loadEvents(50)
-	body, _ := json.Marshal(map[string]any{"type": "telegram-events", "events": summaries(events), "eventCount": s.eventCount()})
-	return body
+func (s *Service) eventCount() int {
+	if s.store == nil {
+		return 0
+	}
+	count, _ := s.store.LLen(eventsKey)
+	return int(count)
 }
 
 func summaries(events []Event) []map[string]any {
@@ -259,134 +407,443 @@ func summaries(events []Event) []map[string]any {
 	return result
 }
 
-func (s *Service) eventCount() int {
-	if s.store == nil {
-		return 0
-	}
-	count, _ := s.store.LLen(eventsKey)
-	return int(count)
+func (s *Service) StatusMessage() []byte {
+	s.mu.Lock()
+	status := s.statusLocked()
+	s.mu.Unlock()
+	return statusMessage(status)
 }
 
-func (s *Service) loadEvents(limit int) []Event {
-	if s.store == nil {
-		return nil
+func statusMessage(status Status) []byte {
+	body, _ := json.Marshal(map[string]any{"type": "telegram-status", "status": status})
+	return body
+}
+
+func (s *Service) statusLocked() Status {
+	status := s.status
+	status.Destinations = s.destinationsLocked()
+	return status
+}
+
+func (s *Service) updateStatus(generation uint64, mutate func(*Status)) bool {
+	s.mu.Lock()
+	if generation != 0 && generation != s.generation {
+		s.mu.Unlock()
+		return false
 	}
-	rows, _ := s.store.LRange(eventsKey, -limit, -1)
-	result := make([]Event, 0, len(rows))
-	for _, row := range rows {
-		var event Event
-		if json.Unmarshal([]byte(row), &event) == nil {
-			result = append(result, event)
+	before := s.statusLocked()
+	mutate(&s.status)
+	after := s.statusLocked()
+	changed := !reflect.DeepEqual(before, after)
+	s.mu.Unlock()
+	if changed {
+		if generation != 0 && !s.generationCurrent(context.Background(), generation) {
+			return false
+		}
+		s.broadcast(statusMessage(after))
+	}
+	return true
+}
+
+func (s *Service) EventsMessage() []byte {
+	events := s.loadEvents(50)
+	body, _ := json.Marshal(map[string]any{"type": "telegram-events", "events": summaries(events), "eventCount": s.eventCount()})
+	return body
+}
+
+func (s *Service) destinationsLocked() []Destination {
+	result := make([]Destination, 0, len(s.config.AllowedChatIDs))
+	for _, id := range s.config.AllowedChatIDs {
+		if known, ok := s.known[id]; ok {
+			result = append(result, Destination{ChatID: id, Label: known.Label, Type: known.Type, Observed: true})
+		} else {
+			result = append(result, Destination{ChatID: id, Label: "Chat " + id})
 		}
 	}
 	return result
 }
 
-func (s *Service) appendEvent(event Event) error {
+func (s *Service) loadPersistent() error {
 	if s.store == nil {
 		return errors.New("storage unavailable")
 	}
-	encoded, _ := json.Marshal(event)
-	if _, err := s.store.RPush(eventsKey, string(encoded)); err != nil {
+	offset := int64(0)
+	raw, err := s.store.Get(offsetKey)
+	if err != nil {
 		return err
 	}
-	if err := s.store.LTrim(eventsKey, -s.config.MaxEventLog, -1); err != nil {
+	if raw != nil {
+		parsed, parseErr := strconv.ParseInt(*raw, 10, 64)
+		if parseErr == nil && parsed >= 0 {
+			offset = parsed
+		} else {
+			s.appendSystem("offset_reset", "offset_reset")
+		}
+	}
+	rows, err := s.store.LRange(chatsKey, 0, -1)
+	if err != nil {
 		return err
+	}
+	known := map[string]KnownChat{}
+	for _, row := range rows {
+		var item KnownChat
+		if json.Unmarshal([]byte(row), &item) == nil && canonicalChatID.MatchString(item.ChatID) {
+			known[item.ChatID] = item
+		}
 	}
 	s.mu.Lock()
-	s.status.EventCount = s.eventCount()
+	s.known = known
+	s.status.Poll.NextOffset, s.status.EventCount = offset, s.eventCount()
 	s.mu.Unlock()
-	frame, _ := json.Marshal(map[string]any{"type": "telegram-event", "event": event})
-	s.broadcast(frame)
 	return nil
 }
 
 func (s *Service) Start(ctx context.Context) {
-	if !s.config.Enabled || s.api == nil {
+	s.root = ctx
+	if !s.config.Enabled {
+		_ = s.loadPersistent()
+		if s.store != nil {
+			_, _ = s.store.HDel(notificationKey, "auth_active", "suspended_active", "suspended_conflict", "delivery_active")
+		}
 		return
 	}
-	go s.poll(ctx)
+	if s.resolver == nil || s.factory == nil || s.reference == "" {
+		s.setState(0, "secret_unavailable", "secret_unavailable")
+		return
+	}
+	s.unsubscribe = s.resolver.Subscribe(s.reference, func(revision config.SecretRevision) {
+		s.clearAuthEligibility()
+		s.mu.Lock()
+		cancel := s.cancelGen
+		s.mu.Unlock()
+		if cancel != nil {
+			cancel()
+		}
+		select {
+		case s.revisions <- revision:
+		default:
+			select {
+			case <-s.revisions:
+			default:
+			}
+			select {
+			case s.revisions <- revision:
+			default:
+			}
+		}
+	})
+	go s.bootstrap(ctx)
 }
 
-func (s *Service) poll(ctx context.Context) {
-	me, err := s.api.GetMe(ctx)
-	if err != nil || !me.IsBot {
-		code := errorCode(err)
-		if err == nil {
-			code = "identity_not_bot"
+func (s *Service) clearAuthEligibility() {
+	s.notifyMu.Lock()
+	defer s.notifyMu.Unlock()
+	if s.store != nil {
+		_, _ = s.store.HDel(notificationKey, "auth_active")
+	}
+}
+
+func (s *Service) bootstrap(ctx context.Context) {
+	for failures := 1; ; failures++ {
+		if err := s.loadPersistent(); err == nil {
+			s.lifecycle(ctx)
+			return
 		}
-		s.setState("auth_failed", code)
-		s.notifyLifecycle(ctx, "error", "Telegram authentication failed", "Update the Telegram bot-token secret in Config.")
-		return
+		s.setState(0, "backing_off", "storage_unavailable")
+		if s.clock.Sleep(ctx, backoff(failures, s.jitter())) != nil {
+			s.setState(0, "stopped", "")
+			return
+		}
+	}
+}
+
+func (s *Service) lifecycle(ctx context.Context) {
+	defer func() {
+		if s.unsubscribe != nil {
+			s.unsubscribe()
+		}
+		s.mu.Lock()
+		s.activeToken, s.activeAPI, s.activeCtx = "", nil, nil
+		s.mu.Unlock()
+		s.setState(0, "stopped", "")
+	}()
+	revision := config.SecretRevision{Success: true}
+	for ctx.Err() == nil {
+		if !revision.Success {
+			s.setState(0, "secret_unavailable", "secret_unavailable")
+			select {
+			case <-ctx.Done():
+				return
+			case revision = <-s.revisions:
+				continue
+			}
+		}
+		tokenBytes, _, err := s.resolver.Resolve(s.reference, 5*time.Minute)
+		if err != nil || len(tokenBytes) == 0 {
+			zero(tokenBytes)
+			s.setState(0, "secret_unavailable", "secret_unavailable")
+			select {
+			case <-ctx.Done():
+				return
+			case revision = <-s.revisions:
+				continue
+			}
+		}
+		token := string(tokenBytes)
+		zero(tokenBytes)
+		api, err := s.factory(token)
+		if err != nil {
+			s.setState(0, "secret_unavailable", "secret_unavailable")
+			return
+		}
+		genCtx, cancel := context.WithCancel(ctx)
+		s.mu.Lock()
+		s.generation++
+		generation := s.generation
+		s.cancelGen, s.activeAPI, s.activeCtx, s.activeToken = cancel, api, genCtx, token
+		s.mu.Unlock()
+		s.setState(generation, "connecting", "")
+		authFailed := s.runGeneration(genCtx, generation, api)
+		cancel()
+		s.mu.Lock()
+		if s.generation == generation {
+			s.cancelGen, s.activeAPI, s.activeCtx, s.activeToken = nil, nil, nil, ""
+		}
+		s.mu.Unlock()
+		if ctx.Err() != nil {
+			return
+		}
+		if authFailed {
+			select {
+			case <-ctx.Done():
+				return
+			case revision = <-s.revisions:
+			}
+		} else {
+			select {
+			case revision = <-s.revisions:
+			default:
+				revision = config.SecretRevision{Success: true}
+			}
+		}
+	}
+}
+
+func (s *Service) generationCurrent(ctx context.Context, generation uint64) bool {
+	if ctx != nil && ctx.Err() != nil {
+		return false
 	}
 	s.mu.Lock()
-	s.status.Bot = BotIdentity{ID: strconv.FormatInt(me.ID, 10), Username: me.Username, DisplayName: strings.TrimSpace(me.FirstName + " " + me.LastName)}
-	s.mu.Unlock()
-	s.setState("connected", "")
-	s.notifyLifecycle(ctx, "info", "Telegram connected", "The configured bot is authenticated and long polling is active.")
-	offset := int64(0)
-	if s.store != nil {
-		if raw, getErr := s.store.Get(offsetKey); getErr == nil && raw != nil {
-			offset, _ = strconv.ParseInt(*raw, 10, 64)
-		}
-	}
+	defer s.mu.Unlock()
+	return generation == s.generation && s.root != nil && s.root.Err() == nil &&
+		s.activeCtx != nil && s.activeCtx.Err() == nil
+}
+
+func (s *Service) runGeneration(ctx context.Context, generation uint64, api API) bool {
 	failures := 0
+	var failureStarted time.Time
 	for ctx.Err() == nil {
-		updates, pollErr := s.api.GetUpdates(ctx, GetUpdatesRequest{
-			Offset: offset, Timeout: s.config.PollTimeoutSeconds,
-			AllowedUpdates: []string{"message", "edited_message"},
-		})
-		if pollErr != nil {
-			if ctx.Err() != nil {
-				break
+		if !s.generationCurrent(ctx, generation) {
+			return false
+		}
+		me, err := api.GetMe(ctx)
+		if !s.generationCurrent(ctx, generation) {
+			return false
+		}
+		if err == nil && !me.IsBot {
+			err = &APIError{Code: "identity_not_bot"}
+		}
+		if err != nil {
+			code := errorCode(err)
+			if code == "authentication_failed" || code == "identity_not_bot" {
+				s.setState(generation, "auth_failed", code)
+				s.authNotification(ctx)
+				return true
 			}
 			failures++
-			code := errorCode(pollErr)
-			if code == "authentication_failed" {
-				s.setState("auth_failed", code)
-				return
+			if failureStarted.IsZero() {
+				failureStarted = s.clock.Now()
 			}
-			state := "backing_off"
-			if code == "poll_conflict" || failures >= 5 {
-				state = "polling_suspended"
-			}
-			s.setState(state, code)
-			delay := backoff(failures, s.jitter())
-			var apiErr *APIError
-			if errors.As(pollErr, &apiErr) && apiErr.RetryAfter > 0 {
-				delay = min(max(apiErr.RetryAfter, time.Second), 15*time.Minute)
-			}
-			if s.clock.Sleep(ctx, delay) != nil {
-				break
+			if !s.retry(ctx, generation, failures, code, err, failureStarted) {
+				return false
 			}
 			continue
 		}
-		failures = 0
-		s.setState("connected", "")
+		if !s.generationCurrent(ctx, generation) {
+			return false
+		}
+		s.updateStatus(generation, func(status *Status) {
+			status.Bot = BotIdentity{
+				ID: strconv.FormatInt(me.ID, 10), Username: sanitize(me.Username, 128),
+				DisplayName: sanitize(strings.TrimSpace(me.FirstName+" "+me.LastName), 128),
+			}
+			status.Poll.ConsecutiveFailures = 0
+			status.Poll.RetryAt = nil
+			status.State, status.Code, status.Detail = "connected", "", stateDetail("connected")
+		})
+		failures, failureStarted = 0, time.Time{}
+		s.connectedNotification(ctx)
+		break
+	}
+	for ctx.Err() == nil {
+		s.mu.Lock()
+		offset := s.status.Poll.NextOffset
+		s.mu.Unlock()
+		if !s.generationCurrent(ctx, generation) {
+			return false
+		}
+		updates, err := api.GetUpdates(ctx, GetUpdatesRequest{
+			Offset: offset, Timeout: s.config.PollTimeoutSeconds,
+			AllowedUpdates: []string{"message", "edited_message"},
+		})
+		if !s.generationCurrent(ctx, generation) {
+			return false
+		}
+		if err != nil {
+			code := errorCode(err)
+			if code == "authentication_failed" {
+				s.setState(generation, "auth_failed", code)
+				s.authNotification(ctx)
+				return true
+			}
+			failures++
+			if failureStarted.IsZero() {
+				failureStarted = s.clock.Now()
+			}
+			if !s.retry(ctx, generation, failures, code, err, failureStarted) {
+				return false
+			}
+			continue
+		}
+		if !s.generationCurrent(ctx, generation) {
+			return false
+		}
+		now := s.clock.Now()
+		wasSuspended := s.state() == "polling_suspended"
+		failures, failureStarted = 0, time.Time{}
+		s.updateStatus(generation, func(status *Status) {
+			status.Poll.ConsecutiveFailures = 0
+			status.Poll.RetryAt = nil
+			status.Poll.LastSuccessTs = now.UnixMilli()
+			status.State, status.Code, status.Detail = "connected", "", stateDetail("connected")
+		})
+		if wasSuspended {
+			s.recoveredNotification(ctx)
+		}
 		sort.Slice(updates, func(i, j int) bool { return updates[i].UpdateID < updates[j].UpdateID })
+		storageFailure := false
 		for _, update := range updates {
+			if !s.generationCurrent(ctx, generation) {
+				return false
+			}
 			if update.UpdateID < offset {
 				continue
 			}
-			if err := s.process(ctx, update); err != nil {
-				s.setState("backing_off", "storage_unavailable")
+			if err := s.process(ctx, generation, api, update); err != nil {
+				if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+					return false
+				}
+				storageFailure = true
 				break
 			}
-			offset = update.UpdateID + 1
-			if s.store == nil || s.store.Set(offsetKey, strconv.FormatInt(offset, 10)) != nil {
-				s.setState("backing_off", "storage_unavailable")
+			candidate := update.UpdateID + 1
+			if !s.generationCurrent(ctx, generation) {
+				return false
+			}
+			if s.store == nil || s.store.Set(offsetKey, strconv.FormatInt(candidate, 10)) != nil {
+				storageFailure = true
 				break
 			}
-			s.mu.Lock()
-			s.status.Poll.NextOffset = offset
-			s.status.Poll.LastSuccessTs = s.clock.Now().UnixMilli()
-			s.mu.Unlock()
+			offset = candidate
+			if !s.generationCurrent(ctx, generation) {
+				return false
+			}
+			s.updateStatus(generation, func(status *Status) {
+				status.Poll.NextOffset = candidate
+			})
+		}
+		if storageFailure {
+			failures++
+			if failureStarted.IsZero() {
+				failureStarted = s.clock.Now()
+			}
+			if !s.retry(ctx, generation, failures, "storage_unavailable", nil, failureStarted) {
+				return false
+			}
 		}
 	}
-	s.setState("stopped", "")
+	return false
 }
 
-func (s *Service) process(ctx context.Context, update Update) error {
+func (s *Service) retry(ctx context.Context, generation uint64, failures int, code string, err error, failureStarted time.Time) bool {
+	if !s.generationCurrent(ctx, generation) {
+		return false
+	}
+	now := s.clock.Now()
+	suspended := s.state() == "polling_suspended" || code == "poll_conflict" || failures >= 5 ||
+		(!failureStarted.IsZero() && now.Sub(failureStarted) >= 60*time.Second)
+	state := "backing_off"
+	if suspended {
+		state = "polling_suspended"
+	}
+	delay := backoff(failures, s.jitter())
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && apiErr.Code == "rate_limited" && apiErr.RetryAfter > 0 {
+		delay = min(max(apiErr.RetryAfter, time.Second), 15*time.Minute)
+	}
+	retryAt := now.Add(delay).UnixMilli()
+	s.updateStatus(generation, func(status *Status) {
+		status.Poll.ConsecutiveFailures = failures
+		status.Poll.RetryAt = &retryAt
+		status.State, status.Code, status.Detail = state, code, stateDetail(state)
+	})
+	s.appendSystemFor(ctx, generation, code, code)
+	if suspended {
+		s.suspendedNotification(ctx, code == "poll_conflict")
+	}
+	if !suspended && !failureStarted.IsZero() {
+		untilSuspended := 60*time.Second - now.Sub(failureStarted)
+		if untilSuspended > 0 && untilSuspended < delay {
+			if s.clock.Sleep(ctx, untilSuspended) != nil || !s.generationCurrent(ctx, generation) {
+				return false
+			}
+			s.updateStatus(generation, func(status *Status) {
+				status.State, status.Detail = "polling_suspended", stateDetail("polling_suspended")
+			})
+			s.suspendedNotification(ctx, false)
+			delay -= untilSuspended
+		}
+	}
+	return s.clock.Sleep(ctx, delay) == nil && s.generationCurrent(ctx, generation)
+}
+
+func (s *Service) state() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.status.State
+}
+
+func (s *Service) setState(generation uint64, state, code string) {
+	s.updateStatus(generation, func(status *Status) {
+		status.State, status.Code, status.Detail = state, code, stateDetail(state)
+	})
+}
+
+func stateDetail(state string) string {
+	return map[string]string{
+		"disabled": "Telegram is disabled", "invalid_config": "Telegram configuration is invalid",
+		"secret_unavailable": "Telegram bot-token secret is unavailable",
+		"connecting":         "Connecting to Telegram", "connected": "Polling for authorized messages",
+		"backing_off":       "Retrying Telegram connection",
+		"polling_suspended": "Telegram polling is suspended; retries continue",
+		"auth_failed":       "Telegram authentication failed", "stopped": "Telegram service stopped",
+	}[state]
+}
+
+func (s *Service) process(ctx context.Context, generation uint64, api API, update Update) error {
+	if !s.generationCurrent(ctx, generation) {
+		return context.Canceled
+	}
 	outcome := "ignored_unsupported"
 	message := update.Message
 	switch {
@@ -403,67 +860,127 @@ func (s *Service) process(ctx context.Context, update Update) error {
 		if !Authorized(s.config, chatID, userID, message.From.IsBot) {
 			outcome = "denied"
 		} else {
-			s.observe(*message.Chat)
+			if err := s.observe(ctx, generation, *message.Chat); err != nil {
+				return err
+			}
 			text := strings.TrimSpace(message.Text)
 			switch {
 			case text == "":
 				outcome = "ignored_non_text"
-			case commandName(*message, s.status.Bot.Username) != "":
-				outcome = s.handleCommand(ctx, chatID, commandName(*message, s.status.Bot.Username))
+			case commandName(*message, s.botUsername()) != "":
+				outcome = s.handleCommand(ctx, generation, api, chatID, commandName(*message, s.botUsername()))
 			case len([]rune(text)) > 4096:
 				outcome = "rejected_too_long"
-				_ = s.send(ctx, chatID, "That message is too long. Please keep it to 4096 characters.")
+				if err := s.send(ctx, generation, api, chatID, "That message is too long. Please keep it to 4096 characters."); err != nil &&
+					!errors.Is(err, context.Canceled) {
+					s.deliveryFailed(ctx)
+				}
 			default:
+				if s.history != nil {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-s.history:
+					}
+				}
 				outcome = "accepted"
-				if s.submit != nil {
-					_ = s.api.SendChatAction(ctx, SendChatActionRequest{ChatID: chatID, Action: "typing"})
-					key := fmt.Sprintf("virtualme:chat:ingress:telegram:%d", update.UpdateID)
-					stage := "reserved"
-					if s.store != nil {
-						reply, err := s.store.Eval(reserveIngressScript, []string{key, ingressIndexKey}, stage, strconv.FormatInt(update.UpdateID, 10))
-						if err != nil {
-							return err
-						}
-						if current, ok := reply.(string); ok {
-							stage = current
-						}
+				if s.submit == nil {
+					return errors.New("chat submitter unavailable")
+				}
+				if !s.generationCurrent(ctx, generation) {
+					return context.Canceled
+				}
+				if err := s.submit(ctx, update.UpdateID, chatID, userID, text); err != nil {
+					if !s.generationCurrent(ctx, generation) {
+						return context.Canceled
 					}
-					if stage != "complete" {
-						if err := s.submit(ctx, update.UpdateID, chatID, userID, text); err != nil {
-							return err
-						}
-						if s.store == nil || s.store.Set(key, "complete") != nil {
-							return errors.New("storage unavailable")
-						}
-					}
+					_ = s.send(ctx, generation, api, chatID, "Virtual Me could not queue that request. Please try again shortly.")
+					return err
 				}
 			}
 		}
 	}
-	return s.appendEvent(NewEvent(update, outcome, s.config.BotToken))
+	s.mu.Lock()
+	token := ""
+	if generation == s.generation {
+		token = s.activeToken
+	}
+	s.mu.Unlock()
+	return s.appendEventFor(ctx, generation, NewEventAt(s.clock.Now(), update, outcome, token))
 }
 
-func (s *Service) observe(chat Chat) {
-	destination := Destination{ChatID: strconv.FormatInt(chat.ID, 10), Label: chatLabel(chat), Type: sanitize(chat.Type, 128), Observed: true}
+func (s *Service) botUsername() string {
 	s.mu.Lock()
-	s.known[destination.ChatID] = destination
-	s.mu.Unlock()
-	if s.store != nil {
-		encoded, _ := json.Marshal(destination)
-		_, _ = s.store.RPush(chatsKey, string(encoded))
-		_ = s.store.LTrim(chatsKey, -200, -1)
+	defer s.mu.Unlock()
+	return s.status.Bot.Username
+}
+
+func (s *Service) observe(ctx context.Context, generation uint64, chat Chat) error {
+	if !s.generationCurrent(ctx, generation) {
+		return context.Canceled
 	}
+	item := KnownChat{
+		ChatID: strconv.FormatInt(chat.ID, 10), Type: sanitize(chat.Type, 128),
+		Label: chatLabel(chat), Username: sanitize(chat.Username, 128), LastSeenTs: s.clock.Now().UnixMilli(),
+	}
+	encoded, _ := json.Marshal(item)
+	if s.store == nil {
+		return errors.New("storage unavailable")
+	}
+	if _, err := s.store.Eval(upsertChatScript, []string{chatsKey}, item.ChatID, string(encoded)); err != nil {
+		return err
+	}
+	if !s.generationCurrent(ctx, generation) {
+		return context.Canceled
+	}
+	s.mu.Lock()
+	before := s.statusLocked()
+	s.known[item.ChatID] = item
+	after := s.statusLocked()
+	s.mu.Unlock()
+	if !reflect.DeepEqual(before, after) {
+		if !s.generationCurrent(ctx, generation) {
+			return context.Canceled
+		}
+		s.broadcast(statusMessage(after))
+	}
+	return nil
+}
+
+func utf16Prefix(text string, units int) (string, bool) {
+	if units <= 0 {
+		return "", false
+	}
+	count := 0
+	for index, char := range text {
+		width := len(utf16.Encode([]rune{char}))
+		if count+width > units {
+			return "", false
+		}
+		count += width
+		if count == units {
+			return text[:index+len(string(char))], true
+		}
+	}
+	return "", false
 }
 
 func commandName(message Message, botUsername string) string {
-	if len(message.Entities) == 0 || message.Entities[0].Type != "bot_command" || message.Entities[0].Offset != 0 {
+	var entity *MessageEntity
+	for index := range message.Entities {
+		if message.Entities[index].Type == "bot_command" && message.Entities[index].Offset == 0 {
+			entity = &message.Entities[index]
+			break
+		}
+	}
+	if entity == nil {
 		return ""
 	}
-	runes := []rune(message.Text)
-	if message.Entities[0].Length <= 0 || message.Entities[0].Length > len(runes) {
+	value, ok := utf16Prefix(message.Text, entity.Length)
+	if !ok {
 		return "unknown"
 	}
-	value := strings.ToLower(string(runes[:message.Entities[0].Length]))
+	value = strings.ToLower(value)
 	parts := strings.SplitN(value, "@", 2)
 	if len(parts) == 2 && !strings.EqualFold(parts[1], botUsername) {
 		return "unknown"
@@ -481,9 +998,8 @@ func commandName(message Message, botUsername string) string {
 	}
 }
 
-func (s *Service) handleCommand(ctx context.Context, chatID, command string) string {
-	text := "Unknown command. Commands: /help, /status."
-	outcome := "unknown_command"
+func (s *Service) handleCommand(ctx context.Context, generation uint64, api API, chatID, command string) string {
+	text, outcome := "Unknown command. Commands: /help, /status.", "unknown_command"
 	switch command {
 	case "help":
 		text, outcome = "Virtual Me shares one conversation with the web console. Send text to ask a question. Commands: /help, /status.", "command"
@@ -492,45 +1008,252 @@ func (s *Service) handleCommand(ctx context.Context, chatID, command string) str
 		if s.jobState != nil {
 			state = s.jobState()
 		}
-		text, outcome = fmt.Sprintf("Virtual Me is %s. Telegram is connected as @%s.", state, s.status.Bot.Username), "command"
+		text, outcome = fmt.Sprintf("Virtual Me is %s. Telegram is connected as @%s.", state, s.botUsername()), "command"
 	}
-	_ = s.send(ctx, chatID, text)
+	if err := s.send(ctx, generation, api, chatID, text); err != nil && !errors.Is(err, context.Canceled) {
+		s.deliveryFailed(ctx)
+	}
 	return outcome
 }
 
-func (s *Service) send(ctx context.Context, chatID, text string) error {
+func (s *Service) send(ctx context.Context, generation uint64, api API, chatID, text string) error {
 	for _, chunk := range ChunkText(text) {
-		if _, err := s.api.SendMessage(ctx, SendMessageRequest{ChatID: chatID, Text: chunk}); err != nil {
+		if !s.generationCurrent(ctx, generation) {
+			return context.Canceled
+		}
+		if _, err := api.SendMessage(ctx, SendMessageRequest{ChatID: chatID, Text: chunk}); err != nil {
 			return err
 		}
+	}
+	if !s.generationCurrent(ctx, generation) {
+		return context.Canceled
+	}
+	s.deliverySucceeded()
+	return nil
+}
+
+func (s *Service) Typing(ctx context.Context, chatID string) {
+	send := func() {
+		s.mu.Lock()
+		api := s.activeAPI
+		generation := s.generation
+		generationCtx := s.activeCtx
+		s.mu.Unlock()
+		if api != nil && generationCtx != nil {
+			callCtx, cancel := linkedContext(ctx, generationCtx)
+			defer cancel()
+			if !s.generationCurrent(callCtx, generation) {
+				return
+			}
+			if err := api.SendChatAction(callCtx, SendChatActionRequest{ChatID: chatID, Action: "typing"}); err != nil &&
+				callCtx.Err() == nil {
+				s.appendSystemFor(callCtx, generation, "typing_failed", "send_failed")
+			}
+		}
+	}
+	send()
+	ticker := time.NewTicker(4 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			send()
+		}
+	}
+}
+
+func (s *Service) Deliver(ctx context.Context, chatID, text string, cause error, stopped bool) error {
+	s.mu.Lock()
+	api := s.activeAPI
+	generation := s.generation
+	generationCtx := s.activeCtx
+	s.mu.Unlock()
+	if api == nil || generationCtx == nil {
+		return errors.New("Telegram is not connected")
+	}
+	callCtx, cancel := linkedContext(ctx, generationCtx)
+	defer cancel()
+	switch {
+	case stopped:
+		text = "That request was cancelled before it completed."
+	case cause != nil:
+		text = "Virtual Me could not complete that request. Please try again."
+	}
+	err := s.send(callCtx, generation, api, chatID, text)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return err
+		}
+		s.appendSystem("reply_send_failed", "send_failed")
+		s.deliveryFailed(ctx)
+	}
+	return err
+}
+
+func linkedContext(parent, generation context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(parent)
+	stop := context.AfterFunc(generation, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
+	}
+}
+
+func (s *Service) notificationState() map[string]string {
+	if s.store == nil {
+		return map[string]string{}
+	}
+	state, err := s.store.HGetAll(notificationKey)
+	if err != nil {
+		return map[string]string{}
+	}
+	return state
+}
+
+func (s *Service) createNotification(ctx context.Context, severity, title, summary string) error {
+	if s.notify == nil || ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if _, err := s.notify.Create(ctx, notifications.CreateRequest{
+		Type: severity, Sender: "telegram", Title: title, Summary: summary, Renderer: "generic",
+	}); err != nil {
+		log.Printf("telegram: notification: storage_unavailable")
+		return err
 	}
 	return nil
 }
 
-func (s *Service) Deliver(ctx context.Context, chatID, text string) error {
-	return s.send(ctx, chatID, text)
+func (s *Service) connectedNotification(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
+	s.notifyMu.Lock()
+	defer s.notifyMu.Unlock()
+	s.mu.Lock()
+	if s.connectedNotified {
+		s.mu.Unlock()
+		return
+	}
+	s.mu.Unlock()
+	if err := s.createNotification(ctx, "info", "Telegram connected", "The configured bot is authenticated and long polling is active."); err != nil {
+		return
+	}
+	s.mu.Lock()
+	s.connectedNotified = true
+	s.mu.Unlock()
+	if s.store != nil {
+		_, _ = s.store.HDel(notificationKey, "auth_active")
+	}
 }
 
-func (s *Service) HandleMessage(conn *ws.Conn, payload []byte) bool {
-	var envelope struct {
-		Type string `json:"type"`
+func (s *Service) authNotification(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
 	}
-	if json.Unmarshal(payload, &envelope) != nil || !strings.HasPrefix(envelope.Type, "telegram-") {
-		return false
+	s.notifyMu.Lock()
+	defer s.notifyMu.Unlock()
+	if s.store == nil {
+		return
 	}
-	switch envelope.Type {
-	case "telegram-status-req":
-		_ = conn.WriteText(s.StatusMessage())
-	case "telegram-events-req":
-		_ = conn.WriteText(s.EventsMessage())
-	case "telegram-event-detail-req":
-		s.handleDetail(conn, payload)
-	case "telegram-test-send":
-		s.handleTestSend(conn, payload)
-	default:
-		return false
+	state := s.notificationState()
+	if state["auth_active"] == "1" {
+		return
 	}
-	return true
+	if _, err := s.store.HSet(notificationKey, "auth_active", "1"); err != nil {
+		return
+	}
+	if err := s.createNotification(ctx, "error", "Telegram authentication failed", "Update the Telegram bot-token secret in Config."); err != nil {
+		_, _ = s.store.HDel(notificationKey, "auth_active")
+	}
+}
+
+func (s *Service) suspendedNotification(ctx context.Context, conflict bool) {
+	if ctx.Err() != nil {
+		return
+	}
+	s.notifyMu.Lock()
+	defer s.notifyMu.Unlock()
+	if s.store == nil {
+		return
+	}
+	state := s.notificationState()
+	now := s.clock.Now().UnixMilli()
+	last, _ := strconv.ParseInt(state["suspended_last"], 10, 64)
+	if conflict && state["suspended_conflict"] != "1" {
+		if _, err := s.store.HSet(
+			notificationKey, "suspended_active", "1", "suspended_conflict", "1",
+			"suspended_last", strconv.FormatInt(now, 10),
+		); err != nil {
+			return
+		}
+		if err := s.createNotification(ctx, "warning", "Telegram polling suspended", "Another consumer is polling this bot. Stop the other poller; automatic retries continue."); err != nil {
+			_, _ = s.store.HDel(notificationKey, "suspended_active", "suspended_conflict", "suspended_last")
+		}
+		return
+	}
+	if state["suspended_active"] == "1" || now-last < int64(15*time.Minute/time.Millisecond) {
+		return
+	}
+	if _, err := s.store.HSet(notificationKey, "suspended_active", "1", "suspended_last", strconv.FormatInt(now, 10)); err != nil {
+		return
+	}
+	body := "Telegram updates are temporarily unavailable; automatic retries continue."
+	if err := s.createNotification(ctx, "warning", "Telegram polling suspended", body); err != nil {
+		_, _ = s.store.HDel(notificationKey, "suspended_active", "suspended_last")
+	}
+}
+
+func (s *Service) recoveredNotification(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
+	s.notifyMu.Lock()
+	defer s.notifyMu.Unlock()
+	if s.store == nil {
+		return
+	}
+	state := s.notificationState()
+	if state["suspended_active"] != "1" {
+		return
+	}
+	_, _ = s.store.HDel(notificationKey, "suspended_active", "suspended_conflict")
+	_ = s.createNotification(ctx, "info", "Telegram polling recovered", "Telegram updates are available again.")
+}
+
+func (s *Service) deliveryFailed(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
+	s.notifyMu.Lock()
+	defer s.notifyMu.Unlock()
+	if s.store == nil {
+		return
+	}
+	if s.state() == "auth_failed" {
+		return
+	}
+	state := s.notificationState()
+	now := s.clock.Now().UnixMilli()
+	last, _ := strconv.ParseInt(state["delivery_last"], 10, 64)
+	if now-last < int64(15*time.Minute/time.Millisecond) {
+		return
+	}
+	if _, err := s.store.HSet(notificationKey, "delivery_active", "1", "delivery_last", strconv.FormatInt(now, 10)); err != nil {
+		return
+	}
+	if err := s.createNotification(ctx, "warning", "Telegram delivery failed", "A Telegram message could not be delivered. Check the Telegram integration page."); err != nil {
+		_, _ = s.store.HDel(notificationKey, "delivery_active", "delivery_last")
+	}
+}
+
+func (s *Service) deliverySucceeded() {
+	s.notifyMu.Lock()
+	defer s.notifyMu.Unlock()
+	if s.store != nil {
+		_, _ = s.store.HDel(notificationKey, "delivery_active")
+	}
 }
 
 func decodeStrict(raw []byte, target any) error {
@@ -546,11 +1269,47 @@ func decodeStrict(raw []byte, target any) error {
 	return nil
 }
 
+func (s *Service) HandleMessage(conn *ws.Conn, payload []byte) bool {
+	var envelope struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(payload, &envelope) != nil || !strings.HasPrefix(envelope.Type, "telegram-") {
+		return false
+	}
+	switch envelope.Type {
+	case "telegram-status-req":
+		var request struct {
+			Type string `json:"type"`
+		}
+		if decodeStrict(payload, &request) == nil {
+			_ = conn.WriteText(s.StatusMessage())
+		}
+	case "telegram-events-req":
+		var request struct {
+			Type string `json:"type"`
+		}
+		if decodeStrict(payload, &request) == nil {
+			_ = conn.WriteText(s.EventsMessage())
+		}
+	case "telegram-event-detail-req":
+		s.handleDetail(conn, payload)
+	case "telegram-test-send":
+		s.handleTestSend(conn, payload)
+	default:
+		return false
+	}
+	return true
+}
+
 func (s *Service) handleDetail(conn *ws.Conn, payload []byte) {
 	var request struct {
-		Type, RequestID, ID string
+		Type      string `json:"type"`
+		RequestID string `json:"requestId"`
+		ID        string `json:"id"`
 	}
-	_ = json.Unmarshal(payload, &request)
+	if decodeStrict(payload, &request) != nil || !requestID.MatchString(request.RequestID) || request.ID == "" {
+		return
+	}
 	for _, event := range s.loadEvents(s.config.MaxEventLog) {
 		if event.ID == request.ID {
 			frame, _ := json.Marshal(map[string]any{"type": "telegram-event-detail", "requestId": request.RequestID, "event": event, "error": ""})
@@ -564,53 +1323,68 @@ func (s *Service) handleDetail(conn *ws.Conn, payload []byte) {
 
 func (s *Service) handleTestSend(conn *ws.Conn, payload []byte) {
 	var request struct {
-		Type, ID, ChatID, Text string
+		Type   string `json:"type"`
+		ID     string `json:"id"`
+		ChatID string `json:"chatId"`
+		Text   string `json:"text"`
 	}
 	errorText := ""
-	if decodeStrict(payload, &request) != nil || strings.TrimSpace(request.Text) == "" || len([]rune(request.Text)) > 4096 {
+	if decodeStrict(payload, &request) != nil || !requestID.MatchString(request.ID) ||
+		strings.TrimSpace(request.Text) == "" || len([]rune(request.Text)) > 4096 {
 		errorText = "Message must be 1–4096 characters"
-	} else if !contains(s.config.AllowedChatIDs, request.ChatID) {
+	} else if !canonicalChatID.MatchString(request.ChatID) || !contains(s.config.AllowedChatIDs, request.ChatID) {
 		errorText = "Destination is not authorized"
-	} else {
-		s.mu.Lock()
-		connected := s.status.State == "connected"
-		_, duplicate := s.inflight[request.ID]
-		if connected && !duplicate {
-			s.inflight[request.ID] = struct{}{}
-		}
-		s.mu.Unlock()
-		switch {
-		case duplicate:
-			errorText = "Request is already running"
-		case !connected:
-			errorText = "Telegram is not connected"
-		default:
-			if err := s.send(context.Background(), request.ChatID, request.Text); err != nil {
-				errorText = "Telegram could not send the test message"
-			}
+	}
+	if errorText != "" {
+		s.writeCommandResult(conn, request.ID, errorText)
+		return
+	}
+	s.mu.Lock()
+	connected := s.status.State == "connected"
+	generation := s.generation
+	generationCtx := s.activeCtx
+	_, duplicate := s.inflight[request.ID]
+	if connected && generationCtx != nil && !duplicate {
+		s.inflight[request.ID] = struct{}{}
+	}
+	s.mu.Unlock()
+	if duplicate {
+		s.writeCommandResult(conn, request.ID, "Request is already running")
+		return
+	}
+	if !connected || generationCtx == nil {
+		s.writeCommandResult(conn, request.ID, "Telegram is not connected")
+		return
+	}
+	go func() {
+		defer func() {
 			s.mu.Lock()
 			delete(s.inflight, request.ID)
 			s.mu.Unlock()
+		}()
+		s.mu.Lock()
+		api := s.activeAPI
+		s.mu.Unlock()
+		sendErr := errors.New("not connected")
+		if api != nil {
+			sendErr = s.send(generationCtx, generation, api, request.ChatID, request.Text)
 		}
-	}
-	frame, _ := json.Marshal(map[string]any{"type": "telegram-command-result", "id": request.ID, "ok": errorText == "", "error": errorText})
-	_ = conn.WriteText(frame)
+		if sendErr != nil {
+			if errors.Is(sendErr, context.Canceled) {
+				s.writeCommandResult(conn, request.ID, "Telegram is not connected")
+				return
+			}
+			s.deliveryFailed(generationCtx)
+			s.writeCommandResult(conn, request.ID, "Telegram could not send the test message")
+			return
+		}
+		s.writeCommandResult(conn, request.ID, "")
+	}()
 }
 
-func (s *Service) setState(state, code string) {
-	details := map[string]string{
-		"disabled": "Telegram is disabled", "connecting": "Connecting to Telegram",
-		"connected": "Polling for authorized messages", "backing_off": "Retrying Telegram connection",
-		"polling_suspended": "Telegram polling is suspended; retries continue",
-		"auth_failed":       "Telegram authentication failed", "stopped": "Telegram service stopped",
-	}
-	s.mu.Lock()
-	changed := s.status.State != state || s.status.Code != code
-	s.status.State, s.status.Code, s.status.Detail = state, code, details[state]
-	s.mu.Unlock()
-	if changed {
-		s.broadcast(s.StatusMessage())
-	}
+func (s *Service) writeCommandResult(conn *ws.Conn, id, errorText string) {
+	frame, _ := json.Marshal(map[string]any{"type": "telegram-command-result", "id": id, "ok": errorText == "", "error": errorText})
+	_ = conn.WriteText(frame)
 }
 
 func errorCode(err error) string {
@@ -630,14 +1404,8 @@ func backoff(failures int, jitter float64) time.Duration {
 	return min(max(delay, 800*time.Millisecond), 60*time.Second)
 }
 
-func (s *Service) notifyLifecycle(ctx context.Context, severity, title, summary string) {
-	if s.notify == nil {
-		return
-	}
-	_, err := s.notify.Create(ctx, notifications.CreateRequest{
-		Type: severity, Sender: "telegram", Title: title, Summary: summary, Renderer: "generic",
-	})
-	if err != nil {
-		log.Printf("telegram: notification: storage_unavailable")
+func zero(value []byte) {
+	for index := range value {
+		value[index] = 0
 	}
 }

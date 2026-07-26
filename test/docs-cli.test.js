@@ -1,6 +1,7 @@
 // @ts-nocheck
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { constants } from "node:os";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
@@ -51,6 +52,10 @@ test("docs runner validates checkout, dependencies, spawn and status", async () 
   assert.equal(options.stdio, "inherit");
   assert.match(options.cwd, /\/docs$/);
   assert.equal(await runWith(["build"], { ...base, exists: () => true, spawn: () => ({ status: 7 }) }), 1);
-  assert.equal(await runWith(["build"], { ...base, exists: () => true, spawn: () => ({ signal: "SIGTERM" }) }), 143);
+  for (const signal of ["SIGHUP", "SIGABRT", "SIGUSR1", "SIGTERM"]) {
+    if (constants.signals[signal]) {
+      assert.equal(await runWith(["build"], { ...base, exists: () => true, spawn: () => ({ signal }) }), 128 + constants.signals[signal]);
+    }
+  }
   assert.equal(await runWith(["build"], { ...base, exists: () => true, spawn: () => ({ error: new Error("boom") }) }), 1);
 });

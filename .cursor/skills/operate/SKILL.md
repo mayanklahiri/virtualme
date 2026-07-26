@@ -90,6 +90,9 @@ the bot; 429 backs off according to Telegram. Disable the integration in Config
 to stop polling. Rotation never requires printing the token. The persisted
 next offset prevents replay after restart; check the event log and
 `virtualme:telegram:update-offset` only when diagnosing resume behavior.
+An unavailable token leaves the controller and Config UI running with redacted
+`secret_unavailable` state; Telegram remains disconnected until secret refresh
+succeeds.
 Telegram is an external cloud boundary even though the console remains on the
 private network.
 

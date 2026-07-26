@@ -23,7 +23,7 @@ if [ "$LLAMA_THREADS" = 0 ]; then LLAMA_THREADS="$(nproc)"; fi
 exec "$LLAMA_DIR/llama-server" \
   --model "$VM_EFFECTIVE_MODEL_PATH" \
   --mmproj "$VM_EFFECTIVE_PROJECTOR_PATH" \
-  --host "${VM_EFFECTIVE_LLAMA_ADDRESS%:*}" --port "${VM_EFFECTIVE_LLAMA_ADDRESS##*:}" \
+  --host "$VM_EFFECTIVE_LLAMA_HOST" --port "$VM_EFFECTIVE_LLAMA_PORT" \
   --ctx-size "$VM_EFFECTIVE_LLAMA_CONTEXT" \
   --threads "$LLAMA_THREADS" \
   --slots \

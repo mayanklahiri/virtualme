@@ -1,10 +1,11 @@
-const themes = ["modern", "editorial", "terminal", "warm", "contrast", "arctic", "solar", "studio"];
 const variants = ["auto", "light", "dark"];
 
 export function initializeThemePicker() {
   const root = document.documentElement;
   const toggle = document.querySelector<HTMLButtonElement>(".theme-toggle");
   const panel = document.querySelector<HTMLElement>("#theme-panel");
+  const themeButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-theme-value]")];
+  const themes = themeButtons.map((button) => button.dataset.themeValue).filter((value): value is string => Boolean(value));
   const scheme = matchMedia("(prefers-color-scheme: dark)");
   let savedTheme = ""; let savedVariant = "";
   try { savedTheme = localStorage.getItem("vm-theme") ?? ""; savedVariant = localStorage.getItem("vm-variant") ?? ""; } catch {}
@@ -23,7 +24,7 @@ export function initializeThemePicker() {
     toggle.setAttribute("aria-expanded", String(!panel.hidden));
     if (!panel.hidden) panel.querySelector<HTMLButtonElement>("[aria-pressed=true]")?.focus();
   });
-  document.querySelectorAll<HTMLButtonElement>("[data-theme-value]").forEach((button) => button.addEventListener("click", () => {
+  themeButtons.forEach((button) => button.addEventListener("click", () => {
     theme = button.dataset.themeValue!;
     try { localStorage.setItem("vm-theme", theme); } catch {}
     apply(); close();

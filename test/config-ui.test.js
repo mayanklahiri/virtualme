@@ -12,9 +12,13 @@ import {
   parseEditorValue,
   restartComplete,
   restartMessage,
+  secretStatusLabel,
   setConfigPath,
+  validateStringItem,
   validateSecretReference,
 } from "../controller/web/static/js/config-model.js";
+import { initConfig } from "../controller/web/static/js/config.js";
+import { createFakeDOM } from "./fake-dom.mjs";
 
 test("config model orders, anchors, converts, and protects secrets", () => {
   assert.equal(configAnchor("llama.contextTokens"), "llama-context-tokens");
@@ -36,6 +40,15 @@ test("config model orders, anchors, converts, and protects secrets", () => {
   assert.throws(() => parseEditorValue(["same", "same"], {
     type: "array", constraints: { uniqueItems: true },
   }), /unique/);
+  assert.equal(validateStringItem("-100", {
+    type: "string", constraints: { pattern: "^-?[1-9][0-9]*$" },
+  }), "-100");
+  assert.throws(() => parseEditorValue(["not-an-id"], {
+    type: "array",
+    item: { type: "string", constraints: { pattern: "^-?[1-9][0-9]*$" } },
+  }), /pattern/);
+  assert.equal(secretStatusLabel({ configured: true, resolved: true }), "Resolved");
+  assert.equal(secretStatusLabel({ configured: true, resolved: false, status: "inactive" }), "Inactive");
 });
 
 test("config model handles grouping, issues, conflicts, discard data, and reconnect", () => {
@@ -78,7 +91,86 @@ test("config route is static, safe, and schema-driven", async () => {
   assert.match(module, /componentRenderers/);
   assert.match(module, /Environment reference/);
   assert.match(module, /config-list-row/);
+  assert.match(module, /input\.required = true/);
   assert.match(module, /60_000/);
   assert.match(module, /restartComplete/);
-  assert.doesNotMatch(module, /lastRefreshAt.*value/);
+  assert.match(module, /\/api\/config\/secrets\/refresh/);
+  assert.match(module, /beginRestart\(response\.pendingHash\)/);
+  assert.match(module, /Secret status/);
+  assert.doesNotMatch(module, /secret\.(value|bytes|length|hash)/);
+});
+
+test("config DOM flow loads, edits, reports conflict, and discards", async () => {
+  const selectors = [
+    "#config-content", "#config-edit", "#config-save", "#config-discard",
+    "#config-restart", "#config-status",
+  ];
+  const { nodes, document } = createFakeDOM(selectors);
+  const priorDocument = globalThis.document;
+  const priorFetch = globalThis.fetch;
+  const snapshot = {
+    raw: { version: 1 }, effective: { version: 1 }, sources: {}, secrets: {},
+    fileHash: "file-a", startupHash: "file-a", pendingRestart: false, restartServices: [],
+  };
+  /** @type {any[]} */
+  const requests = [];
+  globalThis.document = /** @type {any} */ (document);
+  /** @param {string} url @param {any} [options] */
+  const fakeFetch = async (url, options = {}) => {
+    requests.push({ url, options });
+    if (url === "/api/config/schema") return { ok: true, json: async () => ({ sections: [] }) };
+    if (url === "/api/config" && options.method === "PUT") {
+      return {
+        ok: false,
+        statusText: "Conflict",
+        json: async () => ({ error: { code: "config_conflict", message: "stale" } }),
+      };
+    }
+    if (url === "/api/config") return { ok: true, json: async () => snapshot };
+    throw new Error(`unexpected request ${url}`);
+  };
+  globalThis.fetch = /** @type {any} */ (fakeFetch);
+  try {
+    const ui = initConfig();
+    ui.show("config");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(nodes.get("#config-edit").hidden, false);
+    assert.equal(nodes.get("#config-save").hidden, true);
+    nodes.get("#config-edit").dispatch("click");
+    assert.equal(nodes.get("#config-edit").hidden, true);
+    assert.equal(nodes.get("#config-save").hidden, false);
+    await nodes.get("#config-save").dispatch("click");
+    assert.match(nodes.get("#config-status").textContent, /changed in another session/i);
+    assert.equal(requests.filter(({ options }) => options.method === "PUT").length, 1);
+    nodes.get("#config-discard").dispatch("click");
+    assert.equal(nodes.get("#config-edit").hidden, false);
+    assert.equal(nodes.get("#config-save").hidden, true);
+  } finally {
+    globalThis.document = priorDocument;
+    globalThis.fetch = priorFetch;
+  }
+});
+
+test("supervised services consume split endpoints and X11 socket path", async () => {
+  const root = new URL("../docker/rootfs/etc/s6-overlay/s6-rc.d/", import.meta.url);
+  const [xvfb, x11vnc, novnc, chromium, valkey, llama] = await Promise.all([
+    readFile(new URL("svc-xvfb/run", root), "utf8"),
+    readFile(new URL("svc-x11vnc/run", root), "utf8"),
+    readFile(new URL("svc-novnc/run", root), "utf8"),
+    readFile(new URL("svc-chromium/run", root), "utf8"),
+    readFile(new URL("svc-valkey/run", root), "utf8"),
+    readFile(new URL("svc-llama/run", root), "utf8"),
+  ]);
+  assert.match(xvfb, /VM_EFFECTIVE_X11_SOCKET_DIR/);
+  assert.match(x11vnc, /VM_EFFECTIVE_VNC_HOST/);
+  assert.match(x11vnc, /VM_EFFECTIVE_VNC_PORT/);
+  assert.match(x11vnc, /-listen6/);
+  assert.match(x11vnc, /-no6/);
+  assert.match(novnc, /VM_EFFECTIVE_NOVNC_HOST/);
+  assert.match(chromium, /VM_EFFECTIVE_CDP_HOST/);
+  assert.match(valkey, /VM_EFFECTIVE_VALKEY_HOST/);
+  assert.match(llama, /VM_EFFECTIVE_LLAMA_HOST/);
+  for (const script of [x11vnc, novnc, chromium, valkey, llama]) {
+    assert.doesNotMatch(script, /VM_EFFECTIVE_[A-Z_]+(?:%|##)/);
+  }
 });

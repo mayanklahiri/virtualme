@@ -19,6 +19,10 @@ test("theme source validates and generated outputs have exact parity", async () 
   for (let i = 1; i <= 8; i += 1) assert.match(bytes, new RegExp(`--p${i}:`));
   assert.doesNotMatch(bytes, /\d{4}-\d{2}-\d{2}T|\/home\//);
   assert.deepEqual(renderOutputs(normalized), outputs);
+  const picker = await readFile(new URL("../docs/src/scripts/theme-picker.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(picker, /const themes\s*=\s*\[/);
+  for (const id of expected.slice(1)) assert.doesNotMatch(picker, new RegExp(`["']${id}["']`), `authored picker duplicates ${id}`);
+  assert.match(picker, /data-theme-value/);
 });
 
 test("theme schema rejects malformed records and unknown arguments", async () => {

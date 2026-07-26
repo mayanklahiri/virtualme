@@ -164,6 +164,7 @@ test("start guards and forwards the local Telegram stub pair", () => {
   const dataDir = join(parent, "data");
   const oldMode = process.env.VM_TELEGRAM_TEST_MODE;
   const oldBase = process.env.VM_TELEGRAM_API_BASE_URL;
+  const oldMail = process.env.VM_MAIL_SMARTHOST;
   const probes = { haveDocker: () => true, daemonUp: () => true, containerState: () => "absent" };
   try {
     process.env.VM_TELEGRAM_TEST_MODE = "1";
@@ -179,11 +180,31 @@ test("start guards and forwards the local Telegram stub pair", () => {
 
     delete process.env.VM_TELEGRAM_API_BASE_URL;
     assert.equal(start(["--data", dataDir], () => { throw new Error("docker must not run"); }, probes), 2);
+    process.env.VM_TELEGRAM_API_BASE_URL = "http://vmhost:19090";
+    delete process.env.VM_TELEGRAM_TEST_MODE;
+    assert.equal(start(["--data", dataDir], () => { throw new Error("docker must not run"); }, probes), 2);
+
+    delete process.env.VM_TELEGRAM_API_BASE_URL;
+    process.env.VM_TELEGRAM_TEST_MODE = "0";
+    /** @type {string[]} */
+    let normalInvocation = [];
+    assert.equal(start(["--data", dataDir], (args) => { normalInvocation = args; return 0; }, probes), 0);
+    assert.ok(!normalInvocation.some((value) => value.startsWith("VM_TELEGRAM_")));
+
+    process.env.VM_TELEGRAM_TEST_MODE = "1";
+    process.env.VM_TELEGRAM_API_BASE_URL = "http://vmhost:19090";
+    process.env.VM_MAIL_SMARTHOST = "vmhost";
+    /** @type {string[]} */
+    let sharedInvocation = [];
+    assert.equal(start(["--data", dataDir], (args) => { sharedInvocation = args; return 0; }, probes), 0);
+    assert.equal(sharedInvocation.filter((value) => value === "vmhost:host-gateway").length, 1);
   } finally {
     if (oldMode === undefined) delete process.env.VM_TELEGRAM_TEST_MODE;
     else process.env.VM_TELEGRAM_TEST_MODE = oldMode;
     if (oldBase === undefined) delete process.env.VM_TELEGRAM_API_BASE_URL;
     else process.env.VM_TELEGRAM_API_BASE_URL = oldBase;
+    if (oldMail === undefined) delete process.env.VM_MAIL_SMARTHOST;
+    else process.env.VM_MAIL_SMARTHOST = oldMail;
     rmSync(parent, { recursive: true, force: true });
   }
 });

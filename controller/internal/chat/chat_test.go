@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -565,6 +566,83 @@ func TestSlotsUnavailableDoesNotFailChat(t *testing.T) {
 		}
 		if eventType(payload) == "chat-error" {
 			t.Fatalf("chat failed: %s", payload)
+		}
+	}
+}
+
+func TestTypingStopsAndJoinsBeforeDelivery(t *testing.T) {
+	llama := sseServer(t, []string{"done"}, nil)
+	service := New("127.0.0.1:1", llama.URL, func([]byte) {})
+	typingStopped := make(chan struct{})
+	service.RegisterTyping("telegram", func(ctx context.Context, _ Source) {
+		<-ctx.Done()
+		close(typingStopped)
+	})
+	delivered := make(chan Delivery, 1)
+	service.RegisterDelivery("telegram", func(_ context.Context, delivery Delivery) error {
+		select {
+		case <-typingStopped:
+		default:
+			t.Fatal("delivery began before typing handler stopped")
+		}
+		delivered <- delivery
+		return nil
+	})
+	source := Source{Channel: "telegram", ChatID: "42"}
+	payload, _ := json.Marshal(map[string]string{"text": "hello"})
+	if _, err := service.generate(context.Background(), jobs.Envelope{
+		ID: "job-typing", Payload: payload, Source: &source,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case delivery := <-delivered:
+		if delivery.Text != "done" || delivery.Err != nil {
+			t.Fatalf("delivery = %+v", delivery)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("delivery did not complete")
+	}
+}
+
+func TestAgentFailureDoesNotDeliverPartialReply(t *testing.T) {
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{}}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer model.Close()
+	var eventsMu sync.Mutex
+	var events [][]byte
+	service := NewWithAgent("127.0.0.1:1", model.URL, func(payload []byte) {
+		eventsMu.Lock()
+		events = append(events, append([]byte(nil), payload...))
+		eventsMu.Unlock()
+	}, agent.Config{LlamaURL: model.URL, DataDir: t.TempDir()})
+	delivered := make(chan Delivery, 1)
+	service.RegisterDelivery("telegram", func(_ context.Context, delivery Delivery) error {
+		delivered <- delivery
+		return nil
+	})
+	source := Source{Channel: "telegram", ChatID: "42"}
+	payload, _ := json.Marshal(map[string]string{"text": "hello"})
+	if _, err := service.generate(context.Background(), jobs.Envelope{
+		ID: "job-failed", Payload: payload, Source: &source,
+	}); err == nil {
+		t.Fatal("failed agent task returned success")
+	}
+	select {
+	case delivery := <-delivered:
+		if delivery.Text != "" || delivery.Err == nil {
+			t.Fatalf("partial failure delivered as success: %+v", delivery)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("failure was not delivered")
+	}
+	eventsMu.Lock()
+	defer eventsMu.Unlock()
+	for _, payload := range events {
+		if eventType(payload) == "chat-done" {
+			t.Fatalf("failed task emitted chat-done: %s", payload)
 		}
 	}
 }

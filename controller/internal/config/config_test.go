@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -100,6 +101,20 @@ func TestLoadSeedsAndAppliesPrecedence(t *testing.T) {
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode = %o", info.Mode().Perm())
 	}
+	before, err := os.ReadFile(filepath.Join(root, FileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(before, []byte("# Master configuration version.")) {
+		t.Fatal("first-start file is not schema-commented canonical YAML")
+	}
+	if _, err := Load(Options{DataDir: root, Env: []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(filepath.Join(root, FileName))
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatalf("restart changed first-start bytes: %v", err)
+	}
 	if len(warnings) != 1 || strings.Contains(warnings[0], "71") {
 		t.Fatalf("unsafe warnings: %#v", warnings)
 	}
@@ -135,6 +150,59 @@ func TestDocsExportDeterministic(t *testing.T) {
 	if string(first) != string(second) || !strings.Contains(string(first), `"consoleDeepLink": "/config#llama-context-tokens"`) {
 		t.Fatal("docs export is unstable or incomplete")
 	}
+	var reference DocsReference
+	if err := json.Unmarshal(first, &reference); err != nil {
+		t.Fatal(err)
+	}
+	var telegramToken, allowedChats *DocSetting
+	for sectionIndex := range reference.Sections {
+		for settingIndex := range reference.Sections[sectionIndex].Settings {
+			setting := &reference.Sections[sectionIndex].Settings[settingIndex]
+			if setting.Choices == nil {
+				t.Fatalf("%s choices serialized as null", setting.Path)
+			}
+			switch setting.Path {
+			case "integrations.telegram.botToken":
+				telegramToken = setting
+			case "integrations.telegram.allowedChatIds":
+				allowedChats = setting
+			}
+		}
+	}
+	if telegramToken == nil || telegramToken.Sensitivity != "credential" ||
+		telegramToken.SecretPolicy["resolveWhen"] == nil {
+		t.Fatalf("Telegram secret policy missing: %#v", telegramToken)
+	}
+	if allowedChats == nil || allowedChats.Item == nil ||
+		allowedChats.Item.Type != "string" ||
+		allowedChats.Item.Constraints["pattern"] != "^-?[1-9][0-9]*$" ||
+		allowedChats.Item.Overview == "" ||
+		allowedChats.Item.Choices == nil {
+		t.Fatalf("Telegram item constraints missing: %#v", allowedChats)
+	}
+}
+
+func TestExplainedEnumChoicesAreValidatedAndExported(t *testing.T) {
+	enum := []any{"fast", "careful"}
+	doc := map[string]any{
+		"overview": "Select execution mode.", "details": []any{}, "tradeoffs": []any{},
+		"examples": []any{}, "links": []any{}, "order": json.Number("1"),
+		"choices": []any{
+			map[string]any{"value": "fast", "description": "Prioritize latency."},
+			map[string]any{"value": "careful", "description": "Prioritize verification."},
+		},
+	}
+	if err := validateDoc(doc, enum, "mode"); err != nil {
+		t.Fatal(err)
+	}
+	choices := explainedChoices(doc)
+	if len(choices) != 2 || choices[1].Value != "careful" || choices[1].Description != "Prioritize verification." {
+		t.Fatalf("choices = %#v", choices)
+	}
+	doc["choices"].([]any)[1].(map[string]any)["value"] = "wrong"
+	if err := validateDoc(doc, enum, "mode"); err == nil {
+		t.Fatal("misaligned enum explanations passed meta-validation")
+	}
 }
 
 func TestSchemaMetaValidationMutations(t *testing.T) {
@@ -159,6 +227,23 @@ func TestSchemaMetaValidationMutations(t *testing.T) {
 		{"malformed secret", func(root map[string]any) { schemaPath(root, "mail.smarthost.password")["x-vm-sensitive"] = "path" }},
 		{"duplicate order", func(root map[string]any) {
 			schemaPath(root, "agent.keepTasks")["x-vm-ui"].(map[string]any)["order"] = json.Number("10")
+		}},
+		{"malformed minimum", func(root map[string]any) { schemaPath(root, "agent.maxSteps")["minimum"] = "one" }},
+		{"minimum on string", func(root map[string]any) { schemaPath(root, "agent.bashPath")["minimum"] = json.Number("1") }},
+		{"pattern on integer", func(root map[string]any) { schemaPath(root, "agent.maxSteps")["pattern"] = "^[0-9]+$" }},
+		{"malformed environment metadata", func(root map[string]any) { schemaPath(root, "agent.maxSteps")["x-vm-env"] = true }},
+		{"restart none on editable field", func(root map[string]any) { schemaPath(root, "agent.maxSteps")["x-vm-restart"] = "none" }},
+		{"duplicate enum", func(root map[string]any) {
+			schemaPath(root, "agent.maxSteps")["enum"] = []any{json.Number("500"), json.Number("500")}
+		}},
+		{"unresolved reference", func(root map[string]any) {
+			root["$defs"] = map[string]any{"missing": map[string]any{"$ref": "#/$defs/absent"}}
+		}},
+		{"cyclic reference", func(root map[string]any) {
+			root["$defs"] = map[string]any{
+				"first":  map[string]any{"$ref": "#/$defs/second"},
+				"second": map[string]any{"$ref": "#/$defs/first"},
+			}
 		}},
 	}
 	for _, test := range tests {
@@ -244,6 +329,28 @@ func TestInterpolationPrecedenceAndPortAdapters(t *testing.T) {
 		validated.Raw["agent"].(map[string]any)["maxSteps"] != "${env:COUNT}" {
 		t.Fatalf("interpolation mismatch: loaded=%#v err=%v", validated, err)
 	}
+	outOfRange := deepCopy(loaded.Raw).(map[string]any)
+	outOfRange["agent"].(map[string]any)["maxSteps"] = "${env:COUNT}"
+	if _, _, err := ValidateRaw(outOfRange, root, []string{"COUNT=100000"}, nil); err == nil {
+		t.Fatal("resolved out-of-range integer passed schema validation")
+	}
+	telegram := deepCopy(loaded.Raw).(map[string]any)
+	telegramConfig := telegram["integrations"].(map[string]any)["telegram"].(map[string]any)
+	telegramConfig["enabled"] = "${env:ENABLE}"
+	telegramConfig["botToken"] = "${env:TOKEN}"
+	telegramConfig["allowedChatIds"] = []any{"1"}
+	resolver := NewResolver([]string{"ENABLE=true", "TOKEN=resolved-token"})
+	defer resolver.Close()
+	resolved, _, err := ValidateRaw(telegram, root,
+		[]string{"ENABLE=true", "TOKEN=resolved-token"}, resolver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resolved.Config.Integrations.Telegram.Enabled ||
+		resolved.Config.Integrations.Telegram.BotToken != "resolved-token" ||
+		resolved.Secrets["integrations.telegram.botToken"].Status == "inactive" {
+		t.Fatalf("dependent boolean/secret resolution order is wrong: %#v", resolved.Config.Integrations.Telegram)
+	}
 	for _, env := range [][]string{{"VM_AGENT_MAX_STEPS="}, {"VM_AGENT_MAX_STEPS=wat"}} {
 		if _, err := Load(Options{DataDir: t.TempDir(), Env: env}); err == nil {
 			t.Fatalf("invalid override accepted: %v", env)
@@ -273,6 +380,24 @@ func TestSemanticValidationTables(t *testing.T) {
 				t.Fatal("semantic violation accepted")
 			}
 		})
+	}
+	ipv6 := deepCopy(defaults).(map[string]any)
+	desktop := ipv6["desktop"].(map[string]any)
+	desktop["vncAddress"] = "[::1]:5900"
+	desktop["noVNCAddress"] = "[::1]:6080"
+	desktop["noVNCUpstreamAddress"] = "[::1]:5900"
+	desktop["noVNCHealthURL"] = "http://[::1]:6080/vnc.html"
+	desktop["cdpURL"] = "http://[::1]:9222"
+	ipv6["server"].(map[string]any)["desktopProxyURL"] = "http://[::1]:6080"
+	ipv6["valkey"].(map[string]any)["address"] = "[::1]:6379"
+	ipv6["llama"].(map[string]any)["address"] = "[::1]:8081"
+	ipv6["llama"].(map[string]any)["chatCompletionsURL"] = "http://[::1]:8081/v1/chat/completions"
+	ipv6["tts"].(map[string]any)["address"] = "[::1]:8082"
+	ipv6["tts"].(map[string]any)["healthURL"] = "http://[::1]:8082/healthz"
+	health := ipv6["health"].(map[string]any)
+	health["llamaURL"] = "http://[::1]:8081/health"
+	if _, _, err := ValidateRaw(ipv6, t.TempDir(), nil, nil); err != nil {
+		t.Fatalf("IPv6 loopback configuration rejected: %v", err)
 	}
 }
 
@@ -334,6 +459,120 @@ func TestSecretResolverConcurrentMissCoalesces(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+func TestSecretResolverSerializesResolveAndRefresh(t *testing.T) {
+	resolver := NewResolver(nil)
+	reference := "${env:SERIALIZED_SECRET}"
+	firstEntered := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	secondEntered := make(chan struct{})
+	var calls atomic.Int32
+	resolver.reader = func(string) ([]byte, SecretStatus, error) {
+		call := calls.Add(1)
+		status := SecretStatus{Reference: reference, Configured: true, Resolved: true, Source: "env"}
+		if call == 1 {
+			close(firstEntered)
+			<-releaseFirst
+			return []byte("stale"), status, nil
+		}
+		close(secondEntered)
+		return []byte("fresh"), status, nil
+	}
+	resolveDone := make(chan error, 1)
+	go func() {
+		_, _, err := resolver.Resolve(reference, 0)
+		resolveDone <- err
+	}()
+	<-firstEntered
+	refreshDone := make(chan error, 1)
+	go func() {
+		_, err := resolver.Refresh(reference, time.Minute)
+		refreshDone <- err
+	}()
+	select {
+	case <-secondEntered:
+		t.Fatal("refresh read overlapped an in-flight resolve")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(releaseFirst)
+	if err := <-resolveDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-refreshDone; err != nil {
+		t.Fatal(err)
+	}
+	value, _, err := resolver.Resolve(reference, time.Minute)
+	if err != nil || string(value) != "fresh" {
+		t.Fatalf("resolved cache = %q, %v", value, err)
+	}
+}
+
+func TestSecretResolverDescriptorSafetyAndBounds(t *testing.T) {
+	root := t.TempDir()
+	resolver := NewResolver(nil)
+	defer resolver.Close()
+	resolve := func(path string) error {
+		_, _, err := resolver.Resolve("${file:"+path+"}", 0)
+		return err
+	}
+	target := filepath.Join(root, "target")
+	if err := os.WriteFile(target, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := resolve(link); err == nil || !strings.Contains(err.Error(), "not a symlink") {
+		t.Fatalf("symlink secret accepted: %v", err)
+	}
+	permissive := filepath.Join(root, "permissive")
+	if err := os.WriteFile(permissive, []byte("secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := resolve(permissive); err == nil || !strings.Contains(err.Error(), "permissions") {
+		t.Fatalf("permissive secret accepted: %v", err)
+	}
+	oversized := filepath.Join(root, "oversized")
+	if err := os.WriteFile(oversized, bytes.Repeat([]byte("x"), 64*1024+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := resolve(oversized); err == nil || !strings.Contains(err.Error(), "64 KiB") {
+		t.Fatalf("oversized secret accepted: %v", err)
+	}
+}
+
+func TestSecretRefreshFailureRetainsPriorValueAndNotifies(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "secret")
+	if err := os.WriteFile(file, []byte("prior\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resolver := NewResolver(nil)
+	defer resolver.Close()
+	now := time.Unix(100, 0)
+	resolver.now = func() time.Time { return now }
+	reference := "${file:" + file + "}"
+	if value, _, err := resolver.Resolve(reference, time.Minute); err != nil || string(value) != "prior" {
+		t.Fatalf("initial resolve=%q err=%v", value, err)
+	}
+	events := make(chan SecretRevision, 1)
+	unsubscribe := resolver.Subscribe(reference, func(event SecretRevision) { events <- event })
+	defer unsubscribe()
+	if err := os.Remove(file); err != nil {
+		t.Fatal(err)
+	}
+	if status, err := resolver.Refresh(reference, time.Minute); err == nil || status.Error != "secret_unavailable" {
+		t.Fatalf("failed refresh status=%#v err=%v", status, err)
+	}
+	event := <-events
+	if event.Success || event.Error != "secret_unavailable" {
+		t.Fatalf("failed refresh event=%#v", event)
+	}
+	if value, _, err := resolver.Resolve(reference, time.Minute); err != nil || string(value) != "prior" {
+		t.Fatalf("prior cached value not retained: %q %v", value, err)
+	}
 }
 
 func TestConditionalSecretResolutionAndArrayReferenceRejection(t *testing.T) {
@@ -434,6 +673,23 @@ func TestAtomicWriteFaultsAndDestinationSafety(t *testing.T) {
 	}
 	if err := AtomicWrite(link, []byte("bad")); err == nil {
 		t.Fatal("destination symlink accepted")
+	}
+	atomicFault.Lock()
+	atomicFault.hook = func(step string) error {
+		if step == "dirsync" {
+			return errors.New("injected dirsync")
+		}
+		return nil
+	}
+	atomicFault.Unlock()
+	if err := AtomicWrite(file, []byte("dirsync-new")); err == nil {
+		t.Fatal("directory sync fault did not fail")
+	}
+	atomicFault.Lock()
+	atomicFault.hook = nil
+	atomicFault.Unlock()
+	if content, err := os.ReadFile(file); err != nil || string(content) != "dirsync-new" {
+		t.Fatalf("post-rename directory sync fault lost new file: %q %v", content, err)
 	}
 }
 

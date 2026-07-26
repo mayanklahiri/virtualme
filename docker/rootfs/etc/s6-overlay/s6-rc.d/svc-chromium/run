@@ -1,9 +1,6 @@
 #!/command/with-contenv bash
 source /run/virtualme/config.env
 export DISPLAY="$VM_EFFECTIVE_DISPLAY"
-CDP_AUTHORITY="${VM_EFFECTIVE_CDP_URL#*://}"
-CDP_HOST="${CDP_AUTHORITY%:*}"
-CDP_PORT="${CDP_AUTHORITY##*:}"
 PROFILE="$VM_DATA_DIR/chromium"
 
 # Wait for X (same pattern as openbox/x11vnc).
@@ -57,8 +54,8 @@ FLAGS=(
   # Predictable auth/password plumbing (no OS keyring probe at startup).
   --password-store=basic
   # CDP, loopback only (observation-only per spec 008).
-  --remote-debugging-port="$CDP_PORT"
-  --remote-debugging-address="$CDP_HOST"
+  --remote-debugging-port="$VM_EFFECTIVE_CDP_PORT"
+  --remote-debugging-address="$VM_EFFECTIVE_CDP_HOST"
   # Geometry: openbox + watchdog own the window; ask for max as a hint.
   --start-maximized
   --window-position=0,0

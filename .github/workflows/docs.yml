@@ -47,6 +47,7 @@ jobs:
       - run: npm --prefix docs exec playwright install --with-deps chromium
       - run: node --test test/docs*.test.js
       - run: node scripts/generate-themes.mjs --check
+      - run: cd controller && GOTOOLCHAIN=local GOPROXY=off go run ./cmd/configctl docs --check --output ../docs/src/generated/config-reference.json
       - run: npm --prefix docs run check
       - run: npm --prefix docs run test:browser
 
@@ -64,6 +65,7 @@ jobs:
           cache-dependency-path: docs/package-lock.json
       - run: npm ci --prefix docs
       - run: node scripts/generate-themes.mjs --check
+      - run: cd controller && GOTOOLCHAIN=local GOPROXY=off go run ./cmd/configctl docs --check --output ../docs/src/generated/config-reference.json
       - run: npm --prefix docs run build
       - name: Publish orphan docs branch
         env:

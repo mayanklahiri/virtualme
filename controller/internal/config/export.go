@@ -39,17 +39,35 @@ type DocSetting struct {
 	Type            string         `json:"type"`
 	Default         any            `json:"default"`
 	Required        bool           `json:"required"`
-	Choices         []any          `json:"choices"`
+	Choices         []DocChoice    `json:"choices"`
 	Constraints     map[string]any `json:"constraints"`
 	Restart         string         `json:"restart"`
 	LegacyEnv       string         `json:"legacyEnv,omitempty"`
 	Secret          bool           `json:"secret"`
+	SecretPolicy    map[string]any `json:"secretPolicy,omitempty"`
+	Sensitivity     string         `json:"sensitivity,omitempty"`
+	Item            *DocItem       `json:"item,omitempty"`
 	Overview        string         `json:"overview"`
 	Details         []string       `json:"details"`
 	Tradeoffs       []any          `json:"tradeoffs"`
 	Examples        []any          `json:"examples"`
 	Links           []any          `json:"links"`
 	UI              map[string]any `json:"ui"`
+}
+
+type DocItem struct {
+	Type        string         `json:"type"`
+	Default     any            `json:"default"`
+	Choices     []DocChoice    `json:"choices"`
+	Constraints map[string]any `json:"constraints"`
+	Overview    string         `json:"overview"`
+	Details     []string       `json:"details"`
+	UI          map[string]any `json:"ui"`
+}
+
+type DocChoice struct {
+	Value       any    `json:"value"`
+	Description string `json:"description"`
 }
 
 func DocsJSON() ([]byte, error) {
@@ -113,24 +131,61 @@ func collectSettings(node map[string]any, prefix string, target *[]DocSetting) {
 			continue
 		}
 		doc := child["x-vm-doc"].(map[string]any)
-		constraints := map[string]any{}
-		for _, name := range []string{"minimum", "maximum", "minLength", "maxLength", "pattern", "uniqueItems"} {
-			if value, ok := child[name]; ok {
-				constraints[name] = value
+		constraints := exportedConstraints(child)
+		choices := explainedChoices(doc)
+		secretPolicy, secret := child["x-vm-secret"].(map[string]any)
+		var item *DocItem
+		if itemSchema, ok := child["items"].(map[string]any); ok {
+			itemDoc, _ := itemSchema["x-vm-doc"].(map[string]any)
+			itemUI, _ := itemSchema["x-vm-ui"].(map[string]any)
+			item = &DocItem{
+				Type: stringValue(itemSchema["type"]), Default: deepCopy(itemSchema["default"]),
+				Choices: explainedChoices(itemDoc), Constraints: exportedConstraints(itemSchema), Overview: stringValue(itemDoc["overview"]),
+				Details: stringArray(itemDoc["details"]), UI: deepCopy(itemUI).(map[string]any),
 			}
 		}
-		choices, _ := child["enum"].([]any)
-		_, secret := child["x-vm-secret"]
 		*target = append(*target, DocSetting{
 			Path: settingPath, Anchor: anchorFor(settingPath), ConsoleDeepLink: "/config#" + anchorFor(settingPath),
 			Type: stringValue(child["type"]), Default: child["default"], Required: true,
 			Choices: choices, Constraints: constraints, Restart: stringValue(child["x-vm-restart"]),
 			LegacyEnv: stringValue(child["x-vm-env"]), Secret: secret, Overview: stringValue(doc["overview"]),
+			SecretPolicy: secretPolicyCopy(secretPolicy), Sensitivity: stringValue(child["x-vm-sensitive"]), Item: item,
 			Details: stringArray(doc["details"]), Tradeoffs: anyArray(doc["tradeoffs"]),
 			Examples: anyArray(doc["examples"]), Links: exportedLinks(doc["links"]),
 			UI: deepCopy(child["x-vm-ui"]).(map[string]any),
 		})
 	}
+}
+
+func explainedChoices(doc map[string]any) []DocChoice {
+	result := []DocChoice{}
+	for _, raw := range anyArray(doc["choices"]) {
+		choice, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		result = append(result, DocChoice{
+			Value: deepCopy(choice["value"]), Description: stringValue(choice["description"]),
+		})
+	}
+	return result
+}
+
+func exportedConstraints(node map[string]any) map[string]any {
+	result := map[string]any{}
+	for _, name := range []string{"minimum", "maximum", "minLength", "maxLength", "pattern", "uniqueItems"} {
+		if value, ok := node[name]; ok {
+			result[name] = deepCopy(value)
+		}
+	}
+	return result
+}
+
+func secretPolicyCopy(value map[string]any) map[string]any {
+	if value == nil {
+		return nil
+	}
+	return deepCopy(value).(map[string]any)
 }
 
 func (s *Schema) UIJSON() ([]byte, error) {
@@ -347,6 +402,9 @@ func ValidateRaw(raw RawConfig, dataDir string, environment []string, resolver *
 		defer resolver.Close()
 	}
 	if err := resolveTree(schema.root, effective, tempRoot, "", dataDir, env, resolver, secrets, effective); err != nil {
+		return nil, nil, err
+	}
+	if err := schema.Validate(resolvedValidationTree(schema.root, effective, tempRoot)); err != nil {
 		return nil, nil, err
 	}
 	if err := ValidateSemantic(effective); err != nil {

@@ -6,6 +6,7 @@ a{color:var(--fg);text-decoration-color:var(--accent);text-underline-offset:.18e
 button,input{font:inherit}
 button,a{touch-action:manipulation}
 button{min-height:44px}
+nav a{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px}
 :focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 :target{scroll-margin-top:7rem}
 h1,h2,h3{font-family:var(--font-heading);line-height:1.08}

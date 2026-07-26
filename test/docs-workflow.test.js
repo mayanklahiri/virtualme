@@ -30,6 +30,7 @@ test("docs workflow pins official actions and performs explicit setup", async ()
   assert.match(yaml, /npm ci\n/);
   assert.match(yaml, /npm ci --prefix docs/);
   assert.match(yaml, /playwright install --with-deps chromium/);
+  assert.equal((yaml.match(/GOTOOLCHAIN=local GOPROXY=off go run \.\/cmd\/configctl docs --check --output \.\.\/docs\/src\/generated\/config-reference\.json/g) ?? []).length, 2);
   assert.doesNotMatch(yaml, /upload-pages|deploy-pages|peaceiris|api\/repos\/.*pages/);
 });
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,6 +16,39 @@ import (
 	"github.com/mayanklahiri/virtualme/controller/internal/tts"
 	"github.com/mayanklahiri/virtualme/controller/internal/ws"
 )
+
+type fakeNotificationSnapshot struct {
+	message []byte
+	err     error
+}
+
+func (f fakeNotificationSnapshot) Message() ([]byte, error) { return f.message, f.err }
+
+func TestNotificationOnConnectSnapshotAndFailure(t *testing.T) {
+	var frames [][]byte
+	write := func(payload []byte) error {
+		frames = append(frames, append([]byte(nil), payload...))
+		return nil
+	}
+	state := []byte(`{"type":"notifications-state"}`)
+	if err := sendNotificationSnapshot(fakeNotificationSnapshot{message: state}, write); err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) != 1 || !bytes.Equal(frames[0], state) {
+		t.Fatalf("state frames=%q", frames)
+	}
+	injected := errors.New("injected")
+	if err := sendNotificationSnapshot(fakeNotificationSnapshot{err: injected}, write); !errors.Is(err, injected) {
+		t.Fatalf("failure=%v", err)
+	}
+	var frame map[string]any
+	if err := json.Unmarshal(frames[1], &frame); err != nil {
+		t.Fatal(err)
+	}
+	if frame["type"] != "notification-error" || frame["code"] != "persistence_failed" {
+		t.Fatalf("error frame=%#v", frame)
+	}
+}
 
 func TestDesktopProxyStripsPrefix(t *testing.T) {
 	path := make(chan string, 1)
@@ -100,6 +134,12 @@ func TestSpeechEndpointErrors(t *testing.T) {
 		strings.NewReader(`{"input":"Hello."}`)).WithContext(context.Background()))
 	if down.Code != http.StatusBadGateway {
 		t.Fatalf("down status = %d: %s", down.Code, down.Body.String())
+	}
+	limited := httptest.NewRecorder()
+	speechHandler(&tts.Client{MaxCharacters: 4}).ServeHTTP(limited,
+		httptest.NewRequest(http.MethodPost, "/v1/audio/speech", strings.NewReader(`{"input":"12345"}`)))
+	if limited.Code != http.StatusBadRequest || !strings.Contains(limited.Body.String(), "1-4") {
+		t.Fatalf("configured character limit status=%d body=%s", limited.Code, limited.Body.String())
 	}
 }
 

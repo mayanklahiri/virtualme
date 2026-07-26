@@ -17,6 +17,7 @@ export function initializeSnowglobe() {
   };
   figure.querySelector("[data-shake]")?.addEventListener("click", reveal);
   globe?.addEventListener("focus", reveal);
+  globe?.addEventListener("pointerenter", reveal);
   globe?.addEventListener("pointermove", (event) => {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const box = globe.getBoundingClientRect();
