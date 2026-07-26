@@ -1,6 +1,6 @@
 {
   "name": "virtualme",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Virtual Me: private personal background agent. CLI for running the Docker container.",
   "type": "module",
   "bin": {
