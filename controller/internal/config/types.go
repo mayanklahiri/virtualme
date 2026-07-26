@@ -2,7 +2,6 @@ package config
 
 type Config struct {
 	Version      int                `json:"version"`
-	System       SystemConfig       `json:"system"`
 	Server       ServerConfig       `json:"server"`
 	Desktop      DesktopConfig      `json:"desktop"`
 	Valkey       ValkeyConfig       `json:"valkey"`
@@ -12,10 +11,6 @@ type Config struct {
 	Mail         MailConfig         `json:"mail"`
 	Health       HealthConfig       `json:"health"`
 	Integrations IntegrationsConfig `json:"integrations"`
-}
-
-type SystemConfig struct {
-	Timezone string `json:"timezone"`
 }
 
 type ServerConfig struct {

@@ -370,7 +370,6 @@ func TestSemanticValidationTables(t *testing.T) {
 		{"desktop.cdpURL", "http://127.0.0.1:6379"},
 		{"llama.chatCompletionsURL", "http://127.0.0.1:8081/wrong"},
 		{"agent.bashPath", "relative/bash"},
-		{"system.timezone", "Not/A_Zone"},
 	}
 	for _, test := range tests {
 		t.Run(test.path, func(t *testing.T) {

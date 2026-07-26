@@ -15,8 +15,8 @@ import {
 } from "./config-model.js";
 
 const sectionRenderers = new Set([
-  "vm-config-system-section", "vm-config-network-section", "vm-config-service-section",
-  "vm-config-inference-section", "vm-config-agent-section", "vm-config-mail-section",
+  "vm-config-network-section", "vm-config-service-section", "vm-config-inference-section",
+  "vm-config-agent-section", "vm-config-mail-section",
   "vm-config-health-section", "vm-config-integrations-section",
 ]);
 

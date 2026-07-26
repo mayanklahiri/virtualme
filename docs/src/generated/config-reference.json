@@ -1,62 +1,7 @@
 {
   "schemaVersion": 1,
-  "schemaSha256": "b8cc28efce81ff6936fed84f8bfd54ba3368fb3e445a02339a9869fc9454c9a1",
+  "schemaSha256": "970ef1c2a239fb2a12a33fa2448749d5cfcec090b17da2816abfed5753177ede",
   "sections": [
-    {
-      "id": "system",
-      "title": "System",
-      "anchor": "system",
-      "consoleDeepLink": "/config#system",
-      "overview": "Process-wide operating-system behavior.",
-      "details": [
-        "The timezone is exported before supervised services start."
-      ],
-      "exemplarYaml": "system:\n  timezone: UTC\n",
-      "tradeoffs": [],
-      "examples": [
-        {
-          "label": "UTC",
-          "yaml": "system:\n  timezone: UTC\n"
-        }
-      ],
-      "links": [],
-      "ui": {
-        "advanced": false,
-        "order": 10,
-        "section": "System",
-        "sectionRenderer": "vm-config-system-section"
-      },
-      "settings": [
-        {
-          "path": "system.timezone",
-          "anchor": "system-timezone",
-          "consoleDeepLink": "/config#system-timezone",
-          "type": "string",
-          "default": "UTC",
-          "required": true,
-          "choices": [],
-          "constraints": {
-            "maxLength": 128,
-            "minLength": 1
-          },
-          "restart": "all",
-          "legacyEnv": "TZ",
-          "secret": false,
-          "overview": "Controls scheduler and display wall-clock time.",
-          "details": [],
-          "tradeoffs": [],
-          "examples": [],
-          "links": [],
-          "ui": {
-            "advanced": false,
-            "component": "vm-text-field",
-            "control": "text",
-            "order": 10,
-            "section": "System"
-          }
-        }
-      ]
-    },
     {
       "id": "server",
       "title": "Network",

@@ -1035,3 +1035,14 @@ are not spec-031 acceptance blockers.
    fields appear inline in tree order.
 3. **Deprecated key.** `integrations.telegram.allowedUserIds` is hidden from
    the UI projection; see spec 033 amendment for Valkey migration.
+
+### 2026-07-26 — Remove configuration-owned timezone
+
+The `system` section and its sole `system.timezone` field are removed from the
+schema, typed model, semantic validation, preflight export, generated YAML, and
+Config console. Timezone is process-environment state only: the CLI continues
+to forward an explicit host `TZ`, supervised services inherit it, and the
+controller reports `TZ` or its process location when the variable is absent.
+
+Strict loading intentionally rejects existing configuration files that retain
+a `system` key. There is no migration or compatibility alias.

@@ -2,13 +2,6 @@
 # Selects the master configuration format.
 # Default: 1. Restart impact: all.
 version: 1
-# Process-wide operating-system behavior.
-# The timezone is exported before supervised services start.
-system:
-  # IANA timezone used by every service.
-  # Controls scheduler and display wall-clock time.
-  # Default: UTC. Restart impact: all.
-  timezone: UTC
 # Controller network listeners and proxies.
 # Only the console listener may bind beyond loopback.
 server:

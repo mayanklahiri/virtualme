@@ -548,9 +548,13 @@ func main() {
 	jigglerService.SetActivity(activity)
 	gpuInfo := gpu.Detect()
 	addr := master.Server.HTTPAddress
+	timezone := os.Getenv("TZ")
+	if timezone == "" {
+		timezone = time.Now().Location().String()
+	}
 	collector := state.NewCollector(
 		cfg, "/proc", metricsStore, hub.Broadcast, gpuInfo, jigglerService.Enabled,
-		state.Runtime{Version: version, HTTPAddr: addr, DataDir: dataDir, Timezone: master.System.Timezone},
+		state.Runtime{Version: version, HTTPAddr: addr, DataDir: dataDir, Timezone: timezone},
 	)
 	collector.SetCounters(llmCounters)
 	collector.SetSchedulerPaused(jobManager.SchedulerPaused)

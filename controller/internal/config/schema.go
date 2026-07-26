@@ -503,7 +503,7 @@ func validateUI(raw any, kind, path string) error {
 			return fmt.Errorf("%s: malformed section x-vm-ui", path)
 		}
 		renderer := stringValue(ui["sectionRenderer"])
-		if !contains([]string{"vm-config-system-section", "vm-config-network-section", "vm-config-service-section",
+		if !contains([]string{"vm-config-network-section", "vm-config-service-section",
 			"vm-config-inference-section", "vm-config-agent-section", "vm-config-mail-section",
 			"vm-config-health-section", "vm-config-integrations-section"}, renderer) {
 			return fmt.Errorf("%s: invalid sectionRenderer", path)

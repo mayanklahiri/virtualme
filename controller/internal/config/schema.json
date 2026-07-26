@@ -5,15 +5,9 @@
   "description": "The complete restart-applied Virtual Me runtime configuration.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "system", "server", "desktop", "valkey", "llama", "tts", "agent", "mail", "health", "integrations"],
+  "required": ["version", "server", "desktop", "valkey", "llama", "tts", "agent", "mail", "health", "integrations"],
   "properties": {
-    "version": {"type":"integer","const":1,"default":1,"description":"Master configuration version.","x-vm-doc":{"overview":"Selects the master configuration format.","details":[],"tradeoffs":[],"examples":[],"links":[],"order":0},"x-vm-ui":{"section":"System","component":"vm-readonly-field","control":"readonly","order":0,"advanced":false},"x-vm-restart":"all"},
-    "system": {
-      "type":"object","default":{},"additionalProperties":false,"required":["timezone"],
-      "x-vm-doc":{"overview":"Process-wide operating-system behavior.","details":["The timezone is exported before supervised services start."],"tradeoffs":[],"examples":[{"label":"UTC","yaml":"system:\n  timezone: UTC\n"}],"links":[],"order":10},
-      "x-vm-ui":{"section":"System","sectionRenderer":"vm-config-system-section","order":10,"advanced":false},
-      "properties":{"timezone":{"type":"string","minLength":1,"maxLength":128,"default":"UTC","description":"IANA timezone used by every service.","x-vm-doc":{"overview":"Controls scheduler and display wall-clock time.","details":[],"tradeoffs":[],"examples":[],"links":[],"order":10},"x-vm-ui":{"section":"System","component":"vm-text-field","control":"text","order":10,"advanced":false},"x-vm-restart":"all","x-vm-env":"TZ"}}
-    },
+    "version": {"type":"integer","const":1,"default":1,"description":"Master configuration version.","x-vm-doc":{"overview":"Selects the master configuration format.","details":[],"tradeoffs":[],"examples":[],"links":[],"order":0},"x-vm-ui":{"section":"Service","component":"vm-readonly-field","control":"readonly","order":0,"advanced":false},"x-vm-restart":"all"},
     "server": {
       "type":"object","default":{},"additionalProperties":false,"required":["httpAddress","desktopProxyURL"],
       "x-vm-doc":{"overview":"Controller network listeners and proxies.","details":["Only the console listener may bind beyond loopback."],"tradeoffs":[],"examples":[{"label":"Default console","yaml":"server:\n  httpAddress: \":8080\"\n"}],"links":[],"order":20},

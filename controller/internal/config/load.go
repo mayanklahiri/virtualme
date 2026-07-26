@@ -587,10 +587,6 @@ func ValidateSemantic(raw map[string]any) error {
 			Path: path, Message: message, Hint: "see /config#" + anchorFor(path),
 		})
 	}
-	system := raw["system"].(map[string]any)
-	if _, err := time.LoadLocation(system["timezone"].(string)); err != nil {
-		add("system.timezone", "unknown IANA timezone")
-	}
 	desktop := raw["desktop"].(map[string]any)
 	var width, height, depth int
 	if _, err := fmt.Sscanf(desktop["resolution"].(string), "%dx%dx%d", &width, &height, &depth); err != nil ||
