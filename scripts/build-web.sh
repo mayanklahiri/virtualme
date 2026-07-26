@@ -25,8 +25,16 @@ rm -rf "$DIST"
 mkdir -p "$DIST/js" "$DIST/css" "$DIST/fonts" "$DIST/img" "$DIST/brand"
 "$ESBUILD" "$SRC/js/app.js" --bundle --minify --format=esm \
   --sourcemap --sources-content=true --outfile="$DIST/js/app.js"
-"$ESBUILD" "$SRC/css/app.css" --minify \
+"$ESBUILD" "$SRC/css/app.css" --bundle "--external:/fonts/*" --minify \
   --sourcemap --sources-content=true --outfile="$DIST/css/app.css"
+if grep -q '@import' "$DIST/css/app.css"; then
+  echo "build-web: bundled CSS contains unresolved @import" >&2
+  exit 1
+fi
+grep -q '\[data-theme=' "$DIST/css/app.css" && grep -q -- '--bg:' "$DIST/css/app.css" \
+  || { echo "build-web: bundled CSS is missing generated theme tokens" >&2; exit 1; }
+grep -q '@font-face' "$DIST/css/app.css" && grep -q 'url(/fonts/' "$DIST/css/app.css" \
+  || { echo "build-web: bundled CSS is missing local font declarations" >&2; exit 1; }
 "$ESBUILD" "$SRC/js/generated-theme-boot.js" --minify --format=iife \
   --outfile="$DIST/js/generated-theme-boot.js"
 cp "$SRC/index.html" "$DIST/index.html"
