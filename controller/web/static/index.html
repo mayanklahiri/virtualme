@@ -137,8 +137,8 @@
 
       <section data-page="projects" hidden aria-labelledby="projects-title">
         <div class="page-heading">
-          <h1 id="projects-title">Projects</h1>
-          <button id="project-new" type="button"><svg class="icon"><use href="/icons.svg#i-plus"/></svg>New project</button>
+          <div><h1 id="projects-title">Projects</h1><p class="page-caption">Schedule recurring tasks and review their recent runs.</p></div>
+          <div class="page-heading-actions"><button id="project-new" type="button"><svg class="icon"><use href="/icons.svg#i-plus"/></svg>New project</button></div>
         </div>
         <ul id="project-list" class="project-list"></ul>
         <p id="projects-empty" class="empty-note" hidden>No projects yet. A project is a task Virtual Me runs on a schedule.</p>
@@ -163,7 +163,7 @@
       </section>
 
       <section data-page="jobs" hidden class="jobs-page" aria-labelledby="jobs-title">
-        <div class="page-heading"><h1 id="jobs-title">Jobs</h1></div>
+        <div class="page-heading"><div><h1 id="jobs-title">Jobs</h1><p class="page-caption">Queue, schedule, and recent machine activity.</p></div></div>
         <div class="jobs-grid">
           <article class="jobs-card"><h2>Queue</h2>
             <div class="queue-group" hidden>
@@ -200,7 +200,7 @@
           <div><h1 id="notifications-title">Notifications</h1>
             <p class="page-caption">Messages from the assistant and local services.</p>
           </div>
-          <button id="notifications-read-all" class="button" type="button">Mark all read</button>
+          <div class="page-heading-actions"><button id="notifications-read-all" class="button" type="button">Mark all read</button></div>
         </div>
         <div id="notifications-status" class="notifications-status">Loading notifications…</div>
         <div class="notifications-grid">
@@ -375,7 +375,7 @@
 
       <section data-page="chat" hidden class="chat-page" aria-labelledby="chat-title">
         <div class="page-heading">
-          <h1 id="chat-title">Chat</h1>
+          <div><h1 id="chat-title">Chat</h1><p class="page-caption">Talk to the local model; browser tasks show each step.</p></div>
           <div class="page-heading-actions">
             <button id="chat-copy" class="secondary" type="button" aria-label="Copy chat as Markdown"><svg class="icon"><use href="/icons.svg#i-copy"/></svg><span>Copy</span></button>
             <button id="chat-clear" class="secondary" type="button"><svg class="icon"><use href="/icons.svg#i-trash-2"/></svg><span>Clear</span></button>
@@ -399,7 +399,7 @@
       </section>
 
       <section data-page="telegram" hidden class="telegram-page" aria-labelledby="telegram-title">
-        <div class="page-heading"><h1 id="telegram-title">Telegram</h1><a class="button secondary" href="/config#integrations-telegram" data-nav>Configure Telegram</a></div>
+        <div class="page-heading"><div><h1 id="telegram-title">Telegram</h1><p class="page-caption">Optional Telegram bridge over outbound long polling.</p></div><div class="page-heading-actions"><a class="button secondary" href="/config#integrations-telegram" data-nav>Configure Telegram</a></div></div>
         <div class="telegram-grid">
           <article class="metric telegram-state"><h2>Integration state</h2><p id="telegram-state">Disabled</p><dl id="telegram-details"></dl></article>
           <article class="metric telegram-userlist-panel"><h2>Inbound user whitelist</h2><p class="telegram-userlist-note">Empty list permits every human sender in an allowed chat. Changes apply immediately.</p><ol id="telegram-userlist-rows" class="telegram-userlist-rows"></ol><div class="telegram-userlist-add"><input id="telegram-user-input" type="text" inputmode="numeric" pattern="[1-9][0-9]*" placeholder="Telegram user ID" autocomplete="off"><button id="telegram-user-add" type="button">Add</button></div><div class="telegram-userlist-actions"><p id="telegram-userlist-status" class="telegram-userlist-note"></p><button id="telegram-userlist-save" type="button" disabled>Save</button></div></article>
@@ -409,7 +409,7 @@
       </section>
 
       <section data-page="speech" hidden class="speech-page" aria-labelledby="speech-title">
-        <h1 id="speech-title">Speech</h1>
+        <div class="page-heading"><div><h1 id="speech-title">Speech</h1><p class="page-caption">Local text-to-speech with playback history.</p></div></div>
         <div class="speech-card">
           <label for="speech-input">Text</label>
           <div class="speech-seeds" role="group" aria-label="Seed texts"><span class="lookback-label">Seeds</span><button type="button" data-seed="scifi">Sci-fi AI</button><button type="button" data-seed="road">Road notes</button><button type="button" data-seed="bridge">Night bridge</button></div>
@@ -431,7 +431,7 @@
       </section>
 
       <section data-page="mail" hidden class="mail-page" aria-labelledby="mail-title">
-        <h1 id="mail-title">Mail</h1>
+        <div class="page-heading"><div><h1 id="mail-title">Mail</h1><p class="page-caption">Compose and track outbound mail with DKIM signing.</p></div></div>
         <div class="mail-grid">
           <form id="mail-form" class="mail-card">
             <h2>Compose</h2>
@@ -482,7 +482,7 @@
       </section>
 
       <section data-page="desktop" hidden class="desktop-page" aria-labelledby="desktop-title">
-        <div class="page-heading"><h1 id="desktop-title">Desktop</h1><a class="button" href="/desktop/vnc.html?autoconnect=1&amp;resize=scale&amp;path=desktop/websockify" target="_blank" rel="noopener"><svg class="icon"><use href="/icons.svg#i-external-link"/></svg>Pop out</a></div>
+        <div class="page-heading"><div><h1 id="desktop-title">Desktop</h1><p class="page-caption">Watch the virtual desktop live.</p></div><div class="page-heading-actions"><a class="button" href="/desktop/vnc.html?autoconnect=1&amp;resize=scale&amp;path=desktop/websockify" target="_blank" rel="noopener"><svg class="icon"><use href="/icons.svg#i-external-link"/></svg>Pop out</a></div></div>
         <iframe title="Virtual desktop" src="/desktop/vnc.html?autoconnect=1&amp;resize=scale&amp;path=desktop/websockify"></iframe>
       </section>
     </main>

@@ -220,3 +220,16 @@ Supersedes the §3 hero body sentence. The home hero body is now:
 1. **Page heading spacing.** `.page-caption` uses one consistent margin rule
    on all pages; the `.data-page` override is removed so title/subtitle
    spacing is uniform globally.
+
+### 2026-07-26 — Sticky page-header chrome
+
+Every console page except Home uses one normalized title/caption/action header.
+The header is sticky, extends through the page padding, and uses a subtle
+theme-token gradient with a border hairline. Captions are hidden below 700 px;
+actions remain available. Header stacking remains below the mobile navigation,
+detail curtains, and notification popover.
+
+Status retains its existing page title and makes the authoritative health,
+scheduler-clock, and uptime banner sticky instead of adding a duplicate
+heading bar. Configuration and notification anchors reserve scroll space
+beneath sticky chrome. Home's hero and footer remain unchanged.

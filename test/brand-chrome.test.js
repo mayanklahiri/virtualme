@@ -30,6 +30,23 @@ test("brand chrome markup and responsive contracts stay intact", async () => {
   assert.doesNotMatch(html, /class="brand-mark"/);
   assert.match(css, /\.wordmark-svg\{width:12\.5rem;max-width:100%;height:auto;/);
   assert.match(css, /\.brand\{[^}]*overflow:visible/);
+  assert.match(css, /\.page-heading\{position:sticky;top:0;z-index:15/);
+  assert.match(css, /#status-summary\{position:sticky;top:0;z-index:15/);
+  assert.match(css, /@media\(max-width:43\.75rem\)\{\.page-caption\{display:none\}\}/);
+  assert.match(css, /--page-pad:clamp\(1\.25rem,3vw,2\.25rem\)/);
+  for (const caption of [
+    "Queue, schedule, and recent machine activity.",
+    "Talk to the local model; browser tasks show each step.",
+    "Optional Telegram bridge over outbound long polling.",
+    "Local text-to-speech with playback history.",
+    "Compose and track outbound mail with DKIM signing.",
+    "Watch the virtual desktop live.",
+  ]) {
+    assert.ok(html.includes(caption), `missing page caption: ${caption}`);
+  }
+  assert.match(html, /page-heading-actions"><button id="notifications-read-all"/);
+  const homeStart = html.indexOf('data-page="home"');
+  assert.doesNotMatch(html.slice(homeStart, html.indexOf("</section>", homeStart)), /page-heading/);
   assert.match(wordmark, /viewBox="-0\.74 0\.7 128\.5 23\.53"/);
   assert.match(render, /snapshot\.services\.length/);
   assert.doesNotMatch(wordmark, /<text\b/);
