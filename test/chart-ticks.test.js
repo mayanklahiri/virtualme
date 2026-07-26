@@ -68,6 +68,13 @@ test("hover hit-testing selects the nearest timestamp across a gap", () => {
   assert.equal(nearestSampleIndex(samples, 100_000), 2);
 });
 
+test("live chart windows repaint for every state sample", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(chartModule, "utf8");
+  assert.doesNotMatch(source, /lastDrawMs|15000/);
+  assert.match(source, /samples\.push\(metricSample\(snapshot\)\);[^]*?resSec = 2;\s*draw\(\);/);
+});
+
 test("status markup carries split GPU charts and the new LLM/action charts", async () => {
   const { readFile } = await import("node:fs/promises");
   const html = await readFile(new URL("../controller/web/static/index.html", import.meta.url), "utf8");

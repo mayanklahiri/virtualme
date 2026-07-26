@@ -233,3 +233,11 @@ Status retains its existing page title and makes the authoritative health,
 scheduler-clock, and uptime banner sticky instead of adding a duplicate
 heading bar. Configuration and notification anchors reserve scroll space
 beneath sticky chrome. Home's hero and footer remain unchanged.
+
+### 2026-07-26 — Viewport-aligned sticky containment
+
+The main console column uses `overflow: clip`, not `overflow: hidden`.
+Clipping still prevents horizontal layout spill without creating a non-
+scrolling sticky containing block. Normalized page headers therefore begin
+flush at the viewport top, and both page headers and the Status summary stay
+fixed there while the document scrolls.

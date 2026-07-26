@@ -346,7 +346,6 @@ export function initCharts(send) {
   let gpuEnabled;
   let gpuMemTotalMB = 0;
   let memTotalMB = 0;
-  let lastDrawMs = 0;
 
   function request() {
     if (live) {
@@ -500,7 +499,6 @@ export function initCharts(send) {
   });
 
   function draw() {
-    lastDrawMs = Date.now();
     view = downsample(samples, resSec, MAX_BARS, SUM_MODES);
     cpuChart.draw();
     memoryChart.draw();
@@ -556,9 +554,7 @@ export function initCharts(send) {
       const cutoff = Date.now() - SPANS[lookback];
       while (samples[0]?.ts < cutoff) samples.shift();
       resSec = 2;
-      // Samples accumulate at the 2 s state cadence, but the charts repaint
-      // at most once per 15 s to keep the page calm.
-      if (configured || Date.now() - lastDrawMs >= 15000) draw();
+      draw();
     },
     draw,
   };

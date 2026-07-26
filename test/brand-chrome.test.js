@@ -30,6 +30,8 @@ test("brand chrome markup and responsive contracts stay intact", async () => {
   assert.doesNotMatch(html, /class="brand-mark"/);
   assert.match(css, /\.wordmark-svg\{width:12\.5rem;max-width:100%;height:auto;/);
   assert.match(css, /\.brand\{[^}]*overflow:visible/);
+  assert.match(css, /main\{[^}]*overflow:clip/);
+  assert.doesNotMatch(css, /main\{[^}]*overflow:hidden/);
   assert.match(css, /\.page-heading\{position:sticky;top:0;z-index:15/);
   assert.match(css, /#status-summary\{position:sticky;top:0;z-index:15/);
   assert.match(css, /@media\(max-width:43\.75rem\)\{\.page-caption\{display:none\}\}/);

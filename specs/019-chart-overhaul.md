@@ -189,3 +189,10 @@ LLM token/throughput row or the browser-actions figure. The status-markup
 assertions in `test/chart-ticks.test.js` ("status markup carries split GPU
 charts…") are extended to require that `#chart-cpu` and `#chart-mem` share
 one `.chart-row` ancestor.
+
+### 2026-07-26 — Restore live chart repaint cadence
+
+The 15-second client repaint throttle in the 2026-07-24 amendment is
+superseded. For the live `15m` and `1h` windows, every two-second `state`
+sample is appended, downsampled to the existing 36-bar cap, and painted
+immediately. Tier-backed longer windows retain their 30-second refresh.
