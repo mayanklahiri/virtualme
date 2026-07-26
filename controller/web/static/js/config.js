@@ -42,7 +42,7 @@ function typeIcon(setting) {
   const metadata = typeInfo(setting);
   const namespace = "http:" + "//www.w3.org/2000/svg";
   const svg = document.createElementNS(namespace, "svg");
-  svg.className = "icon config-type-icon";
+  svg.setAttribute("class", "icon config-type-icon");
   svg.setAttribute("aria-label", metadata.label);
   svg.setAttribute("title", metadata.label);
   const use = document.createElementNS(namespace, "use");

@@ -37,7 +37,11 @@ class FakeElement {
 
   dispatch(type) { return this.listeners.get(type)?.({ preventDefault() {} }); }
 
-  setAttribute(name, value) { this.attributes.set(name, String(value)); }
+  setAttribute(name, value) {
+    const text = String(value);
+    this.attributes.set(name, text);
+    if (name === "class") this.className = text;
+  }
 
   getAttribute(name) { return this.attributes.get(name) ?? null; }
 

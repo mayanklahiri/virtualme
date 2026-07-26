@@ -249,6 +249,10 @@ test("config master-detail navigation persists selection and keeps field context
       findByClass(content, "config-type-icon").children[0].getAttribute("href"),
       "/icons.svg#i-key-round",
     );
+    assert.equal(
+      findByClass(content, "config-type-icon").getAttribute("class"),
+      "icon config-type-icon",
+    );
     navigation.children[0].dispatch("click");
     assert.equal(storage.get("vm-config-section"), "network");
     assert.equal(
