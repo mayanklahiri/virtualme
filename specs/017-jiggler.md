@@ -177,3 +177,18 @@ pre-`mousemove` re-clamp; the e2e motion probe is unchanged. Manual
 acceptance: watch one full burst in `/desktop-view` — the cursor is visible
 end-to-end, moves at a believable human pace, and never touches the display
 edge except during deliberate edge excursions.
+
+### 2026-07-25 — Composite the automation cursor into VNC frames
+
+`-cursor most` gives x11vnc the correct XFIXES cursor shape, but noVNC
+advertises CursorShapeUpdates and renders that shape as a browser-local
+cursor. Server-side movement from `xdotool` cannot move the browser cursor, so
+agent and jiggler motion remains invisible unless the viewer itself is moving
+the pointer.
+
+Add `-nocursorshape` while retaining `-cursor most`. This disables the
+CursorShapeUpdates optimization and makes x11vnc composite the remote cursor
+into framebuffer updates, so `/desktop-view` displays pointer movement caused
+by the agent, jiggler, and viewer. The accepted cost is modest extra
+framebuffer traffic and cursor latency. A service-script contract test pins
+the flag.

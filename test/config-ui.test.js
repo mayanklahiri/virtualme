@@ -153,23 +153,27 @@ test("config DOM flow loads, edits, reports conflict, and discards", async () =>
 
 test("supervised services consume split endpoints and X11 socket path", async () => {
   const root = new URL("../docker/rootfs/etc/s6-overlay/s6-rc.d/", import.meta.url);
-  const [xvfb, x11vnc, novnc, chromium, valkey, llama] = await Promise.all([
+  const [xvfb, x11vnc, novnc, chromium, valkey, llama, watchdog] = await Promise.all([
     readFile(new URL("svc-xvfb/run", root), "utf8"),
     readFile(new URL("svc-x11vnc/run", root), "utf8"),
     readFile(new URL("svc-novnc/run", root), "utf8"),
     readFile(new URL("svc-chromium/run", root), "utf8"),
     readFile(new URL("svc-valkey/run", root), "utf8"),
     readFile(new URL("svc-llama/run", root), "utf8"),
+    readFile(new URL("svc-chromium-watchdog/run", root), "utf8"),
   ]);
   assert.match(xvfb, /VM_EFFECTIVE_X11_SOCKET_DIR/);
   assert.match(x11vnc, /VM_EFFECTIVE_VNC_HOST/);
   assert.match(x11vnc, /VM_EFFECTIVE_VNC_PORT/);
   assert.match(x11vnc, /-listen6/);
   assert.match(x11vnc, /-no6/);
+  assert.match(x11vnc, /-cursor most -nocursorshape/);
   assert.match(novnc, /VM_EFFECTIVE_NOVNC_HOST/);
   assert.match(chromium, /VM_EFFECTIVE_CDP_HOST/);
   assert.match(valkey, /VM_EFFECTIVE_VALKEY_HOST/);
   assert.match(llama, /VM_EFFECTIVE_LLAMA_HOST/);
+  assert.match(watchdog, /getwindowfocus/);
+  assert.match(watchdog, /xdotool windowfocus "\$WIN"/);
   for (const script of [x11vnc, novnc, chromium, valkey, llama]) {
     assert.doesNotMatch(script, /VM_EFFECTIVE_[A-Z_]+(?:%|##)/);
   }

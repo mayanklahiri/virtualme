@@ -9,4 +9,4 @@ else
 fi
 exec x11vnc -display "$VM_EFFECTIVE_DISPLAY" -forever -shared -nopw \
   "${listen_flags[@]}" \
-  -noxdamage -cursor most -quiet
+  -noxdamage -cursor most -nocursorshape -quiet

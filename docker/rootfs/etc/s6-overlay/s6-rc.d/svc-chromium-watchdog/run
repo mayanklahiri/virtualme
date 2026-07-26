@@ -36,6 +36,14 @@ while sleep 2; do
       echo "chromium-watchdog: window ${WIDTH:-?}x${HEIGHT:-?}+${X:-?}+${Y:-?} != screen ${SCREEN_W}x${SCREEN_H}+0+0; re-fitting" >&2
       xdotool windowmove "$WIN" 0 0 windowsize "$WIN" 100% 100% || true
     fi
+    # Self-heal input focus (spec 016 amendment): if Chromium maps before
+    # openbox manages the display, no window ever gets focus and all xdotool
+    # keystrokes are silently dropped. Re-assert focus on the active surface.
+    FOCUSED="$(xdotool getwindowfocus 2>/dev/null || true)"
+    if [ "$FOCUSED" != "$WIN" ]; then
+      echo "chromium-watchdog: focus on ${FOCUSED:-none}, not $WIN; refocusing" >&2
+      xdotool windowfocus "$WIN" || true
+    fi
     continue
   fi
   MISS=$((MISS + 1))

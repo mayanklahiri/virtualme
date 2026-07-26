@@ -167,3 +167,20 @@ vision/xdotool agent.
   which does not depend on the automation marker.
 - Consequence: `navigator.webdriver` is no longer forced true, which is
   acceptable (and mildly beneficial) for an agent browsing consumer sites.
+
+### 2026-07-25 — Watchdog input-focus self-heal (adopt-before-WM race)
+
+A container boot can map Chromium's window before openbox begins managing the
+display. Openbox then adopts the window without applying the
+`<application><focus>yes</focus></application>` map-time rule in
+`openbox-rc.xml`, so no window ever receives X input focus and every
+OS-level `xdotool` keystroke (agent `navigate`/`type`/`key`, manual Tools
+console actuation) is silently dropped while the page sits on `about:blank`.
+Observed live on 2026-07-25; `xdotool windowfocus` on the Chromium surface
+restored control instantly.
+
+`svc-chromium-watchdog/run` now self-heals focus with the same 2-second
+cadence as geometry: when the visible Chromium surface `$WIN` is not the
+`xdotool getwindowfocus` window, it logs one line and runs
+`xdotool windowfocus "$WIN"`. This also recovers focus lost after popup
+closes or WM hiccups. A service-script contract test pins both commands.
