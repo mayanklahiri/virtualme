@@ -28,7 +28,8 @@ test("release workflow publishes the committed Docker Hub overview", async () =>
   assert.match(workflow, /curl -fsS -X PATCH/);
   assert.match(workflow, /repositories\/\$IMAGE\//);
   assert.match(overview, /npx virtualme start/);
-  assert.match(overview, /No cloud, no\naccounts, no telemetry\./);
+  assert.match(overview, /optional Telegram Bot API integration/);
+  assert.match(overview, /enabling Telegram deliberately sends authorized chat\ntraffic through Telegram's cloud service\./);
   assert.match(overview, /trusted private network only\./);
 });
 

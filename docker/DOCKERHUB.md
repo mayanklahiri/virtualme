@@ -1,8 +1,10 @@
 # Virtual Me
 
-A private background agent that runs entirely on your machine: local LLM,
-real browser on a virtual desktop, speech, and outbound mail. No cloud, no
-accounts, no telemetry.
+A private background agent with a local LLM, a real browser on a virtual
+desktop, recurring projects, durable jobs and notifications, speech, outbound
+mail, and an optional Telegram Bot API integration. Core inference and state
+stay on your machine; enabling Telegram deliberately sends authorized chat
+traffic through Telegram's cloud service.
 
 ## Run it
 
@@ -16,8 +18,10 @@ or with plain Docker:
 
 Then open http://localhost:8080 in a browser on the same network.
 
-Your data (browser profile, chat history, projects, mail queue) lives in
-`~/.virtualme` on the host and survives updates.
+Your data (browser profile, chat history, projects, configuration,
+notifications, metrics, and mail queue) lives in `~/.virtualme` on the host
+and survives updates. The console includes Config, Jobs, Data, Notifications,
+and Telegram integration pages.
 
 ## Good to know
 
