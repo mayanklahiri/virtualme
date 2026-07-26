@@ -298,3 +298,43 @@ func TestNavigateWaitsForSettledPage(t *testing.T) {
 		t.Fatalf("navigate settle took %s", elapsed)
 	}
 }
+
+func TestReturnKeyWaitsForSettledPage(t *testing.T) {
+	polls := 0
+	server := fakeCDPServer(t, false, func(method string, _ json.RawMessage) any {
+		if method != "Runtime.evaluate" {
+			t.Errorf("unexpected method %s", method)
+		}
+		polls++
+		switch {
+		case polls == 1:
+			return evaluateResult(map[string]any{"url": "http://fake/search", "title": "Search", "ready": true})
+		case polls == 2:
+			return evaluateResult(map[string]any{"url": "http://fake/search", "title": "Search", "ready": true})
+		default:
+			return evaluateResult(map[string]any{"url": "http://fake/results", "title": "Results", "ready": true})
+		}
+	})
+	defer server.Close()
+	runner := &recordingRunner{}
+	humanize := false
+	tools := NewLocalTools(Config{
+		Runner: runner, XdotoolPath: "xdotool", CDPURL: server.URL, Client: server.Client(),
+		Humanize: &humanize,
+	})
+	result, err := tools.Execute(context.Background(), "key", json.RawMessage(`{"keys":"Enter"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Observe {
+		t.Fatal("Return key must produce an observation")
+	}
+	for _, want := range []string{`"pressed":"Return"`, `"url":"http://fake/results"`, `"title":"Results"`, `"ready":true`} {
+		if !strings.Contains(result.Text, want) {
+			t.Fatalf("Return observation %q missing %s", result.Text, want)
+		}
+	}
+	if got := strings.Join(runner.args, " "); got != "key --clearmodifiers Return" {
+		t.Fatalf("xdotool args = %q", got)
+	}
+}

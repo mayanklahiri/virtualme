@@ -790,6 +790,37 @@ func (r *recordingRunner) Run(_ context.Context, name string, args, env []string
 	return nil, nil, nil
 }
 
+type invalidKeyRunner struct{}
+
+func (*invalidKeyRunner) Run(_ context.Context, _ string, _ []string, _ []string, _ string) ([]byte, []byte, error) {
+	return nil, []byte("(symbol) No such key name 'Bogus'. Ignoring it."), nil
+}
+
+func TestNormalizeKeys(t *testing.T) {
+	for input, want := range map[string]string{
+		"enter":      "Return",
+		"Enter":      "Return",
+		"ctrl+l":     "ctrl+l",
+		"Ctrl+Enter": "ctrl+Return",
+		"pagedown":   "Next",
+		"F5":         "F5",
+		"a":          "a",
+	} {
+		if got := normalizeKeys(input); got != want {
+			t.Errorf("normalizeKeys(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestKeyRejectsUnknownXdotoolKeysym(t *testing.T) {
+	humanize := false
+	tools := NewLocalTools(Config{Runner: &invalidKeyRunner{}, Humanize: &humanize})
+	_, err := tools.Execute(context.Background(), "key", json.RawMessage(`{"keys":"Bogus"}`))
+	if err == nil || !strings.Contains(err.Error(), "rejected key name") {
+		t.Fatalf("unknown key error = %v", err)
+	}
+}
+
 type captureRunner struct {
 	calls [][]string
 }

@@ -270,3 +270,17 @@ intervals. These delays apply equally to agent and manual Tools-console
 actuation; observation tools remain immediate. The agent config exposes an
 opt-out and injectable sleep function so hermetic tests remain fast and
 deterministic.
+
+### 2026-07-26 — Reliable key names and Return verification
+
+The `key` tool normalizes common case-insensitive names to X11 keysyms:
+Enter/Return to `Return`, Esc/Escape to `Escape`, Backspace to `BackSpace`,
+Del/Delete to `Delete`, PageUp/PageDown to `Prior`/`Next`, canonical arrow,
+Home, End, Tab, and Space names, plus lowercase modifier names. Unknown names
+remain available for valid keysyms such as `F5` and `KP_Enter`.
+
+Because xdotool exits successfully after printing `No such key name`, that
+stderr text is a hard tool error. A chord containing `Return` or `KP_Enter`
+waits up to eight seconds for CDP-observed page settlement and returns a fresh
+`{pressed,url,title,ready}` observation. Other keys retain their short action
+acknowledgement.

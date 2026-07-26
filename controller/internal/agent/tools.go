@@ -32,7 +32,16 @@ const (
 	pageEvalCap      = 16 * 1024
 	layoutDebugCap   = 4 * 1024
 	navigateSettleMs = 15000
+	keySettleMs      = 8000
 )
+
+var keyAliases = map[string]string{
+	"enter": "Return", "return": "Return", "esc": "Escape", "escape": "Escape",
+	"backspace": "BackSpace", "del": "Delete", "delete": "Delete", "tab": "Tab",
+	"space": "space", "up": "Up", "down": "Down", "left": "Left", "right": "Right",
+	"pageup": "Prior", "pagedown": "Next", "home": "Home", "end": "End",
+	"ctrl": "ctrl", "alt": "alt", "shift": "shift", "super": "super", "meta": "meta",
+}
 
 // Runner executes a process and returns its captured output.
 type Runner interface {
@@ -187,6 +196,25 @@ func NewLocalTools(cfg Config) *localTools {
 }
 
 func schema(value string) json.RawMessage { return json.RawMessage(value) }
+
+func normalizeKeys(keys string) string {
+	parts := strings.Split(keys, "+")
+	for index, part := range parts {
+		if mapped, ok := keyAliases[strings.ToLower(strings.TrimSpace(part))]; ok {
+			parts[index] = mapped
+		}
+	}
+	return strings.Join(parts, "+")
+}
+
+func keyIncludesReturn(keys string) bool {
+	for _, part := range strings.Split(keys, "+") {
+		if part == "Return" || part == "KP_Enter" {
+			return true
+		}
+	}
+	return false
+}
 
 // ToolManifest is the server-driven description consumed by the Tools page.
 type ToolManifest struct {
@@ -393,7 +421,19 @@ func (t *localTools) Execute(ctx context.Context, name string, raw json.RawMessa
 		if err := decodeArgs(raw, &args); err != nil {
 			return ToolResult{}, err
 		}
-		return t.action(ctx, "Pressed "+args.Keys, "key", "--clearmodifiers", args.Keys)
+		keys := normalizeKeys(args.Keys)
+		if !keyIncludesReturn(keys) {
+			return t.action(ctx, "Pressed "+keys, "key", "--clearmodifiers", keys)
+		}
+		before := t.cdp.pageInfo(ctx)
+		if _, err := t.action(ctx, "Pressed "+keys, "key", "--clearmodifiers", keys); err != nil {
+			return ToolResult{}, err
+		}
+		settled := t.cdp.WaitSettled(ctx, before.URL, keySettleMs*time.Millisecond)
+		observation, _ := json.Marshal(map[string]any{
+			"pressed": keys, "url": settled.URL, "title": settled.Title, "ready": settled.Ready,
+		})
+		return ToolResult{Text: string(observation), Summary: "Pressed " + keys, Observe: true}, nil
 	case "scroll":
 		var args struct {
 			Dir    string `json:"dir"`
@@ -741,6 +781,9 @@ func (t *localTools) action(ctx context.Context, summary string, args ...string)
 	stdout, stderr, err := t.runner.Run(ctx, t.cfg.XdotoolPath, args, []string{"DISPLAY=" + t.cfg.Display}, "")
 	if err != nil {
 		return ToolResult{}, fmt.Errorf("xdotool: %w: %s%s", err, stdout, stderr)
+	}
+	if strings.Contains(string(stderr), "No such key name") {
+		return ToolResult{}, fmt.Errorf("xdotool rejected key name: %s", strings.TrimSpace(string(stderr)))
 	}
 	return ToolResult{Text: summary, Summary: summary}, nil
 }
