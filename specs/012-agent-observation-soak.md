@@ -171,3 +171,9 @@ locally running browser when invoked manually.
    exception to constitution rule 4's no-rewrite posture, limited to
    scrubbing references to that site.
 3. Spec 027 §8 binds future work to the same two-site allowlist.
+
+### 2026-07-26 — Withdraw offline feed golden exception
+
+The spec 029 `hn-front` fixture and its feed-row grouping logic are removed.
+The offline gate uses `example-com` and `lahiri-me` fixtures only; no committed
+DOM fixture targets a numbered news-feed page.

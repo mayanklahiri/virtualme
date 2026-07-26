@@ -406,83 +406,11 @@
 
   // Drop a later link when an earlier one already carries the same href and
   // the same visible text (or the later one adds no text): overlay links and
-  // screen-reader duplicates double every story link on feed pages.
+  // screen-reader duplicates repeat the same destination.
   function digestText(node) {
     let text = node.text || "";
     for (const child of node.children ?? []) text += " " + digestText(child);
     return text.replace(/\s+/g, " ").trim();
-  }
-
-  // Numbered feed pages commonly encode one item as a title row followed by
-  // a metadata row. Keep those rows together so titles, URLs, scores, ages,
-  // and comment links remain one model-readable record.
-  function groupFeedRows(nodes) {
-    const rankCount = (node) => {
-      let count = /^\d+\.$/.test(node?.text || "") ? 1 : 0;
-      for (const child of node?.children ?? []) count += rankCount(child);
-      return count;
-    };
-    for (const node of nodes) {
-      if (node.children) node.children = groupFeedRows(node.children);
-      if (node.items) node.items = groupFeedRows(node.items);
-    }
-    const grouped = [];
-    for (let index = 0; index < nodes.length; index++) {
-      const node = nodes[index];
-      const rank = node?.tag === "tr" && rankCount(node) === 1;
-      if (!rank) {
-        grouped.push(node);
-        continue;
-      }
-      const children = [node];
-      const next = nodes[index + 1];
-      const nextIsRank = next?.tag === "tr" && rankCount(next) === 1;
-      if (next?.tag === "tr" && !nextIsRank) {
-        children.push(next);
-        index++;
-      }
-      const flattened = [];
-      const collect = (entry) => {
-        flattened.push(entry);
-        for (const child of entry?.children ?? []) collect(child);
-      };
-      for (const child of children) collect(child);
-      const rankNode = flattened.find((entry) => /^\d+\.$/.test(entry?.text || ""));
-      const titleLinks = [];
-      collectTitleLinks(node, titleLinks);
-      const titleLink = titleLinks.find((entry) =>
-        entry.text && entry.href &&
-        !/\/(?:vote|from)\?/.test(entry.href));
-      const scoreNode = flattened.find((entry) => /^\d+ points?$/.test(entry?.text || ""));
-      const commentLink = flattened.find((entry) =>
-        entry.href && /\/item\?id=\d+/.test(entry.href) &&
-        /^(?:\d+ comments?|discuss)$/.test(entry.text || ""));
-      const ageLink = flattened.find((entry) =>
-        entry.href && /\/item\?id=\d+/.test(entry.href) && /\bago$/.test(entry.text || ""));
-      const authorLink = flattened.find((entry) => /\/user\?id=/.test(entry?.href || ""));
-      const commentURL = commentLink?.href || ageLink?.href || "";
-      const title = titleLink?.text || "";
-      const article = {
-        tag: "article",
-        rank: Number((rankNode?.text || "").slice(0, -1)),
-        title,
-        title_link: title && commentURL ? `[${title}](${commentURL})` : "",
-        url: titleLink?.href || "",
-        score: scoreNode?.text || "",
-        comments: commentLink?.text || "",
-        comment_url: commentURL,
-        author: authorLink?.text || "",
-        age: ageLink?.text || "",
-        children,
-      };
-      grouped.push(article);
-    }
-    return grouped;
-  }
-
-  function collectTitleLinks(node, output) {
-    if (node?.tag === "a") output.push(node);
-    for (const child of node?.children ?? []) collectTitleLinks(child, output);
   }
 
   function dedupeLinks(nodes, seen) {
@@ -518,7 +446,7 @@
     }
   }
   dedupeLinks(body, new Map());
-  const collapsed = groupFeedRows(collapse(body));
+  const collapsed = collapse(body);
   if (budgetHit) {
     collapsed.push({ note: "truncated: node budget reached" });
   }

@@ -165,33 +165,6 @@ test("layout tables preserve links and do not flatten nested rows", () => {
   assert.match(serialized, /Score 10 points/);
 });
 
-test("numbered feed rows group title and metadata into articles", () => {
-  const fixture = {
-    title: "Feed", url: "https://example.com/",
-    body: [{ tag: "table", children: [{ tag: "tbody", children: [
-      { tag: "tr", children: [
-        { tag: "td", text: "1." },
-        { tag: "td", children: [{ tag: "a", text: "Story", attrs: { href: "/story" } }] },
-      ] },
-      { tag: "tr", children: [{ tag: "td", children: [
-        { tag: "span", text: "10 points" },
-        { tag: "a", text: "3 comments", attrs: { href: "/item?id=1" } },
-      ] }] },
-      { tag: "tr" },
-    ] }] }],
-  };
-  const digest = runReadPage(fixture);
-  assert.equal(digest.body.length, 1);
-  assert.equal(digest.body[0].tag, "article");
-  assert.equal(digest.body[0].rank, 1);
-  assert.equal(digest.body[0].title, "Story");
-  assert.equal(digest.body[0].title_link, "[Story](https://example.com/item?id=1)");
-  assert.equal(digest.body[0].url, "https://example.com/story");
-  assert.equal(digest.body[0].score, "10 points");
-  assert.equal(digest.body[0].comments, "3 comments");
-  assert.equal(digest.body[0].comment_url, "https://example.com/item?id=1");
-});
-
 test("single-link list items flatten; long lists append a truncation note", () => {
   /** @type {any[]} */
   const lis = [{ tag: "li", children: [{ tag: "a", text: "Story one", attrs: { href: "/one" } }] }];

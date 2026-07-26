@@ -236,9 +236,7 @@ shape: page-shaped JSON becomes a linked title plus plain text, `KEY=value`
 runs become sorted tables, manual screenshots omit the agent's coordinate
 grid, and `read_page` YAML renders as a collapsible tree. At the default model
 context, model-facing `read_page` YAML is capped at 24576 bytes (the cap scales
-with context), treats layout tables as containers so links survive, and
-groups numbered feeds into explicit article fields including a ready-to-copy
-linked title, score, comments, and comment URL. Real data tables retain
+with context), treats layout tables as containers so links survive. Real data tables retain
 structured links. This can invoke `bash` and browser actuation;
 under the current trust model it has no additional authentication, so expose the
 console only on a trusted private network.

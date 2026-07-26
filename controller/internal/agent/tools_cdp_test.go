@@ -49,7 +49,7 @@ func TestDumpDOMWritesManualFixture(t *testing.T) {
 			t.Fatal("dump expression not sent")
 		}
 		return evaluateResult(map[string]any{
-			"url": "https://news.ycombinator.com/", "title": "Hacker News", "lang": "en",
+			"url": "https://example.com/", "title": "Example Domain", "lang": "en",
 			"head": []any{}, "body": []any{map[string]any{"tag": "p", "text": "hello"}},
 		})
 	})
@@ -60,14 +60,14 @@ func TestDumpDOMWritesManualFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(result.Text, "agent/dom-dumps/news.ycombinator.com-") {
+	if !strings.HasPrefix(result.Text, "agent/dom-dumps/example.com-") {
 		t.Fatalf("path = %q", result.Text)
 	}
 	data, err := os.ReadFile(filepath.Join(filepath.Dir(dataDir), filepath.FromSlash(result.Text)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), `"title": "Hacker News"`) {
+	if !strings.Contains(string(data), `"title": "Example Domain"`) {
 		t.Fatalf("fixture = %s", data)
 	}
 }

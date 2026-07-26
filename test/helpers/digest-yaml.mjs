@@ -2,8 +2,7 @@
 const ORDER = {
   "": ["title", "url", "head", "body"],
   head: ["lang", "description", "canonical", "og"],
-  node: ["tag", "rank", "title", "title_link", "url", "score", "comments", "comment_url",
-    "author", "age", "text", "href", "src", "alt", "type", "name", "value",
+  node: ["tag", "title", "url", "text", "href", "src", "alt", "type", "name", "value",
     "placeholder", "action", "method", "label", "rows", "items", "children", "note"],
 };
 

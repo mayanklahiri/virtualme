@@ -65,9 +65,7 @@ cadence. DOM observations carry the page URL and title, omit layout-only
 noise, and fit the default 32768-token context;
 `read_page` emits a structured YAML digest capped at 24576 bytes at the default
 context (scaling from 4 to 64 KiB with configured context), collapsing
-layout tables while preserving links, grouping numbered feed rows into
-explicit article fields (including ready-to-copy `title_link`, score, comments,
-and comment URL), and retaining structured links in data tables,
+layout tables while preserving links and retaining structured links in data tables,
 and `navigate` waits for the page to settle. CDP never performs input or
 navigation; agent screenshots and step logs (including observation text)
 persist under `$VM_DATA_DIR/agent/`. The vision coordinate grid is drawn only

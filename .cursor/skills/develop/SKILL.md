@@ -217,7 +217,7 @@ Agent CDP observation tools:
 
 | Tool | Purpose |
 |---|---|
-| `read_page` | Structured YAML page digest capped at 24576 bytes for the default 32768-token context (scales from 4 to 64 KiB); layout tables collapse, numbered feeds gain explicit `title_link`/score/comments fields, and data tables preserve structured links |
+| `read_page` | Structured YAML page digest capped at 24576 bytes for the default 32768-token context (scales from 4 to 64 KiB); layout tables collapse and data tables preserve structured links |
 | `dom_query` | Precise CSS extraction of bounded text and requested attributes |
 | `dom_validate` | Full-batch structure/content assertions |
 | `page_eval` | Bounded expression extraction with tripwires and Chromium side-effect rejection |

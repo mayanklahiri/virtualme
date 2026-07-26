@@ -139,3 +139,13 @@ manual transport ceilings remain unchanged. Completion `max_tokens` is now
 adaptive within 1024 through one quarter of context after a conservative
 preflight prompt estimate and 512-token margin. Spec 034 defines the complete
 compaction and overflow-recovery policy.
+
+### 2026-07-26 — Remove site-specific feed grouping
+
+The committed `hn-front` DOM fixture, golden YAML, and property assertions are
+removed. Offline golden coverage uses `example-com`, `lahiri-me`, and
+`lahiri-me.props.mjs` only. The `read_page` extractor no longer groups numbered
+table rows into `article` records or emits feed-specific fields (`rank`,
+`title_link`, `score`, `comments`, `comment_url`, `author`, `age`). §6
+acceptance items 3–4 (live feed digest and five linked story rows) are
+retired; items 1, 2, and 5 remain binding.
