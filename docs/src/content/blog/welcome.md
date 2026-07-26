@@ -17,7 +17,7 @@ in the data directory on hardware you control.
 
 ## Where to begin
 
-The [5-minute guide](site:guide/) starts with the CLI, runs one concrete
+Begin with the 5-minute guide. It starts with the CLI, runs one concrete
 browser task, and turns another task into a recurring Project. The Desktop
 shows the work as it happens; Jobs and Data make its result inspectable.
 

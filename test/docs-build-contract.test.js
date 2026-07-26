@@ -45,7 +45,7 @@ test("Astro config and generated configuration match production contract", async
   assert.match(config, /base:\s*"\/virtualme"/);
   assert.match(config, /output:\s*"static"/);
   assert.match(config, /trailingSlash:\s*"always"/);
-  assert.match(config, /baseAwareMarkdownLinks/);
+  assert.doesNotMatch(config, /remarkPlugins/);
   const reference = JSON.parse(await readFile(new URL("src/generated/config-reference.json", docs)));
   assert.equal(reference.schemaVersion, 1);
   assert.match(reference.schemaSha256, /^[0-9a-f]{64}$/);
