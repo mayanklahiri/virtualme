@@ -1417,3 +1417,14 @@ corresponding executable gate passes.
 5. **Websocket frames.** `telegram-userlist-req` → `telegram-userlist`
    snapshot; `telegram-userlist-set` replaces the full list (validated,
    sender-scoped result).
+
+### 2026-07-26 — Reliable chat-allowlist editor
+
+The Config-page string-list editor creates absent intermediate objects before
+writing `integrations.telegram.allowedChatIds`. It trims rows, drops empty rows
+at parse/save time, checks uniqueness after that normalization, and validates
+each non-empty row against the item schema.
+
+Each row owns its validation message. Add focuses the new row; Remove redraws
+the list before synchronization so another invalid row cannot leave deleted UI
+behind. Add and Remove use the console's standard button chrome.

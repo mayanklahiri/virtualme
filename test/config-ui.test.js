@@ -20,6 +20,16 @@ import {
 import { initConfig } from "../controller/web/static/js/config.js";
 import { createFakeDOM } from "./fake-dom.mjs";
 
+/** @param {any} node @param {string} className @returns {any} */
+function findByClass(node, className) {
+  if (node.classList?.contains(className)) return node;
+  for (const child of node.children ?? []) {
+    const found = findByClass(child, className);
+    if (found) return found;
+  }
+  return null;
+}
+
 test("config model orders, anchors, converts, and protects secrets", () => {
   assert.equal(configAnchor("llama.contextTokens"), "llama-context-tokens");
   assert.deepEqual(
@@ -45,6 +55,10 @@ test("config model orders, anchors, converts, and protects secrets", () => {
   assert.deepEqual(parseEditorValue(["first", "second"], {
     type: "array", constraints: { uniqueItems: true },
   }), ["first", "second"]);
+  assert.deepEqual(parseEditorValue(["", "123", " "], {
+    type: "array", constraints: { uniqueItems: true },
+    item: { type: "string", constraints: { pattern: "^-?[1-9][0-9]*$" } },
+  }), ["123"]);
   assert.throws(() => parseEditorValue(["same", "same"], {
     type: "array", constraints: { uniqueItems: true },
   }), /unique/);
@@ -74,6 +88,9 @@ test("config model handles grouping, issues, conflicts, discard data, and reconn
   const raw = { agent: { maxSteps: 10 } };
   setConfigPath(raw, "agent.maxSteps", 20);
   assert.equal(raw.agent.maxSteps, 20);
+  const sparse = {};
+  setConfigPath(sparse, "integrations.telegram.allowedChatIds", ["1"]);
+  assert.deepEqual(sparse, { integrations: { telegram: { allowedChatIds: ["1"] } } });
   assert.equal(restartComplete({
     fileHash: "hash", startupHash: "hash", pendingRestart: false,
   }, "hash"), true);
@@ -152,6 +169,73 @@ test("config DOM flow loads, edits, reports conflict, and discards", async () =>
     nodes.get("#config-discard").dispatch("click");
     assert.equal(nodes.get("#config-edit").hidden, false);
     assert.equal(nodes.get("#config-save").hidden, true);
+  } finally {
+    globalThis.document = priorDocument;
+    globalThis.fetch = priorFetch;
+  }
+});
+
+test("config list editor creates nested paths and redraws removals", async () => {
+  const selectors = [
+    "#config-content", "#config-edit", "#config-save", "#config-discard",
+    "#config-restart", "#config-status",
+  ];
+  const { nodes, document } = createFakeDOM(selectors);
+  const priorDocument = globalThis.document;
+  const priorFetch = globalThis.fetch;
+  const schema = {
+    sections: [{
+      id: "integrations", anchor: "integrations", title: "Integrations", overview: "Optional integrations.",
+      ui: { order: 10, sectionRenderer: "vm-config-integrations-section" },
+      settings: [{
+        path: "integrations.telegram.allowedChatIds",
+        anchor: "integrations-telegram-allowed-chat-ids",
+        type: "array",
+        constraints: { uniqueItems: true },
+        item: { type: "string", constraints: { pattern: "^-?[1-9][0-9]*$" } },
+        ui: { order: 10, component: "vm-string-list" },
+      }],
+    }],
+  };
+  const snapshot = {
+    raw: { version: 1 }, effective: { version: 1 }, sources: {}, secrets: {},
+    fileHash: "file-a", startupHash: "file-a", pendingRestart: false, restartServices: [],
+  };
+  /** @type {any} */
+  let saved = null;
+  globalThis.document = /** @type {any} */ (document);
+  /** @param {string} url @param {any} [options] */
+  const fakeFetch = async (url, options = {}) => {
+    if (url === "/api/config/schema") return { ok: true, json: async () => schema };
+    if (url === "/api/config" && options.method === "PUT") {
+      saved = JSON.parse(options.body);
+      return {
+        ok: false, statusText: "Conflict",
+        json: async () => ({ error: { code: "config_conflict", message: "stale" } }),
+      };
+    }
+    if (url === "/api/config") return { ok: true, json: async () => snapshot };
+    throw new Error(`unexpected request ${url}`);
+  };
+  globalThis.fetch = /** @type {any} */ (fakeFetch);
+  try {
+    const ui = initConfig();
+    ui.show("config");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    nodes.get("#config-edit").dispatch("click");
+    const root = nodes.get("#config-content");
+    const add = findByClass(root, "config-list-add");
+    add.dispatch("click");
+    add.dispatch("click");
+    const rows = findByClass(root, "config-list-rows");
+    assert.equal(rows.children.length, 2);
+    const firstInput = rows.children[0].children[0];
+    firstInput.value = "123";
+    firstInput.dispatch("input");
+    rows.children[1].children[1].dispatch("click");
+    assert.equal(rows.children.length, 1, "remove redraws even with an empty row");
+    await nodes.get("#config-save").dispatch("click");
+    assert.deepEqual(saved.config.integrations.telegram.allowedChatIds, ["123"]);
   } finally {
     globalThis.document = priorDocument;
     globalThis.fetch = priorFetch;

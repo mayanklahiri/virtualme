@@ -12,6 +12,7 @@ import {
   secretStatusLabel,
   setConfigPath,
   validateSecretReference,
+  validateStringItem,
 } from "./config-model.js";
 
 const sectionRenderers = new Set([
@@ -161,45 +162,59 @@ export function initConfig() {
     row.append(element("span", "config-editor-label", setting.path.split(".").at(-1)));
     if (setting.ui?.component === "vm-string-list") {
       const editor = element("div", "config-list-editor");
+      const rows = element("div", "config-list-rows");
+      const listError = element("p", "config-list-error");
       const values = [...(getConfigPath(draft, setting.path) ?? [])];
       const sync = () => {
-        setConfigPath(draft, setting.path, parseEditorValue(values, setting));
+        try {
+          setConfigPath(draft, setting.path, parseEditorValue(values, setting));
+          listError.textContent = "";
+        } catch (error) {
+          listError.textContent = error.message;
+        }
       };
       const draw = () => {
-        editor.replaceChildren();
+        rows.replaceChildren();
         controls.delete(setting.path);
+        let lastInput;
         values.forEach((value, index) => {
           const line = element("div", "config-list-row");
           const input = makeInput({ constraints: setting.item?.constraints }, value, "text");
+          input.required = false;
           input.dataset.configPath = setting.path;
           input.addEventListener("input", () => {
             values[index] = input.value;
             try {
-              sync();
+              if (input.value.trim() !== "") {
+                validateStringItem(input.value.trim(), setting.item);
+              }
               input.setCustomValidity("");
             } catch (error) {
               input.setCustomValidity(error.message);
             }
+            sync();
           });
-          const remove = element("button", "", "Remove");
+          const remove = element("button", "button secondary config-list-remove", "Remove");
           remove.type = "button";
           remove.addEventListener("click", () => {
             values.splice(index, 1);
-            sync();
             draw();
+            sync();
           });
           line.append(input, remove);
-          editor.append(line);
+          rows.append(line);
+          lastInput = input;
           if (!controls.has(setting.path)) controls.set(setting.path, input);
         });
-        const add = element("button", "", "Add");
-        add.type = "button";
-        add.addEventListener("click", () => {
-          values.push("");
-          draw();
-        });
-        editor.append(add);
+        return lastInput;
       };
+      const add = element("button", "button secondary config-list-add", "Add");
+      add.type = "button";
+      add.addEventListener("click", () => {
+        values.push("");
+        draw()?.focus();
+      });
+      editor.append(rows, listError, add);
       draw();
       row.append(editor);
       return row;

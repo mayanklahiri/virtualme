@@ -11,6 +11,8 @@ class FakeElement {
     this.hidden = false;
     this.disabled = false;
     this.focused = false;
+    this.dataset = {};
+    this.validationMessage = "";
     this.classList = {
       add: (...names) => {
         for (const name of names) {
@@ -37,6 +39,8 @@ class FakeElement {
   querySelector() { return null; }
 
   focus() { this.focused = true; }
+
+  setCustomValidity(message) { this.validationMessage = message; }
 }
 
 export function createFakeDOM(selectors) {

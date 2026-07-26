@@ -39,10 +39,11 @@ export function buildSettingTree(settings) {
 export function parseEditorValue(value, setting) {
   if (setting.type === "array") {
     if (!Array.isArray(value)) throw new Error("Enter ordered list rows.");
-    if (setting.constraints?.uniqueItems && new Set(value).size !== value.length) {
+    const rows = value.map((item) => String(item).trim()).filter((item) => item !== "");
+    if (setting.constraints?.uniqueItems && new Set(rows).size !== rows.length) {
       throw new Error("List rows must be unique.");
     }
-    return value.map((item) => validateStringItem(String(item), setting.item));
+    return rows.map((item) => validateStringItem(item, setting.item));
   }
   if (setting.type === "integer") {
     if (!/^-?(0|[1-9][0-9]*)$/.test(String(value))) {
@@ -92,7 +93,7 @@ export function secretStatusLabel(secret) {
 export function setConfigPath(root, dotted, value) {
   const parts = dotted.split(".");
   let current = root;
-  for (const part of parts.slice(0, -1)) current = current[part];
+  for (const part of parts.slice(0, -1)) current = (current[part] ??= {});
   current[parts.at(-1)] = value;
 }
 
