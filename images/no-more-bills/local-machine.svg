@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" role="img" aria-labelledby="title">
+  <title id="title">A compact local computer beside a notebook and lamp</title>
+  <rect width="640" height="400" fill="#fdf6e3"/>
+  <path d="M0 330h640v70H0z" fill="#b58900"/>
+  <rect x="210" y="120" width="220" height="180" rx="18" fill="#073642"/>
+  <circle cx="385" cy="260" r="8" fill="#d3a625"/>
+  <path d="M85 318l70-150 70 150M112 260h86" fill="none" stroke="#073642" stroke-width="14"/>
+  <path d="M455 240h120v80H455z" fill="#fff" stroke="#073642" stroke-width="6"/>
+</svg>
