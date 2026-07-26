@@ -509,11 +509,16 @@ func main() {
 	telegramConfig := telegram.Config{
 		Enabled:            master.Integrations.Telegram.Enabled,
 		AllowedChatIDs:     master.Integrations.Telegram.AllowedChatIDs,
-		AllowedUserIDs:     master.Integrations.Telegram.AllowedUserIDs,
 		PollTimeoutSeconds: master.Integrations.Telegram.PollTimeoutSeconds,
 		MaxEventLog:        master.Integrations.Telegram.MaxEventLog,
 	}
 	telegramService := telegram.New(telegramConfig, sharedValkey, hub.Broadcast, notificationService)
+	if err := telegramService.MigrateAllowedUsers(master.Integrations.Telegram.AllowedUserIDs); err != nil {
+		log.Fatal("telegram: allowed user migration:", err)
+	}
+	if err := config.ClearLegacyTelegramUserAllowlist(loaded); err != nil {
+		log.Printf("config: clear legacy telegram user allowlist: %v", err)
+	}
 	rawIntegrations, _ := loaded.Raw["integrations"].(map[string]any)
 	rawTelegram, _ := rawIntegrations["telegram"].(map[string]any)
 	tokenReference, _ := rawTelegram["botToken"].(string)
@@ -711,6 +716,7 @@ func main() {
 		_ = conn.WriteText(chatService.StatsMessage())
 		_ = conn.WriteText(telegramService.StatusMessage())
 		_ = conn.WriteText(telegramService.EventsMessage())
+		_ = conn.WriteText(telegramService.AllowedUsersMessage())
 		_ = conn.WriteText(mailService.StatusMessage())
 		_ = conn.WriteText(jobManager.StateMessage())
 		_ = conn.WriteText(projectService.Message())

@@ -798,3 +798,44 @@ func walkStrings(value any, path string, visit func(string, string)) {
 		visit(path, typed)
 	}
 }
+
+// ClearLegacyTelegramUserAllowlist clears the deprecated
+// integrations.telegram.allowedUserIds value after Valkey migration. The key
+// remains present because the schema requires it.
+func ClearLegacyTelegramUserAllowlist(loaded *Loaded) error {
+	if loaded == nil || loaded.File == "" {
+		return nil
+	}
+	integrations, ok := loaded.Raw["integrations"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	telegram, ok := integrations["telegram"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	legacy, ok := telegram["allowedUserIds"]
+	if !ok {
+		return nil
+	}
+	switch values := legacy.(type) {
+	case []any:
+		if len(values) == 0 {
+			return nil
+		}
+	case []string:
+		if len(values) == 0 {
+			return nil
+		}
+	}
+	telegram["allowedUserIds"] = []any{}
+	schema, err := EmbeddedSchema()
+	if err != nil {
+		return err
+	}
+	content, err := schema.Emit(loaded.Raw)
+	if err != nil {
+		return err
+	}
+	return AtomicWrite(loaded.File, content)
+}

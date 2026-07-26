@@ -18,6 +18,24 @@ export function orderedSettings(settings) {
     left.path.localeCompare(right.path));
 }
 
+/** @param {any[]} settings */
+export function buildSettingTree(settings) {
+  const root = { name: "", depth: 0, children: new Map(), settings: [] };
+  for (const setting of orderedSettings(settings)) {
+    const parts = setting.path.split(".");
+    let node = root;
+    for (let index = 0; index < parts.length - 1; index++) {
+      const part = parts[index];
+      if (!node.children.has(part)) {
+        node.children.set(part, { name: part, depth: index + 1, children: new Map(), settings: [] });
+      }
+      node = node.children.get(part);
+    }
+    node.settings.push(setting);
+  }
+  return root;
+}
+
 export function parseEditorValue(value, setting) {
   if (setting.type === "array") {
     if (!Array.isArray(value)) throw new Error("Enter ordered list rows.");

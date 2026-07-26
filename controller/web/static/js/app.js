@@ -152,6 +152,7 @@ function onMessage(message) {
     case "telegram-event":
     case "telegram-event-detail":
     case "telegram-command-result":
+    case "telegram-userlist":
       telegram.frame(message);
       break;
   }

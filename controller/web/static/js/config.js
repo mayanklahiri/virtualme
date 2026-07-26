@@ -1,13 +1,11 @@
 // @ts-nocheck
 import {
-  advancedGroups,
+  buildSettingTree,
   cloneConfig,
-  configAnchor,
   conflictMessage,
   getConfigPath,
   issueControl,
   orderedSections,
-  orderedSettings,
   parseEditorValue,
   restartComplete,
   restartMessage,
@@ -78,74 +76,25 @@ export function initConfig() {
     }
   }
 
-  function renderDocs(container, value) {
-    if (value.overview) container.append(element("p", "config-overview", value.overview));
-    for (const detail of value.details ?? []) container.append(element("p", "config-detail", detail));
-    if ((value.tradeoffs ?? []).length) {
-      const list = element("ul", "config-tradeoffs");
-      for (const tradeoff of value.tradeoffs) {
-        list.append(element("li", "", `${tradeoff.choice}: ${tradeoff.benefit} Cost: ${tradeoff.cost}`));
-      }
-      container.append(list);
-    }
-    if ((value.choices ?? []).length) {
-      const list = element("ul", "config-choices");
-      for (const choice of value.choices) {
-        list.append(element("li", "", choice.description
-          ? `${choice.value}: ${choice.description}`
-          : String(choice.value ?? choice)));
-      }
-      container.append(list);
-    }
-    if ((value.examples ?? []).length) {
-      const list = element("ul", "config-examples");
-      for (const example of value.examples) {
-        list.append(element("li", "", `${example.label}: ${example.yaml}`));
-      }
-      container.append(list);
-    }
-    if ((value.links ?? []).length) {
-      const list = element("ul", "config-links");
-      for (const link of value.links) {
-        const item = element("li");
-        const anchor = element("a", "", link.label);
-        anchor.href = link.href;
-        item.append(anchor);
-        list.append(item);
-      }
-      container.append(list);
-    }
-  }
-
   function readSetting(setting) {
     const card = element("article", "config-setting");
     card.id = setting.anchor;
     const heading = element("div", "config-setting-head");
     heading.append(element("h3", "", setting.path.split(".").at(-1)));
-    heading.append(element("span", "config-restart-badge", setting.restart));
+    if (setting.restart) heading.append(element("span", "config-restart-badge", setting.restart));
     card.append(heading);
-    renderDocs(card, setting);
-    const list = element("dl", "config-values");
-    const unresolved = getConfigPath(snapshot.raw, setting.path);
-    const effective = getConfigPath(snapshot.effective, setting.path);
-    const values = [
-      ["Configured", setting.secret ? (unresolved ? String(unresolved) : "Not configured") : String(unresolved)],
-      ["Source", snapshot.sources[setting.path] ?? "default"],
-      ["Default", JSON.stringify(setting.default)],
-    ];
-    if (!setting.secret && effective !== unresolved) values.splice(1, 0, ["Effective", String(effective)]);
+    if (setting.overview) card.append(element("p", "config-overview", setting.overview));
+    let display = "";
+    if (setting.secret) {
+      const unresolved = getConfigPath(snapshot.raw, setting.path);
+      display = unresolved ? String(unresolved) : "Not configured";
+    } else {
+      const effective = getConfigPath(snapshot.effective, setting.path);
+      const raw = getConfigPath(snapshot.raw, setting.path);
+      display = String(effective ?? raw ?? setting.default ?? "");
+    }
+    card.append(element("p", "config-value", display));
     const secret = setting.secret ? snapshot.secrets?.[setting.path] : null;
-    if (secret) {
-      values.splice(1, 0, ["Secret status", secretStatusLabel(secret)]);
-      if (secret.source) values.splice(2, 0, ["Secret source", secret.source]);
-      if (secret.lastRefreshAt) values.splice(3, 0, ["Last refresh", secret.lastRefreshAt]);
-    }
-    for (const [label, value] of values) {
-      const row = element("div");
-      row.append(element("dt", "", label), element("dd", "", value));
-      list.append(row);
-    }
-    card.append(list);
     if (secret?.configured && secret.status !== "inactive") {
       const refresh = element("button", "config-secret-refresh", "Refresh secret");
       refresh.type = "button";
@@ -163,6 +112,7 @@ export function initConfig() {
           refresh.disabled = false;
         }
       });
+      card.append(element("p", "config-overview", secretStatusLabel(secret)));
       card.append(refresh);
     }
     return card;
@@ -208,7 +158,7 @@ export function initConfig() {
   function editSetting(setting) {
     const row = element("label", "config-editor");
     row.id = setting.anchor;
-    row.append(element("span", "config-editor-label", setting.path));
+    row.append(element("span", "config-editor-label", setting.path.split(".").at(-1)));
     if (setting.ui?.component === "vm-string-list") {
       const editor = element("div", "config-list-editor");
       const values = [...(getConfigPath(draft, setting.path) ?? [])];
@@ -259,49 +209,40 @@ export function initConfig() {
       row.append(element("strong", "config-error", `Unsupported component ${setting.ui?.component}`));
       return row;
     }
-    const configured = getConfigPath(draft, setting.path);
-    const environmentMatch = !setting.secret && typeof configured === "string"
-      ? configured.match(/^\$\{env:([A-Z][A-Z0-9_]*)\}$/)
-      : null;
-    const input = renderer(setting, environmentMatch ? environmentMatch[1] : configured);
+    const input = renderer(setting, getConfigPath(draft, setting.path));
     input.dataset.configPath = setting.path;
-    let mode = environmentMatch ? "environment" : "literal";
     const update = () => {
       try {
         const raw = input.type === "checkbox" ? input.checked : input.value;
         if (setting.secret && !validateSecretReference(String(raw))) {
           throw new Error("Use an empty value, ${env:NAME}, or ${file:/absolute/path}.");
         }
-        if (mode === "environment") {
-          if (!/^[A-Z][A-Z0-9_]*$/.test(String(raw))) throw new Error("Enter an environment variable name.");
-          setConfigPath(draft, setting.path, `\${env:${raw}}`);
-        } else {
-          setConfigPath(draft, setting.path, parseEditorValue(raw, setting));
-        }
+        setConfigPath(draft, setting.path, parseEditorValue(raw, setting));
         input.setCustomValidity("");
       } catch (error) {
         input.setCustomValidity(error.message);
       }
     };
     input.addEventListener("change", update);
+    input.addEventListener("input", update);
     controls.set(setting.path, input);
-    if (!setting.secret && setting.ui?.control !== "readonly") {
-      const sourceMode = document.createElement("select");
-      for (const [value, label] of [["literal", "Literal"], ["environment", "Environment reference"]]) {
-        const option = element("option", "", label);
-        option.value = value;
-        option.selected = value === mode;
-        sourceMode.append(option);
-      }
-      sourceMode.addEventListener("change", () => {
-        mode = sourceMode.value;
-        input.value = mode === "environment" ? "" : String(setting.default ?? "");
-        update();
-      });
-      row.append(sourceMode);
-    }
     row.append(input);
     return row;
+  }
+
+  function renderTreeNode(node, editing) {
+    const container = element("div", "config-group");
+    if (node.depth) {
+      container.dataset.depth = String(node.depth);
+      container.append(element("h3", "config-group-title", node.name));
+    }
+    for (const child of [...node.children.values()].sort((left, right) => left.name.localeCompare(right.name))) {
+      container.append(renderTreeNode(child, editing));
+    }
+    for (const setting of node.settings) {
+      container.append(editing ? editSetting(setting) : readSetting(setting));
+    }
+    return container;
   }
 
   function renderSection(section) {
@@ -312,20 +253,8 @@ export function initConfig() {
     const container = element("section", `config-section ${renderer}`);
     container.id = section.anchor;
     container.append(element("h2", "", section.title));
-    renderDocs(container, section);
-    const settings = orderedSettings(section.settings ?? []);
-    if (!editing) {
-      for (const setting of settings) container.append(readSetting(setting));
-      return container;
-    }
-    const groups = advancedGroups(settings);
-    for (const setting of groups.regular) container.append(editSetting(setting));
-    if (groups.advanced.length) {
-      const advanced = document.createElement("details");
-      advanced.append(element("summary", "", "Advanced"));
-      for (const setting of groups.advanced) advanced.append(editSetting(setting));
-      container.append(advanced);
-    }
+    if (section.overview) container.append(element("p", "config-section-overview", section.overview));
+    container.append(renderTreeNode(buildSettingTree(section.settings ?? []), editing));
     return container;
   }
 

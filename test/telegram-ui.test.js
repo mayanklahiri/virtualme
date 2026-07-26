@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { initTelegram, mergeEvents, statusRows, validTestText } from "../controller/web/static/js/telegram.js";
+import { initTelegram, mergeEvents, statusRows, validTestText, validUserID } from "../controller/web/static/js/telegram.js";
 import { createFakeDOM } from "./fake-dom.mjs";
 
 const root = new URL("../", import.meta.url);
@@ -15,13 +15,22 @@ test("telegram route, safe page, and exact websocket contract", async () => {
   ]);
   assert.match(router, /"\/telegram".*"Telegram"/);
   assert.match(html, /data-page="telegram"/);
+  assert.match(html, /telegram-userlist/);
+  assert.doesNotMatch(html, /Privacy boundary/);
   assert.match(html, /\/config#integrations-telegram/);
   assert.doesNotMatch(page, /innerHTML|botToken|api\.telegram\.org|config-save/);
   for (const type of [
     "telegram-status-req", "telegram-events-req", "telegram-event-detail-req",
-    "telegram-test-send", "telegram-status", "telegram-events",
+    "telegram-test-send", "telegram-userlist-req", "telegram-userlist-set",
+    "telegram-status", "telegram-events", "telegram-userlist",
     "telegram-event", "telegram-event-detail", "telegram-command-result",
   ]) assert.match(app + page, new RegExp(type));
+});
+
+test("telegram user ID validation accepts canonical positive IDs", () => {
+  assert.equal(validUserID("42"), true);
+  assert.equal(validUserID("0"), false);
+  assert.equal(validUserID("-1"), false);
 });
 
 test("telegram pure UI behavior enforces rune limits, ordering, and status detail", () => {
@@ -48,6 +57,8 @@ test("telegram DOM flow disables controls and correlates results and details", (
     "telegram-test-text", "telegram-test-send", "telegram-test-result", "telegram-events-card",
     "telegram-event-list", "telegram-event-detail", "telegram-event-meta",
     "telegram-event-error", "telegram-event-raw", "telegram-event-close",
+    "telegram-userlist-rows", "telegram-user-input", "telegram-userlist-save", "telegram-userlist-status",
+    "telegram-user-add",
   ];
   const { nodes, body, document } = createFakeDOM(ids.map((id) => `#${id}`));
   for (const selector of [
@@ -62,7 +73,7 @@ test("telegram DOM flow disables controls and correlates results and details", (
     const button = nodes.get("#telegram-test-send");
     const destination = nodes.get("#telegram-destination");
     const text = nodes.get("#telegram-test-text");
-    ui.connection("connected");
+    ui.connection("live");
     ui.frame({ type: "telegram-status", status: {
       enabled: true, state: "connected", detail: "Polling",
       destinations: [{ chatId: "42", label: "Mayank" }], poll: {},

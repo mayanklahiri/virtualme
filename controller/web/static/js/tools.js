@@ -135,6 +135,7 @@ export function initTools(send) {
   const list = /** @type {HTMLElement} */ (document.querySelector("#tools-list"));
   const form = /** @type {HTMLFormElement} */ (document.querySelector("#tool-form"));
   const output = /** @type {HTMLElement} */ (document.querySelector("#tool-output"));
+  const grid = /** @type {HTMLElement} */ (document.querySelector(".tools-grid"));
   /** @type {Data[]} */
   let tools = [];
   /** @type {Data | undefined} */
@@ -144,8 +145,15 @@ export function initTools(send) {
   /** @type {Map<string, {tool: string, timer: ReturnType<typeof setTimeout>}>} */
   const pending = new Map();
 
+  function dismissOutput() {
+    if (!selected) return;
+    results.delete(String(selected.name));
+    renderOutput();
+  }
+
   function renderOutput() {
     const result = selected ? results.get(String(selected.name)) : undefined;
+    grid.classList.toggle("has-output", Boolean(result));
     if (!result) {
       output.hidden = true;
       output.replaceChildren();
@@ -153,12 +161,20 @@ export function initTools(send) {
     }
     output.hidden = false;
     const header = document.createElement("header");
+    const titleWrap = document.createElement("div");
     const title = document.createElement("strong");
     title.textContent = String(selected?.name ?? "");
     const status = document.createElement("span");
     status.className = `tool-result-status ${result.ok ? "ok" : "error"}`;
     status.textContent = `${result.ok ? "ok" : "error"} · ${formatShortDuration(Number(result.durationMs) || 0)}`;
-    header.append(title, status);
+    titleWrap.append(title, status);
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "icon-button tool-output-close";
+    close.setAttribute("aria-label", "Dismiss result");
+    close.textContent = "×";
+    close.addEventListener("click", dismissOutput);
+    header.append(titleWrap, close);
     const body = document.createElement("div");
     body.className = "tool-output-body";
     if (result.image) {

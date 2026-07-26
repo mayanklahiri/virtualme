@@ -197,3 +197,12 @@ Activity pane gains persisted "Tool calls" and "Jiggler" show toggles
 Desktop >=64rem lays out Queue (full height, left), Activity (right), and a
 persistent details third column; mid widths keep the slide-in details.
 Queue rows adopt the activity column rhythm with fixed-width pills.
+
+### 2026-07-25 — Console fix and taste sweep
+
+1. **Desktop layout.** Default is two columns (Queue | Activity). Selecting a
+   row adds an inline third detail column with a close X; no persistent empty
+   placeholder pane.
+2. **Narrow layout.** Below 64rem the grid stacks to a single column; detail
+   uses the existing slide-over overlay (the cramped two-column middle band is
+   removed).

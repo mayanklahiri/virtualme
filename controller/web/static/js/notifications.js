@@ -2,7 +2,7 @@ import { renderTree } from "./tree.js";
 
 const knownIcons = new Set([
   "i-circle-info", "i-circle-check", "i-triangle-alert", "i-circle-x",
-  "i-bot", "i-monitor", "i-settings", "i-bell",
+  "i-bot", "i-monitor", "i-settings", "i-bell", "i-x",
 ]);
 
 const state = {
@@ -74,10 +74,15 @@ function detailHeading(container, notification) {
   const heading = element("header", "notification-detail-heading");
   const back = element("button", "notification-detail-back", "Back");
   back.type = "button";
-  back.addEventListener("click", closeMobileDetail);
+  back.addEventListener("click", closeDetail);
+  const close = element("button", "notification-detail-close icon-button");
+  close.type = "button";
+  close.setAttribute("aria-label", "Close details");
+  close.append(icon("i-x"));
+  close.addEventListener("click", closeDetail);
   const copy = element("div");
   copy.append(element("h2", "", notification.title), element("p", "", notification.summary));
-  heading.append(back, typeIcon(notification), copy);
+  heading.append(back, typeIcon(notification), copy, close);
   container.append(heading);
   const metadata = element("dl", "notification-detail-metadata");
   addDefinition(metadata, "Sender", notification.sender);
@@ -209,9 +214,11 @@ function renderFilters() {
   const box = document.querySelector("#notification-filters");
   box.replaceChildren();
   const typeGroup = element("div", "notification-filter-group");
+  typeGroup.append(element("span", "notification-filter-label", "Type"));
   for (const type of [{ name: "all" }, ...state.types]) {
     const count = state.loaded.filter((item) => type.name === "all" || item.type === type.name).length;
-    const button = element("button", "", `${type.name === "all" ? "All" : type.name} (${count})`);
+    const label = type.name === "all" ? "All" : type.name[0].toUpperCase() + type.name.slice(1);
+    const button = element("button", "", `${label} (${count})`);
     button.type = "button";
     button.setAttribute("aria-pressed", String(state.typeFilter === type.name));
     button.addEventListener("click", () => {
@@ -222,6 +229,7 @@ function renderFilters() {
     typeGroup.append(button);
   }
   const readGroup = element("div", "notification-filter-group");
+  readGroup.append(element("span", "notification-filter-label", "Read state"));
   for (const filter of ["all", "unread", "read"]) {
     const button = element("button", "", filter[0].toUpperCase() + filter.slice(1));
     button.type = "button";
@@ -272,12 +280,12 @@ function renderPage() {
 }
 
 function renderDetail() {
+  const grid = document.querySelector(".notifications-grid");
   const container = document.querySelector("#notification-detail");
+  grid?.classList.toggle("has-detail", Boolean(state.selected));
+  container.hidden = !state.selected;
   container.replaceChildren();
-  if (!state.selected) {
-    container.textContent = state.error === "not_found" ? "Notification not found" : "Select a notification to inspect it.";
-    return;
-  }
+  if (!state.selected) return;
   if (!state.detail || state.detail.id !== state.selected) {
     container.textContent = "Loading notification details…";
     return;
@@ -314,6 +322,19 @@ function sendRead(id) {
   }
 }
 
+function closeDetail() {
+  state.selected = null;
+  state.detail = null;
+  state.detailRequest = "";
+  state.error = "";
+  closeMobileDetail();
+  const url = new URL(location.href);
+  url.searchParams.delete("id");
+  history.replaceState(null, "", url.pathname + url.search);
+  render();
+  document.querySelector("#notification-list .notification-row")?.focus();
+}
+
 function select(id) {
   if (!id) return;
   state.selected = id;
@@ -337,11 +358,7 @@ function selectFromPopover(notification) {
 function chooseFirstVisible() {
   const first = visibleItems()[0];
   if (first) select(first.id);
-  else {
-    state.selected = null;
-    state.detail = null;
-    renderDetail();
-  }
+  else closeDetail();
 }
 
 function listKeydown(event) {
@@ -435,7 +452,6 @@ function frame(message) {
     const requested = new URL(location.href).searchParams.get("id");
     if (requested && state.loaded.some(({ id }) => id === requested)) select(requested);
     else if (requested) select(requested);
-    else if (!state.selected && !requested) chooseFirstVisible();
     if (state.reloadAfterPage) {
       state.reloadAfterPage = false;
       loadPage(true);
@@ -481,6 +497,20 @@ function closePopover(restore = true) {
   if (restore && inside) document.querySelector("#notification-bell").focus();
 }
 
+function positionPopover() {
+  const popover = document.querySelector("#notification-popover");
+  const bell = document.querySelector("#notification-bell");
+  if (popover.hidden || !bell || typeof bell.getBoundingClientRect !== "function") return;
+  popover.style.top = "";
+  popover.style.left = "";
+  const rect = bell.getBoundingClientRect();
+  const width = popover.offsetWidth;
+  const left = Math.min(window.innerWidth - width - 12, Math.max(12, rect.left));
+  const top = Math.max(12, rect.top - popover.offsetHeight - 8);
+  popover.style.left = `${left}px`;
+  popover.style.top = `${top}px`;
+}
+
 function togglePopover() {
   const popover = document.querySelector("#notification-popover");
   const opening = popover.hidden;
@@ -488,9 +518,12 @@ function togglePopover() {
     dispatchEvent(new CustomEvent("notificationpopoveropen"));
     popover.hidden = false;
     document.querySelector("#notification-bell").setAttribute("aria-expanded", "true");
-    const rows = [...popover.querySelectorAll(".notification-row")];
-    (rows.find((row) => row.querySelector(".notification-unread-dot")) ?? rows[0] ??
-      popover.querySelector("a,button"))?.focus();
+    requestAnimationFrame(() => {
+      positionPopover();
+      const rows = [...popover.querySelectorAll(".notification-row")];
+      (rows.find((row) => row.querySelector(".notification-unread-dot")) ?? rows[0] ??
+        popover.querySelector("a,button"))?.focus();
+    });
   } else closePopover();
 }
 
@@ -512,7 +545,7 @@ function closeMobileDetail() {
 }
 
 function status(connection) {
-  state.connected = connection === "connected";
+  state.connected = connection === "live";
   if (!state.connected) {
     closePopover(false);
     state.pageRequest = null;
@@ -533,7 +566,6 @@ function enter() {
   if (state.connected) loadPage(true);
   const id = new URL(location.href).searchParams.get("id");
   if (id) select(id);
-  else if (!id && state.loaded.length) chooseFirstVisible();
 }
 
 export function initNotifications(send) {
@@ -568,12 +600,7 @@ export function initNotifications(send) {
     const id = new URL(location.href).searchParams.get("id");
     if (id) select(id);
     else {
-      state.selected = null;
-      state.detail = null;
-      state.detailRequest = "";
-      state.error = "";
-      closeMobileDetail();
-      render();
+      closeDetail();
     }
   });
   render();

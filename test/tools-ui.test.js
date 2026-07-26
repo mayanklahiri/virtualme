@@ -32,7 +32,9 @@ test("Tools page is server-driven and schema-generated", async () => {
   assert.match(tools, /JSON\.parse\(value\)/);
   assert.match(tools, /queued…/);
   assert.match(tools, /120000/);
-  assert.match(css, /\.tools-grid\{display:grid;grid-template-columns:minmax\(16rem,22rem\) minmax\(0,1\.4fr\) minmax\(24rem,1fr\)/);
+  assert.match(css, /\.tools-grid\{display:grid;grid-template-columns:minmax\(16rem,22rem\) minmax\(0,1fr\)/);
+  assert.match(css, /\.tools-grid\.has-output\{grid-template-columns:minmax\(16rem,22rem\) minmax\(0,1\.4fr\) minmax\(24rem,1fr\)/);
+  assert.match(tools, /has-output/);
   assert.doesNotMatch(tools, /dom_query|dom_validate|page_eval|layout_debug/);
 });
 

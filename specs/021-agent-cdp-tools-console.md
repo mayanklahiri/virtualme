@@ -149,3 +149,13 @@ Spec 029 supersedes the tool-result limits in §2 and §3: `dom`/`dom_query`/
 `dom_validate` use 24 KiB, `page_eval` uses 16 KiB, and manual tool-result
 text uses 64 KiB. The Tools manifest also exposes the development-only
 `dump_dom` capture tool; it is intentionally absent from model definitions.
+
+### 2026-07-25 — Console fix and taste sweep
+
+1. **Tool list height.** The left tool list column is viewport-height
+   scrollable.
+2. **Params width.** Without tool results, the params form fills the
+   remaining width (two-column grid: list | form).
+3. **Results column.** The results column appears only when a result exists
+   for the selected tool and is dismissible with an X; dismissing clears the
+   cached result and collapses back to two columns.

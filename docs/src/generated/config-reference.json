@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "schemaSha256": "f40c2508f032c13333c0b907ce0e1164e26f77ccdb9cf210232398cfb0e32412",
+  "schemaSha256": "b8cc28efce81ff6936fed84f8bfd54ba3368fb3e445a02339a9869fc9454c9a1",
   "sections": [
     {
       "id": "system",
@@ -1680,51 +1680,6 @@
             "component": "vm-string-list",
             "control": "string-list",
             "order": 30,
-            "section": "Integrations"
-          }
-        },
-        {
-          "path": "integrations.telegram.allowedUserIds",
-          "anchor": "integrations-telegram-allowed-user-ids",
-          "consoleDeepLink": "/config#integrations-telegram-allowed-user-ids",
-          "type": "array",
-          "default": [],
-          "required": true,
-          "choices": [],
-          "constraints": {
-            "uniqueItems": true
-          },
-          "restart": "controller",
-          "secret": false,
-          "item": {
-            "type": "string",
-            "default": "1",
-            "choices": [],
-            "constraints": {
-              "pattern": "^[1-9][0-9]*$"
-            },
-            "overview": "Canonical positive decimal Telegram user ID.",
-            "details": [],
-            "ui": {
-              "advanced": false,
-              "component": "vm-text-field",
-              "control": "text",
-              "order": 1,
-              "section": "Integrations"
-            }
-          },
-          "overview": "Optional user allowlist applied in addition to the chat allowlist.",
-          "details": [
-            "When empty, every human sender in an allowed chat is authorized."
-          ],
-          "tradeoffs": [],
-          "examples": [],
-          "links": [],
-          "ui": {
-            "advanced": false,
-            "component": "vm-string-list",
-            "control": "string-list",
-            "order": 40,
             "section": "Integrations"
           }
         },

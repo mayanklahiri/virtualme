@@ -365,21 +365,17 @@ export function initData() {
     viewer.append(note);
   }
 
-  function renderViewerPlaceholder() {
-    viewer.replaceChildren();
-    const placeholder = document.createElement("p");
-    placeholder.className = "data-empty";
-    placeholder.textContent = "Select a file to inspect it.";
-    viewer.append(placeholder);
-  }
+  function renderViewerPlaceholder() {}
 
   /** @param {boolean} updateURL */
   function closePreview(updateURL) {
     previewID += 1;
     selected = "";
+    grid.classList.remove("has-viewer");
     viewer.classList.remove("open");
+    viewer.replaceChildren();
+    viewer.hidden = true;
     document.body.classList.remove("data-preview-locked");
-    renderViewerPlaceholder();
     if (updateURL) {
       setURL(cwd, "push");
       renderEntries();
@@ -389,6 +385,9 @@ export function initData() {
   /** @param {string} path @param {DataEntry} entry */
   async function showFile(path, entry) {
     const id = ++previewID;
+    selected = path;
+    grid.classList.add("has-viewer");
+    viewer.hidden = false;
     viewer.replaceChildren();
     viewer.classList.add("open");
     if (matchMedia("(max-width: 47.999rem)").matches) document.body.classList.add("data-preview-locked");
@@ -400,6 +399,12 @@ export function initData() {
     back.setAttribute("aria-label", "Back to files");
     back.append(icon("chevron-left"));
     back.addEventListener("click", () => closePreview(true));
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "icon-button data-viewer-close";
+    close.setAttribute("aria-label", "Close preview");
+    close.append(icon("x"));
+    close.addEventListener("click", () => closePreview(true));
     const title = document.createElement("div");
     const pathEl = document.createElement("strong");
     pathEl.textContent = path;
@@ -413,7 +418,7 @@ export function initData() {
     download.textContent = "Download";
     download.className = "button data-download";
     download.prepend(icon("download"));
-    header.append(back, title, download);
+    header.append(back, title, close, download);
     viewer.append(header);
 
     const ext = extensionOf(entry.name);

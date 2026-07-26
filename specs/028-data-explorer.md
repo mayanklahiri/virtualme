@@ -226,3 +226,14 @@ persistence map is unchanged — this spec adds no state.
       Back/Forward tracks navigation safely.
 - [x] Mobile (375 px): the explorer remains usable and file preview opens as
       a full-screen slide-over with working Back and Escape controls.
+
+## Amendments
+
+### 2026-07-25 — Console fix and taste sweep
+
+1. **Desktop layout.** The browser occupies full width until a file is
+   opened; then the 66/34 drag-resizable split (with splitter) appears.
+2. **Viewer dismiss.** The viewer is dismissible on desktop (close control);
+   closing returns to the single-column browser view.
+3. **No placeholder.** The persistent "Select a file to inspect it"
+   placeholder pane is removed.

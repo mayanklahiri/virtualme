@@ -1145,3 +1145,17 @@ The default e2e run intentionally skipped its existing optional
 was detected by the container but the optional GPU assertion mode was not
 enabled. These are not notification acceptance blockers; all notification
 live probes are deterministic and passed.
+
+### 2026-07-25 — Console fix and taste sweep
+
+1. **Connection status.** The notifications module treats the websocket as
+   connected when the shared status string is `"live"` (not `"connected"`).
+   Reconnecting/connecting states remain disconnected for mutation gating.
+2. **Page layout.** Desktop defaults to a single-column notification list.
+   Selecting a row adds a dismissible detail column (close X); no row is
+   auto-selected on enter. Mobile keeps the existing slide-over.
+3. **Filter labels.** Filter groups carry visible labels ("Type", "Read
+   state"); type options are capitalized text pills with counts.
+4. **Bell popover.** The popover uses fixed positioning with z-index above
+   page content, anchored near the bell, and is not clipped to the sidebar
+   footer width.

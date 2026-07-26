@@ -1400,3 +1400,20 @@ The corrective implementation:
 
 The acceptance checklist remains normative; an item is complete only when its
 corresponding executable gate passes.
+
+### 2026-07-25 — Console fix and taste sweep
+
+1. **Exposition panel removed.** The static "Privacy boundary" article is
+   deleted from `/telegram`.
+2. **User allowlist in Valkey.** Inbound user allowlist is stored at
+   `virtualme:telegram:allowed-users` (JSON array of canonical user IDs),
+   displayed and edited on `/telegram`, and applied live without restart.
+3. **Config key deprecated.** `integrations.telegram.allowedUserIds` remains a
+   hidden, schema-required legacy key that runtime authorization ignores. On
+   startup, if Valkey is unset, its value seeds Valkey once and is then
+   atomically cleared to `[]` in the config file.
+4. **Empty list semantics.** An empty user allowlist still permits every
+   human sender in an allowed chat; the page states this explicitly.
+5. **Websocket frames.** `telegram-userlist-req` → `telegram-userlist`
+   snapshot; `telegram-userlist-set` replaces the full list (validated,
+   sender-scoped result).

@@ -214,3 +214,9 @@ Supersedes the §3 hero body sentence. The home hero body is now:
 
 > **Virtual Me** is a personal, private background AI agent that runs
 > completely locally on your computer, as you, without any GPUs, data centers, or AI bills.
+
+### 2026-07-25 — Console fix and taste sweep
+
+1. **Page heading spacing.** `.page-caption` uses one consistent margin rule
+   on all pages; the `.data-page` override is removed so title/subtitle
+   spacing is uniform globally.

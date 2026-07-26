@@ -212,7 +212,7 @@
               <button id="notification-load-older" class="button" type="button" hidden>Load older</button>
             </div>
           </section>
-          <aside id="notification-detail" class="notification-detail" aria-label="Notification details">Select a notification to inspect it.</aside>
+          <aside id="notification-detail" class="notification-detail" aria-label="Notification details" hidden></aside>
         </div>
         <div id="notification-detail-curtain" class="notification-detail-curtain" hidden></div>
       </section>
@@ -251,9 +251,7 @@
             <div id="data-tree" class="data-entries" role="region"></div>
           </section>
           <div id="data-splitter" class="data-splitter" role="separator" aria-label="Resize file explorer" aria-orientation="vertical" aria-valuemin="20" aria-valuemax="80" tabindex="0"><svg class="icon"><use href="/icons.svg#i-grip-vertical"/></svg></div>
-          <aside id="data-viewer" class="data-viewer">
-            <p class="data-empty">Select a file to inspect it.</p>
-          </aside>
+          <aside id="data-viewer" class="data-viewer" hidden></aside>
         </div>
       </section>
 
@@ -401,7 +399,7 @@
         <div class="page-heading"><h1 id="telegram-title">Telegram</h1><a class="button secondary" href="/config#integrations-telegram" data-nav>Configure Telegram</a></div>
         <div class="telegram-grid">
           <article class="metric telegram-state"><h2>Integration state</h2><p id="telegram-state">Disabled</p><dl id="telegram-details"></dl></article>
-          <article class="metric telegram-privacy"><h2>Privacy boundary</h2><ul><li>Chat and optional user allowlists are the authentication boundary.</li><li>An empty user allowlist permits every human sender in an allowed chat.</li><li>Group privacy mode is configured with BotFather.</li><li>Telegram traffic crosses the private-network boundary around port 8080.</li></ul></article>
+          <article class="metric telegram-userlist-panel"><h2>Inbound user whitelist</h2><p class="telegram-userlist-note">Empty list permits every human sender in an allowed chat. Changes apply immediately.</p><ol id="telegram-userlist-rows" class="telegram-userlist-rows"></ol><div class="telegram-userlist-add"><input id="telegram-user-input" type="text" inputmode="numeric" pattern="[1-9][0-9]*" placeholder="Telegram user ID" autocomplete="off"><button id="telegram-user-add" type="button">Add</button></div><div class="telegram-userlist-actions"><p id="telegram-userlist-status" class="telegram-userlist-note"></p><button id="telegram-userlist-save" type="button" disabled>Save</button></div></article>
           <form id="telegram-test-form" class="metric"><h2>Integration test</h2><label for="telegram-destination">Destination</label><select id="telegram-destination" disabled></select><label for="telegram-test-text">Message</label><textarea id="telegram-test-text" maxlength="4096" rows="4">Virtual Me Telegram integration test.</textarea><button id="telegram-test-send" type="submit" disabled>Send</button><p id="telegram-test-result" tabindex="-1" hidden></p></form>
         </div>
         <article id="telegram-events-card" class="metric telegram-events" hidden><h2>Event log</h2><div id="telegram-event-list"></div><aside id="telegram-event-detail" class="telegram-event-detail" hidden><h3>Event detail</h3><p id="telegram-event-error" class="result err" hidden></p><dl id="telegram-event-meta"></dl><p>Raw Telegram update (may contain message content)</p><div id="telegram-event-raw"></div><button id="telegram-event-close" type="button">Close</button></aside></article>

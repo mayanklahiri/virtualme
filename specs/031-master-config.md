@@ -1023,3 +1023,15 @@ Final verification passed:
 Optional hardware/slow probes (`E2E_GPU=1`, `E2E_AGENT=1`, and
 `E2E_JIGGLER=1`) were not enabled; their existing deterministic default skips
 are not spec-031 acceptance blockers.
+
+### 2026-07-25 — Console fix and taste sweep
+
+1. **Read view.** Settings render as an indented YAML tree: intermediate path
+   segments become group headers; each leaf shows name, effective value (or
+   redacted secret reference), one-line overview, and restart badge only.
+2. **Edit view.** The same tree layout; each leaf is its schema-driven
+   control only. No Literal/Environment mode selector (env references are
+   typed directly as `${env:NAME}`); no Advanced `<details>` collapse — all
+   fields appear inline in tree order.
+3. **Deprecated key.** `integrations.telegram.allowedUserIds` is hidden from
+   the UI projection; see spec 033 amendment for Valkey migration.

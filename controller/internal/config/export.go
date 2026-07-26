@@ -130,6 +130,11 @@ func collectSettings(node map[string]any, prefix string, target *[]DocSetting) {
 			collectSettings(child, settingPath, target)
 			continue
 		}
+		if ui, ok := child["x-vm-ui"].(map[string]any); ok {
+			if hidden, _ := ui["hidden"].(bool); hidden {
+				continue
+			}
+		}
 		doc := child["x-vm-doc"].(map[string]any)
 		constraints := exportedConstraints(child)
 		choices := explainedChoices(doc)

@@ -139,10 +139,9 @@ export function initJobs(send) {
   const activityEmpty = /** @type {HTMLParagraphElement} */ (document.querySelector("#activity-empty"));
   const detail = /** @type {HTMLElement} */ (document.querySelector("#job-detail"));
   const curtain = /** @type {HTMLElement} */ (document.querySelector("#job-detail-curtain"));
+  const grid = /** @type {HTMLElement} */ (document.querySelector(".jobs-grid"));
   const showTools = /** @type {HTMLInputElement} */ (document.querySelector("#activity-show-tools"));
   const showJiggler = /** @type {HTMLInputElement} */ (document.querySelector("#activity-show-jiggler"));
-  // Below 64rem the detail pane is a slide-in overlay; at desktop width it is
-  // a persistent third column with a placeholder.
   const overlayMedia = matchMedia("(max-width: 63.999rem)");
   /** @type {Data} */
   let queue = { upcoming: [], running: null, finished: [] };
@@ -153,13 +152,6 @@ export function initJobs(send) {
   /** @type {HTMLElement | undefined} */
   let previousFocus;
 
-  function renderPlaceholder() {
-    const note = document.createElement("p");
-    note.className = "empty-note";
-    note.textContent = "Select a queue or activity row to inspect it.";
-    detail.replaceChildren(note);
-  }
-
   function closeDetail() {
     const wasOverlayOpen = detail.classList.contains("open") && overlayMedia.matches;
     selected = undefined;
@@ -167,7 +159,8 @@ export function initJobs(send) {
     curtain.classList.remove("open");
     document.body.classList.remove("job-detail-locked");
     curtain.hidden = true;
-    renderPlaceholder();
+    grid.classList.remove("has-detail");
+    detail.replaceChildren();
     if (wasOverlayOpen) previousFocus?.focus();
   }
 
@@ -290,6 +283,7 @@ export function initJobs(send) {
     selected = { kind, value };
     previousFocus = trigger ?? document.activeElement;
     detail.replaceChildren(kind === "queue" ? queueDetails(value) : activityDetails(value));
+    grid.classList.add("has-detail");
     if (overlayMedia.matches) {
       curtain.hidden = false;
       document.body.classList.add("job-detail-locked");
@@ -406,7 +400,6 @@ export function initJobs(send) {
     localStorage.setItem("vm-activity-jiggler", showJiggler.checked ? "1" : "0");
     renderActivity();
   });
-  renderPlaceholder();
 
   curtain.addEventListener("click", closeDetail);
   detail.addEventListener("keydown", (event) => {

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
-  advancedGroups,
+  buildSettingTree,
   configAnchor,
   conflictMessage,
   issueControl,
@@ -29,6 +29,12 @@ test("config model orders, anchors, converts, and protects secrets", () => {
     ]).map(({ id }) => id),
     ["early", "late"],
   );
+  const tree = buildSettingTree([
+    { path: "mail.smarthost.host", ui: { order: 2 } },
+    { path: "mail.from", ui: { order: 1 } },
+  ]);
+  assert.equal(tree.children.get("mail").settings.length, 1);
+  assert.equal(tree.children.get("mail").children.get("smarthost").settings[0].path, "mail.smarthost.host");
   assert.equal(parseEditorValue("42", { type: "integer" }), 42);
   assert.equal(parseEditorValue(true, { type: "boolean" }), true);
   assert.equal(validateSecretReference("${file:/run/secrets/smtp}"), true);
@@ -57,10 +63,7 @@ test("config model handles grouping, issues, conflicts, discard data, and reconn
     { path: "a", ui: { order: 10, advanced: false } },
   ];
   assert.deepEqual(orderedSettings(settings).map(({ path }) => path), ["a", "z"]);
-  assert.deepEqual(advancedGroups(settings), {
-    regular: [settings[1]],
-    advanced: [settings[0]],
-  });
+  assert.equal(buildSettingTree(settings).settings.length, 2);
   const focused = { focus() {} };
   assert.deepEqual(issueControl([{ path: "a" }], new Map([["a", focused]])), {
     issue: { path: "a" }, control: focused,
@@ -89,14 +92,16 @@ test("config route is static, safe, and schema-driven", async () => {
   assert.match(router, /\["\/config", \["config", "Config"\]\]/);
   assert.doesNotMatch(module, /innerHTML/);
   assert.match(module, /componentRenderers/);
-  assert.match(module, /Environment reference/);
+  assert.match(module, /buildSettingTree/);
   assert.match(module, /config-list-row/);
+  assert.doesNotMatch(module, /Environment reference/);
+  assert.doesNotMatch(module, /Advanced/);
   assert.match(module, /input\.required = true/);
   assert.match(module, /60_000/);
   assert.match(module, /restartComplete/);
   assert.match(module, /\/api\/config\/secrets\/refresh/);
   assert.match(module, /beginRestart\(response\.pendingHash\)/);
-  assert.match(module, /Secret status/);
+  assert.doesNotMatch(module, /Secret status/);
   assert.doesNotMatch(module, /secret\.(value|bytes|length|hash)/);
 });
 

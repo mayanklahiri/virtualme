@@ -509,8 +509,13 @@ func validateUI(raw any, kind, path string) error {
 			return fmt.Errorf("%s: invalid sectionRenderer", path)
 		}
 	} else {
-		if !exactKeys(ui, "section", "component", "control", "order", "advanced") {
+		allowed := exactKeys(ui, "section", "component", "control", "order", "advanced") ||
+			exactKeys(ui, "section", "component", "control", "order", "advanced", "hidden")
+		if !allowed {
 			return fmt.Errorf("%s: malformed leaf x-vm-ui", path)
+		}
+		if hidden, ok := ui["hidden"].(bool); ok && hidden {
+			return nil
 		}
 		component := stringValue(ui["component"])
 		control := stringValue(ui["control"])

@@ -33,6 +33,13 @@ const (
 	notificationKey = "virtualme:telegram:notification-state"
 )
 
+func AuthorizeSender(chatIDs, allowedUserIDs []string, chatID, userID string, isBot bool) bool {
+	if isBot || chatID == "" || userID == "" || !contains(chatIDs, chatID) {
+		return false
+	}
+	return len(allowedUserIDs) == 0 || contains(allowedUserIDs, userID)
+}
+
 const appendEventScript = `
 redis.call('RPUSH', KEYS[1], ARGV[1])
 redis.call('LTRIM', KEYS[1], -tonumber(ARGV[2]), -1)
@@ -127,6 +134,7 @@ type Service struct {
 	activeToken       string
 	unsubscribe       func()
 	connectedNotified bool
+	allowedUserIDs    []string
 }
 
 func cryptoJitter() float64 {
@@ -167,10 +175,7 @@ func (s *Service) SetJobState(fn func() string)          { s.jobState = fn }
 func (s *Service) SetHistoryReady(ready <-chan struct{}) { s.history = ready }
 
 func Authorized(cfg Config, chatID, userID string, isBot bool) bool {
-	if isBot || chatID == "" || userID == "" || !contains(cfg.AllowedChatIDs, chatID) {
-		return false
-	}
-	return len(cfg.AllowedUserIDs) == 0 || contains(cfg.AllowedUserIDs, userID)
+	return AuthorizeSender(cfg.AllowedChatIDs, cfg.AllowedUserIDs, chatID, userID, isBot)
 }
 
 func contains(values []string, value string) bool {
@@ -495,7 +500,7 @@ func (s *Service) loadPersistent() error {
 	s.known = known
 	s.status.Poll.NextOffset, s.status.EventCount = offset, s.eventCount()
 	s.mu.Unlock()
-	return nil
+	return s.loadAllowedUsers()
 }
 
 func (s *Service) Start(ctx context.Context) {
@@ -857,7 +862,7 @@ func (s *Service) process(ctx context.Context, generation uint64, api API, updat
 		outcome = "ignored_malformed"
 	default:
 		chatID, userID := strconv.FormatInt(message.Chat.ID, 10), strconv.FormatInt(message.From.ID, 10)
-		if !Authorized(s.config, chatID, userID, message.From.IsBot) {
+		if !s.isAuthorized(chatID, userID, message.From.IsBot) {
 			outcome = "denied"
 		} else {
 			if err := s.observe(ctx, generation, *message.Chat); err != nil {
@@ -1295,6 +1300,15 @@ func (s *Service) HandleMessage(conn *ws.Conn, payload []byte) bool {
 		s.handleDetail(conn, payload)
 	case "telegram-test-send":
 		s.handleTestSend(conn, payload)
+	case "telegram-userlist-req":
+		var request struct {
+			Type string `json:"type"`
+		}
+		if decodeStrict(payload, &request) == nil {
+			_ = conn.WriteText(s.AllowedUsersMessage())
+		}
+	case "telegram-userlist-set":
+		s.handleUserListSet(conn, payload)
 	default:
 		return false
 	}

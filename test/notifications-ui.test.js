@@ -45,7 +45,9 @@ test("notification module keeps protocol and safety invariants explicit", async 
   assert.match(source, /limit:\s*50/);
   assert.match(source, /slice\(0,\s*10\)/);
   assert.match(source, /Disconnected; notification state may be stale\./);
-  assert.match(source, /Notification not found/);
+  assert.match(source, /connection === "live"/);
+  assert.match(source, /has-detail/);
+  assert.match(source, /notification-filter-label/);
 });
 
 class FakeClassList {
@@ -75,6 +77,7 @@ class FakeElement {
     this.dataset = {};
     this.hidden = false;
     this.disabled = false;
+    this.style = {};
     this._text = "";
   }
   set id(value) {
@@ -212,11 +215,12 @@ function notificationDOM() {
   all.setAttribute("href", "/notifications");
   make("notifications-read-all", "button");
   make("notifications-status");
-  make("notification-filters");
-  make("notification-list", "ol");
-  make("notification-list-count");
-  make("notification-load-older", "button");
-  make("notification-detail", "aside");
+  const grid = make("notifications-grid");
+  make("notification-filters", "div", grid);
+  make("notification-list", "ol", grid);
+  make("notification-list-count", "span", grid);
+  make("notification-load-older", "button", grid);
+  make("notification-detail", "aside", grid);
   const curtain = make("notification-detail-curtain");
   curtain.hidden = true;
   make("theme-button", "button");
@@ -265,7 +269,7 @@ test("notification UI executes protocol, focus, history, reconnect, and safe ren
   assert.deepEqual(Object.keys(module.sortedDetailData({ z: 1, a: 2 })), ["a", "z"]);
   const sent = [];
   const ui = module.initNotifications((frame) => sent.push(frame));
-  ui.status("connected");
+  ui.status("live");
   assert.deepEqual(sent[0], { type: "notifications-req" });
   const pageRequest = sent.find((frame) => frame.type === "notifications-page-req");
   assert.equal(pageRequest.before, "");
@@ -345,11 +349,12 @@ test("notification UI executes protocol, focus, history, reconnect, and safe ren
   ui.frame({ type: "notification-error", requestId: "stale", code: "not_found", error: "stale" });
   assert.doesNotMatch(document.querySelector("#notifications-status").textContent, /stale/);
   ui.frame({ type: "notification-error", requestId: deepRequest.requestId, code: "not_found", error: "missing" });
-  assert.equal(document.querySelector("#notification-detail").textContent, "Notification not found");
+  assert.equal(document.querySelector("#notification-detail").hidden, true);
+  assert.equal(document.querySelector("#notification-detail").textContent, "");
 
   setURL("/notifications");
   globalThis.dispatchEvent(new globalThis.PopStateEvent("popstate"));
-  assert.equal(document.querySelector("#notification-detail").textContent, "Select a notification to inspect it.");
+  assert.equal(document.querySelector("#notification-detail").hidden, true);
 
   const beforeCreated = sent.length;
   const pendingPage = sent.findLast((frame) => frame.type === "notifications-page-req");
@@ -368,6 +373,6 @@ test("notification UI executes protocol, focus, history, reconnect, and safe ren
   mobile = true;
   ui.status("disconnected");
   assert.match(document.querySelector("#notifications-status").textContent, /Disconnected/);
-  ui.status("connected");
+  ui.status("live");
   assert.ok(sent.filter((frame) => frame.type === "notifications-req").length >= 2);
 });

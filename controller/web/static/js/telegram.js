@@ -12,6 +12,11 @@ export function validTestText(text) {
   return size >= 1 && size <= 4096;
 }
 
+/** @param {string} value */
+export function validUserID(value) {
+  return /^[1-9][0-9]*$/.test(String(value).trim());
+}
+
 /** @param {TelegramEvent[]} current @param {TelegramEvent} incoming */
 export function mergeEvents(current, incoming) {
   return [incoming, ...current.filter((item) => item.id !== incoming.id)].slice(0, 50);
@@ -46,13 +51,22 @@ export function initTelegram(send) {
   const detailMeta = /** @type {HTMLElement} */ (document.querySelector("#telegram-event-meta"));
   const detailError = /** @type {HTMLElement} */ (document.querySelector("#telegram-event-error"));
   const raw = /** @type {HTMLElement} */ (document.querySelector("#telegram-event-raw"));
+  const userList = /** @type {HTMLOListElement} */ (document.querySelector("#telegram-userlist-rows"));
+  const userInput = /** @type {HTMLInputElement} */ (document.querySelector("#telegram-user-input"));
+  const userSave = /** @type {HTMLButtonElement} */ (document.querySelector("#telegram-userlist-save"));
+  const userStatus = /** @type {HTMLElement} */ (document.querySelector("#telegram-userlist-status"));
   /** @type {TelegramStatus} */
   let status = { enabled: false, state: "disabled", destinations: [] };
   let connected = false;
+  /** @type {string[]} */
+  let allowedUsers = [];
+  /** @type {string[]} */
+  let draftUsers = [];
   /** @type {TelegramEvent[]} */
   let events = [];
   let requestID = "";
   let detailRequestID = "";
+  let userlistRequestID = "";
 
   /** @param {string} tag @param {string} value @param {string} [className] */
   function element(tag, value, className = "") {
@@ -62,10 +76,42 @@ export function initTelegram(send) {
     return node;
   }
 
+  function userlistDirty() {
+    const left = [...draftUsers].sort();
+    const right = [...allowedUsers].sort();
+    return left.length !== right.length || left.some((value, index) => value !== right[index]);
+  }
+
   function updateControls() {
     const usable = connected && status.state === "connected" && (status.destinations?.length ?? 0) > 0;
     destination.disabled = !usable;
     button.disabled = !usable || !validTestText(text.value);
+    userSave.disabled = !connected || !userlistDirty();
+  }
+
+  function renderUserList() {
+    userList.replaceChildren();
+    if (!draftUsers.length) {
+      userList.append(element("li", "No user IDs configured.", "telegram-userlist-empty"));
+    } else {
+      for (const userID of draftUsers) {
+        const row = document.createElement("li");
+        row.className = "telegram-userlist-row";
+        const code = document.createElement("code");
+        code.textContent = userID;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "Remove";
+        remove.addEventListener("click", () => {
+          draftUsers = draftUsers.filter((value) => value !== userID);
+          renderUserList();
+          updateControls();
+        });
+        row.append(code, remove);
+        userList.append(row);
+      }
+    }
+    updateControls();
   }
 
   function renderStatus() {
@@ -107,6 +153,31 @@ export function initTelegram(send) {
     }
   }
 
+  document.querySelector("#telegram-user-add")?.addEventListener("click", () => {
+    const value = userInput.value.trim();
+    if (!validUserID(value)) {
+      userStatus.textContent = "Enter a canonical positive Telegram user ID.";
+      return;
+    }
+    if (draftUsers.includes(value)) {
+      userStatus.textContent = "That user ID is already listed.";
+      return;
+    }
+    draftUsers = [...draftUsers, value].sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+    userInput.value = "";
+    userStatus.textContent = "";
+    renderUserList();
+  });
+  userInput?.addEventListener("input", () => {
+    userStatus.textContent = "";
+  });
+  userSave?.addEventListener("click", () => {
+    userlistRequestID = crypto.randomUUID();
+    userSave.disabled = true;
+    userStatus.textContent = "Saving…";
+    send({ type: "telegram-userlist-set", requestId: userlistRequestID, userIds: draftUsers });
+  });
+
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!validTestText(text.value)) return;
@@ -124,12 +195,13 @@ export function initTelegram(send) {
 
   return {
     /** @param {string} value */
-    connection(value) { connected = value === "connected"; updateControls(); },
+    connection(value) { connected = value === "live"; updateControls(); },
     /** @param {string} page */
     show(page) {
       if (page === "telegram") {
         send({ type: "telegram-status-req" });
         send({ type: "telegram-events-req" });
+        send({ type: "telegram-userlist-req" });
       }
     },
     /** @param {any} message */
@@ -137,6 +209,10 @@ export function initTelegram(send) {
       if (message.type === "telegram-status") {
         status = message.status;
         renderStatus();
+      } else if (message.type === "telegram-userlist") {
+        allowedUsers = Array.isArray(message.userIds) ? message.userIds : [];
+        draftUsers = [...allowedUsers];
+        renderUserList();
       } else if (message.type === "telegram-events") {
         events = message.events ?? [];
         renderEvents();
@@ -161,6 +237,11 @@ export function initTelegram(send) {
           if (message.event.rawOmitted) raw.append(element("p", "Raw update exceeded the 16 KiB retention cap."));
           else raw.append(renderTree(message.event.rawUpdate ?? {}, { expandDepth: 0 }));
         }
+      } else if (message.type === "telegram-command-result" && message.id === userlistRequestID) {
+        userlistRequestID = "";
+        userStatus.textContent = message.ok ? "Saved." : (message.error ?? "Unable to save user allowlist.");
+        if (message.ok) allowedUsers = [...draftUsers];
+        updateControls();
       } else if (message.type === "telegram-command-result" && message.id === requestID) {
         result.hidden = false;
         result.textContent = message.ok ? "Test message sent." : message.error;

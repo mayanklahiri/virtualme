@@ -76,3 +76,53 @@ func TestTelegramUnavailableSecretKeepsControllerConfigLoadable(t *testing.T) {
 		t.Fatalf("unavailable secret state = %+v", loaded.Secrets["integrations.telegram.botToken"])
 	}
 }
+
+func TestClearLegacyTelegramUserAllowlist(t *testing.T) {
+	schema, err := EmbeddedSchema()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := schema.Defaults()
+	if err != nil {
+		t.Fatal(err)
+	}
+	telegram := raw["integrations"].(map[string]any)["telegram"].(map[string]any)
+	telegram["allowedUserIds"] = []any{"7", "42"}
+	content, err := schema.Emit(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dataDir := t.TempDir()
+	file := filepath.Join(dataDir, FileName)
+	if err := os.WriteFile(file, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(Options{DataDir: dataDir, Env: []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ClearLegacyTelegramUserAllowlist(loaded); err != nil {
+		t.Fatal(err)
+	}
+	cleared, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(cleared), "allowedUserIds: []") ||
+		strings.Contains(string(cleared), "allowedUserIds:\n") {
+		t.Fatalf("legacy allowlist was not cleared:\n%s", cleared)
+	}
+	if _, err := Load(Options{DataDir: dataDir, Env: []string{}}); err != nil {
+		t.Fatalf("cleared config is not loadable: %v", err)
+	}
+	if err := ClearLegacyTelegramUserAllowlist(loaded); err != nil {
+		t.Fatal(err)
+	}
+	unchanged, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(unchanged) != string(cleared) {
+		t.Fatal("already-empty legacy allowlist rewrote the config")
+	}
+}
