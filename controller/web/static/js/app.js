@@ -32,28 +32,42 @@ const configuration = initConfig();
 const notifications = initNotifications((value) => socket.send(value));
 const telegram = initTelegram((value) => socket.send(value));
 const agent = initAgent(chat.log, (text) => chat.setStatus(text));
-const jigglerSwitch = document.querySelector("#jiggler-switch");
-jigglerSwitch.addEventListener("click", () => {
-  socket.send({
-    type: "jiggler-set",
-    enabled: jigglerSwitch.getAttribute("aria-checked") !== "true",
+function wireQuickOption(id, type) {
+  const button = document.querySelector(id);
+  button.addEventListener("click", () => {
+    if (button.classList.contains("qo-pending")) return;
+    button.classList.add("qo-pending");
+    button.setAttribute("aria-busy", "true");
+    clearTimeout(button._qoTimer);
+    button._qoTimer = setTimeout(() => {
+      button.classList.remove("qo-pending");
+      button.removeAttribute("aria-busy");
+    }, 5000);
+    socket.send({
+      type,
+      enabled: button.getAttribute("aria-checked") !== "true",
+    });
   });
-});
-const schedulerSwitch = document.querySelector("#scheduler-switch");
-schedulerSwitch.addEventListener("click", () => {
-  // Cockpit polarity: the lamp is lit while the scheduler runs, so pressing
-  // a lit button pauses it. scheduler-set carries "enabled" (running).
-  socket.send({
-    type: "scheduler-set",
-    enabled: schedulerSwitch.getAttribute("aria-checked") !== "true",
-  });
-});
+}
+wireQuickOption("#jiggler-switch", "jiggler-set");
+wireQuickOption("#scheduler-switch", "scheduler-set");
 // Tap/click a label to pin its tooltip open on touch devices.
 for (const label of document.querySelectorAll(".qo-label")) {
   label.addEventListener("click", () => {
     label.closest(".qo-cell")?.classList.toggle("qo-open");
   });
 }
+document.addEventListener("click", (event) => {
+  for (const cell of document.querySelectorAll(".qo-cell.qo-open")) {
+    if (!cell.contains(event.target)) cell.classList.remove("qo-open");
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  for (const cell of document.querySelectorAll(".qo-cell.qo-open")) {
+    cell.classList.remove("qo-open");
+  }
+});
 
 function onStatus(status, connectedSince) {
   connectionWatch.status(status, connectedSince);

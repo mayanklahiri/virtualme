@@ -192,3 +192,14 @@ into framebuffer updates, so `/desktop-view` displays pointer movement caused
 by the agent, jiggler, and viewer. The accepted cost is modest extra
 framebuffer traffic and cursor latency. A service-script contract test pins
 the flag.
+
+### 2026-07-26 — Quick Options response feedback and finite tooltips
+
+Quick Options buttons enter an `aria-busy` pending state immediately after a
+press, ignore additional presses while pending, and pulse their lamp until an
+authoritative state snapshot arrives. A five-second fallback clears pending
+state when no snapshot arrives; reduced-motion mode uses a steady partial glow.
+
+Tooltips appear on hover or `:focus-visible`, not generic focus left behind by
+a pointer click. Label taps may still pin a tooltip, but an outside click or
+Escape always dismisses every pinned tooltip.

@@ -155,14 +155,22 @@ export function renderState(snapshot) {
     item.className = "current";
     selectorList.append(item);
   }
-  document.querySelector("#jiggler-switch").setAttribute(
+  const jigglerSwitch = document.querySelector("#jiggler-switch");
+  jigglerSwitch.setAttribute(
     "aria-checked",
     String(snapshot.jiggler?.enabled === true),
   );
+  jigglerSwitch.classList.remove("qo-pending");
+  jigglerSwitch.removeAttribute("aria-busy");
+  clearTimeout(jigglerSwitch._qoTimer);
   // Lamp polarity: lit while the scheduler is running (not paused).
-  document.querySelector("#scheduler-switch").setAttribute(
+  const schedulerSwitch = document.querySelector("#scheduler-switch");
+  schedulerSwitch.setAttribute(
     "aria-checked",
     String(scheduler.paused !== true),
   );
+  schedulerSwitch.classList.remove("qo-pending");
+  schedulerSwitch.removeAttribute("aria-busy");
+  clearTimeout(schedulerSwitch._qoTimer);
   updateConnectionSnapshot(snapshot);
 }

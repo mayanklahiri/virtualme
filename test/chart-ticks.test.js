@@ -71,6 +71,8 @@ test("hover hit-testing selects the nearest timestamp across a gap", () => {
 test("status markup carries split GPU charts and the new LLM/action charts", async () => {
   const { readFile } = await import("node:fs/promises");
   const html = await readFile(new URL("../controller/web/static/index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../controller/web/static/js/app.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../controller/web/static/css/app.css", import.meta.url), "utf8");
   for (const id of ["chart-gpu-util", "chart-gpu-mem", "chart-tokens", "chart-throughput", "chart-actions"]) {
     assert.ok(html.includes(`id="${id}"`), `index.html has #${id}`);
   }
@@ -83,6 +85,12 @@ test("status markup carries split GPU charts and the new LLM/action charts", asy
   assert.equal((html.match(/class="qo-tip" role="tooltip"/g) ?? []).length, 2, "two tooltips");
   assert.ok(!html.includes("qo-hint"), "old hint buttons removed");
   assert.ok(!html.includes("qo-row"), "old switch rows removed");
+  assert.ok(app.includes("qo-pending"), "quick option switches enter a pending state");
+  assert.ok(app.includes('event.key !== "Escape"'), "Escape dismisses pinned tooltips");
+  assert.ok(css.includes(".qo-btn.qo-pending .qo-lamp"), "pending lamp animation is styled");
+  assert.ok(css.includes("@keyframes qo-pulse"), "pending lamp pulse is defined");
+  assert.ok(css.includes("prefers-reduced-motion:reduce"), "pending animation respects reduced motion");
+  assert.ok(!css.includes("qo-cell:focus-within"), "mouse focus does not pin tooltips");
   // CPU and memory share one .chart-row ancestor (desktop side-by-side).
   const cpuAt = html.indexOf('id="chart-cpu"');
   const memAt = html.indexOf('id="chart-mem"');
