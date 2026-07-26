@@ -86,7 +86,7 @@ func New(options Options) (*Service, error) {
 		options.Environment = os.Environ()
 	}
 	if options.Resolver == nil {
-		options.Resolver = config.NewResolver(options.Environment)
+		options.Resolver = config.NewResolver(options.Environment, options.Loaded.DataDir)
 	}
 	if options.Notifier == nil {
 		options.Notifier = ConfigNotifierFunc(func(context.Context, SaveNotice) error { return nil })

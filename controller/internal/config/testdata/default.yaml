@@ -175,6 +175,8 @@ mail:
     username: ""
     # Relay password secret reference.
     # References relay credentials without persisting bytes.
+    # Use an environment reference, an absolute file reference, or a file beneath the
+    # data directory with ${file:${data}/relative/path}.
     # Default: "". Restart impact: mail.
     password: ""
   # DKIM signing domain.
@@ -222,7 +224,8 @@ integrations:
     enabled: false
     # Telegram bot-token secret reference.
     # References the BotFather token without persisting credential bytes.
-    # A non-empty whole-scalar environment or file reference is required while enabled.
+    # A non-empty whole-scalar environment, absolute file, or
+    # ${file:${data}/relative/path} reference is required while enabled.
     # Default: "". Restart impact: controller.
     botToken: ""
     # Authorized Telegram chat IDs.

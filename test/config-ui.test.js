@@ -38,6 +38,8 @@ test("config model orders, anchors, converts, and protects secrets", () => {
   assert.equal(parseEditorValue("42", { type: "integer" }), 42);
   assert.equal(parseEditorValue(true, { type: "boolean" }), true);
   assert.equal(validateSecretReference("${file:/run/secrets/smtp}"), true);
+  assert.equal(validateSecretReference("${file:${data}/secrets/telegram-token}"), true);
+  assert.equal(validateSecretReference("${file:relative/no-token}"), false);
   assert.equal(validateSecretReference("DO_NOT_LEAK_031"), false);
   assert.match(restartMessage(["llama", "controller"]), /llama.*controller/);
   assert.deepEqual(parseEditorValue(["first", "second"], {

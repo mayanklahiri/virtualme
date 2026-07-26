@@ -731,7 +731,9 @@ func (s *Schema) Validate(value any) error {
 				enabled, _ := telegram["enabled"].(bool)
 				token, _ := telegram["botToken"].(string)
 				chats, _ := telegram["allowedChatIds"].([]any)
-				if token != "" && envReferencePattern.FindStringSubmatch(token) == nil && fileReferencePattern.FindStringSubmatch(token) == nil {
+				if token != "" && envReferencePattern.FindStringSubmatch(token) == nil &&
+					fileReferencePattern.FindStringSubmatch(token) == nil &&
+					dataFileReferencePattern.FindStringSubmatch(token) == nil {
 					issues = append(issues, Issue{Path: "integrations.telegram.botToken", Message: "must be an exact environment or file secret reference"})
 				}
 				if enabled && token == "" {

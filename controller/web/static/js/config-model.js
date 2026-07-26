@@ -78,7 +78,8 @@ export function validateStringItem(value, item) {
 export function validateSecretReference(value) {
   return value === "" ||
     /^\$\{env:[A-Z][A-Z0-9_]*\}$/.test(value) ||
-    /^\$\{file:\/[^{}]*\}$/.test(value);
+    /^\$\{file:\/[^{}]*\}$/.test(value) ||
+    /^\$\{file:\$\{data\}\/[^{}]+\}$/.test(value);
 }
 
 export function secretStatusLabel(secret) {

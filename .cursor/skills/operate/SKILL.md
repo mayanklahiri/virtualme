@@ -66,9 +66,10 @@ value or restoring a known-good file, then start again.
 
 Precedence is explicit legacy environment override, YAML, then schema default.
 Migrate warnings by moving the named value into YAML and removing the
-environment variable. Secret values must use `${env:NAME}` or
-`${file:/absolute/path}`. Secret files must be regular, at most 64 KiB, and
-mode `0600` (no group/other bits). Saving in `/config` validates and writes
+environment variable. Secret values must use `${env:NAME}`,
+`${file:/absolute/path}`, or `${file:${data}/relative/path}` for a file beneath
+the data directory. Secret files must be regular, at most 64 KiB, and mode
+`0600` (no group/other bits). Saving in `/config` validates and writes
 atomically but does not apply settings; inspect the affected-service list and
 press “Restart to update.” A failed preflight leaves the current services
 running and the pending revision retryable.

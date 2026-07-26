@@ -339,7 +339,7 @@ func TestInterpolationPrecedenceAndPortAdapters(t *testing.T) {
 	telegramConfig["enabled"] = "${env:ENABLE}"
 	telegramConfig["botToken"] = "${env:TOKEN}"
 	telegramConfig["allowedChatIds"] = []any{"1"}
-	resolver := NewResolver([]string{"ENABLE=true", "TOKEN=resolved-token"})
+	resolver := NewResolver([]string{"ENABLE=true", "TOKEN=resolved-token"}, root)
 	defer resolver.Close()
 	resolved, _, err := ValidateRaw(telegram, root,
 		[]string{"ENABLE=true", "TOKEN=resolved-token"}, resolver)
@@ -406,7 +406,7 @@ func TestSecretResolverCacheRefreshAndRedaction(t *testing.T) {
 	if err := os.WriteFile(file, []byte("first\r\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	resolver := NewResolver([]string{"SECRET=env-value"})
+	resolver := NewResolver([]string{"SECRET=env-value"}, root)
 	now := time.Unix(100, 0)
 	resolver.now = func() time.Time { return now }
 	ref := "${file:" + file + "}"
@@ -439,13 +439,33 @@ func TestSecretResolverCacheRefreshAndRedaction(t *testing.T) {
 	}
 }
 
+func TestSecretResolverDataRelativeFilesStayContained(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "secrets"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "secrets", "token"), []byte("data-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resolver := NewResolver(nil, root)
+	defer resolver.Close()
+	value, status, err := resolver.Resolve("${file:${data}/secrets/token}", time.Minute)
+	if err != nil || string(value) != "data-token" || status.Source != "file" {
+		t.Fatalf("data-relative resolve = %q, %#v, %v", value, status, err)
+	}
+	_, status, err = resolver.Resolve("${file:${data}/../escape}", time.Minute)
+	if err == nil || status.Error != "secret_path_invalid" {
+		t.Fatalf("escaping data-relative reference = %#v, %v", status, err)
+	}
+}
+
 func TestSecretResolverConcurrentMissCoalesces(t *testing.T) {
 	root := t.TempDir()
 	file := filepath.Join(root, "secret")
 	if err := os.WriteFile(file, []byte("value\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	resolver := NewResolver(nil)
+	resolver := NewResolver(nil, root)
 	var wg sync.WaitGroup
 	for range 16 {
 		wg.Add(1)
@@ -461,7 +481,7 @@ func TestSecretResolverConcurrentMissCoalesces(t *testing.T) {
 }
 
 func TestSecretResolverSerializesResolveAndRefresh(t *testing.T) {
-	resolver := NewResolver(nil)
+	resolver := NewResolver(nil, "")
 	reference := "${env:SERIALIZED_SECRET}"
 	firstEntered := make(chan struct{})
 	releaseFirst := make(chan struct{})
@@ -509,7 +529,7 @@ func TestSecretResolverSerializesResolveAndRefresh(t *testing.T) {
 
 func TestSecretResolverDescriptorSafetyAndBounds(t *testing.T) {
 	root := t.TempDir()
-	resolver := NewResolver(nil)
+	resolver := NewResolver(nil, root)
 	defer resolver.Close()
 	resolve := func(path string) error {
 		_, _, err := resolver.Resolve("${file:"+path+"}", 0)
@@ -548,7 +568,7 @@ func TestSecretRefreshFailureRetainsPriorValueAndNotifies(t *testing.T) {
 	if err := os.WriteFile(file, []byte("prior\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	resolver := NewResolver(nil)
+	resolver := NewResolver(nil, root)
 	defer resolver.Close()
 	now := time.Unix(100, 0)
 	resolver.now = func() time.Time { return now }
@@ -599,7 +619,7 @@ func TestConditionalSecretResolutionAndArrayReferenceRejection(t *testing.T) {
 	}}
 	raw := deepCopy(effective).(map[string]any)
 	statuses := map[string]SecretStatus{}
-	resolver := NewResolver(nil)
+	resolver := NewResolver(nil, t.TempDir())
 	if err := resolveTree(schema, effective, raw, "", t.TempDir(), map[string]string{}, resolver, statuses, effective); err != nil {
 		t.Fatal(err)
 	}

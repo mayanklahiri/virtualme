@@ -401,7 +401,7 @@ func ValidateRaw(raw RawConfig, dataDir string, environment []string, resolver *
 	secrets := map[string]SecretStatus{}
 	owned := false
 	if resolver == nil {
-		resolver, owned = NewResolver(environment), true
+		resolver, owned = NewResolver(environment, dataDir), true
 	}
 	if owned {
 		defer resolver.Close()

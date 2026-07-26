@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "schemaSha256": "970ef1c2a239fb2a12a33fa2448749d5cfcec090b17da2816abfed5753177ede",
+  "schemaSha256": "165bed893bc4e935ac7f7431d37328508dc628c21c1bbc026572ccd5d5475215",
   "sections": [
     {
       "id": "server",
@@ -1256,7 +1256,9 @@
           },
           "sensitivity": "credential",
           "overview": "References relay credentials without persisting bytes.",
-          "details": [],
+          "details": [
+            "Use an environment reference, an absolute file reference, or a file beneath the data directory with ${file:${data}/relative/path}."
+          ],
           "tradeoffs": [],
           "examples": [],
           "links": [],
@@ -1565,7 +1567,7 @@
           "sensitivity": "credential",
           "overview": "References the BotFather token without persisting credential bytes.",
           "details": [
-            "A non-empty whole-scalar environment or file reference is required while enabled."
+            "A non-empty whole-scalar environment, absolute file, or ${file:${data}/relative/path} reference is required while enabled."
           ],
           "tradeoffs": [],
           "examples": [],

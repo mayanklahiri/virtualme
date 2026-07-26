@@ -1046,3 +1046,16 @@ controller reports `TZ` or its process location when the variable is absent.
 
 Strict loading intentionally rejects existing configuration files that retain
 a `system` key. There is no migration or compatibility alias.
+
+### 2026-07-26 — Data-directory-relative secret files
+
+Secret fields additionally accept the whole-scalar form
+`${file:${data}/relative/path}`. The resolver expands it beneath
+`$VM_DATA_DIR`, rejects absolute, unclean, or parent-traversing relative paths,
+and then applies the same descriptor safety as absolute file references:
+`O_NOFOLLOW`, regular files only, no group/other permissions, a 64 KiB cap,
+and one trailing newline trimmed.
+
+The Config editor, generated reference, Telegram example, and operator skill
+expose the same grammar. `${data}` remains unavailable for arbitrary
+non-secret user-authored paths.

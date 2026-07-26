@@ -79,7 +79,7 @@ func Load(options Options) (*Loaded, error) {
 	resolver := options.Resolver
 	ownedResolver := false
 	if resolver == nil {
-		resolver, ownedResolver = NewResolver(environment), true
+		resolver, ownedResolver = NewResolver(environment, root), true
 	}
 	if ownedResolver {
 		defer resolver.Close()
@@ -396,13 +396,15 @@ func resolveSecrets(schema map[string]any, effective, raw map[string]any, path s
 		if sourcesValue := stringValueFromAny(rawValue); sourcesValue != text && sourcesValue != "" {
 			text = sourcesValue
 		}
-		if envReferencePattern.FindStringSubmatch(text) == nil && fileReferencePattern.FindStringSubmatch(text) == nil {
+		if envReferencePattern.FindStringSubmatch(text) == nil &&
+			fileReferencePattern.FindStringSubmatch(text) == nil &&
+			dataFileReferencePattern.FindStringSubmatch(text) == nil {
 			if sourcesValue := stringValueFromAny(rawValue); sourcesValue == "" && effective[key] != "" {
 				// Temporary literal legacy adapter; effective only.
 				secrets[childPath] = SecretStatus{Configured: true, Resolved: true, Source: "legacy-env", Error: ""}
 				continue
 			}
-			return validationIssue(childPath, "secret must be empty or a whole ${env:...}/${file:...} reference")
+			return validationIssue(childPath, "secret must be empty or a whole ${env:...}, ${file:/...}, or ${file:${data}/...} reference")
 		}
 		if condition, ok := secretMeta["resolveWhen"].(map[string]any); ok {
 			expected, _ := condition["equals"].(bool)

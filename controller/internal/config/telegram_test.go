@@ -28,6 +28,10 @@ func TestTelegramSchemaAndSecretOnlyStorage(t *testing.T) {
 	if err := schema.Validate(raw); err != nil {
 		t.Fatalf("file reference rejected: %v", err)
 	}
+	telegram["botToken"] = "${file:${data}/secrets/telegram-token}"
+	if err := schema.Validate(raw); err != nil {
+		t.Fatalf("data-relative file reference rejected: %v", err)
+	}
 	telegram["botToken"] = "${env:VM_TEST_TELEGRAM_TOKEN}"
 
 	dataDir := t.TempDir()

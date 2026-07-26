@@ -249,7 +249,7 @@ func TestConfigAPISecretRefreshNeverReturnsBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 	environment := []string{}
-	resolver := config.NewResolver(environment)
+	resolver := config.NewResolver(environment, root)
 	defer resolver.Close()
 	loaded, err := config.Load(config.Options{DataDir: root, Env: environment, Resolver: resolver})
 	if err != nil {
@@ -359,7 +359,7 @@ func TestConcurrentGETAndSecretRefreshIsRaceFree(t *testing.T) {
 	if err := os.WriteFile(secret, []byte("value\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	resolver := config.NewResolver(nil)
+	resolver := config.NewResolver(nil, root)
 	defer resolver.Close()
 	loaded, err := config.Load(config.Options{DataDir: root, Env: []string{}, Resolver: resolver})
 	if err != nil {

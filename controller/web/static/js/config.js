@@ -215,7 +215,7 @@ export function initConfig() {
       try {
         const raw = input.type === "checkbox" ? input.checked : input.value;
         if (setting.secret && !validateSecretReference(String(raw))) {
-          throw new Error("Use an empty value, ${env:NAME}, or ${file:/absolute/path}.");
+          throw new Error("Use an empty value, ${env:NAME}, ${file:/absolute/path}, or ${file:${data}/relative/path}.");
         }
         setConfigPath(draft, setting.path, parseEditorValue(raw, setting));
         input.setCustomValidity("");

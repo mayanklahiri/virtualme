@@ -418,7 +418,11 @@ func main() {
 	log.SetOutput(os.Stdout)
 	log.SetFlags(0)
 	environment := os.Environ()
-	secretResolver := config.NewResolver(environment)
+	bootstrapDataDir := os.Getenv("VM_DATA_DIR")
+	if bootstrapDataDir == "" {
+		bootstrapDataDir = "/home/virtualme/.virtualme"
+	}
+	secretResolver := config.NewResolver(environment, bootstrapDataDir)
 	defer secretResolver.Close()
 	loaded, err := config.Load(config.Options{Env: environment, Resolver: secretResolver})
 	if err != nil {

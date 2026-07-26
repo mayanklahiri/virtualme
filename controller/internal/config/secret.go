@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	envReferencePattern  = regexp.MustCompile(`^\$\{env:([A-Z][A-Z0-9_]*)\}$`)
-	fileReferencePattern = regexp.MustCompile(`^\$\{file:(/[^{}]*)\}$`)
+	envReferencePattern      = regexp.MustCompile(`^\$\{env:([A-Z][A-Z0-9_]*)\}$`)
+	fileReferencePattern     = regexp.MustCompile(`^\$\{file:(/[^{}]*)\}$`)
+	dataFileReferencePattern = regexp.MustCompile(`^\$\{file:\$\{data\}/([^{}]+)\}$`)
 )
 
 type SecretStatus struct {
@@ -46,6 +47,7 @@ type secretEntry struct {
 type Resolver struct {
 	mu          sync.Mutex
 	env         map[string]string
+	dataDir     string
 	cache       map[string]*secretEntry
 	subscribers map[string]map[uint64]func(SecretRevision)
 	serial      map[string]*sync.Mutex
@@ -54,9 +56,9 @@ type Resolver struct {
 	reader      func(string) ([]byte, SecretStatus, error)
 }
 
-func NewResolver(environment []string) *Resolver {
+func NewResolver(environment []string, dataDir string) *Resolver {
 	resolver := &Resolver{
-		env: environmentMap(environment), cache: map[string]*secretEntry{},
+		env: environmentMap(environment), dataDir: dataDir, cache: map[string]*secretEntry{},
 		subscribers: map[string]map[uint64]func(SecretRevision){},
 		serial:      map[string]*sync.Mutex{}, now: time.Now,
 	}
@@ -113,12 +115,29 @@ func (r *Resolver) read(reference string) ([]byte, SecretStatus, error) {
 		return []byte(value), status, nil
 	}
 	match := fileReferencePattern.FindStringSubmatch(reference)
-	if match == nil {
+	dataMatch := dataFileReferencePattern.FindStringSubmatch(reference)
+	if match == nil && dataMatch == nil {
 		status.Error = "secret_reference_invalid"
 		return nil, status, errors.New("invalid secret reference")
 	}
-	path := match[1]
 	status.Source = "file"
+	var path string
+	if dataMatch != nil {
+		relative := dataMatch[1]
+		if filepath.Clean(relative) != relative || filepath.IsAbs(relative) {
+			status.Error = "secret_path_invalid"
+			return nil, status, errors.New("secret data path is not clean and relative")
+		}
+		for _, part := range strings.Split(relative, string(filepath.Separator)) {
+			if part == ".." {
+				status.Error = "secret_path_invalid"
+				return nil, status, errors.New("secret data path escapes data directory")
+			}
+		}
+		path = filepath.Join(r.dataDir, relative)
+	} else {
+		path = match[1]
+	}
 	if filepath.Clean(path) != path {
 		status.Error = "secret_path_invalid"
 		return nil, status, errors.New("secret path is not clean")
