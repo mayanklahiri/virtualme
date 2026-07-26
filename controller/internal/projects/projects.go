@@ -4,11 +4,13 @@ package projects
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -18,6 +20,8 @@ import (
 )
 
 const projectsKey = "virtualme:projects"
+
+var errProjectNotFound = errors.New("project not found")
 
 // Project is the durable project record.
 type Project struct {
@@ -46,18 +50,25 @@ type TaskRunner interface {
 	RunTask(context.Context, string) (string, error)
 }
 
+type jobManager interface {
+	Register(string, func(context.Context, jobs.Envelope) (string, error))
+	RegisterSource(func(time.Time) []jobs.Envelope)
+	Enqueue(jobs.Envelope) (int, error)
+}
+
 // Service owns project persistence, scheduling, execution, and websocket CRUD.
 type Service struct {
 	client    *valkey.Client
-	jobs      *jobs.Manager
+	jobs      jobManager
 	runner    TaskRunner
 	dataDir   string
 	broadcast func([]byte)
 	now       func() time.Time
+	mu        sync.Mutex
 }
 
 // New creates and registers a project service.
-func New(client *valkey.Client, manager *jobs.Manager, runner TaskRunner, dataDir string, broadcast func([]byte)) *Service {
+func New(client *valkey.Client, manager jobManager, runner TaskRunner, dataDir string, broadcast func([]byte)) *Service {
 	service := &Service{
 		client: client, jobs: manager, runner: runner, dataDir: dataDir,
 		broadcast: broadcast, now: time.Now,
@@ -99,7 +110,7 @@ func (s *Service) get(id string) (Project, error) {
 		return Project{}, err
 	}
 	if value == nil {
-		return Project{}, fmt.Errorf("project not found")
+		return Project{}, errProjectNotFound
 	}
 	var project Project
 	if err := json.Unmarshal([]byte(*value), &project); err != nil {
@@ -138,6 +149,8 @@ func (s *Service) create(name string) (Project, error) {
 	if err != nil {
 		return Project{}, err
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	project := Project{
 		ID: jobs.NewID(), Name: name, Selector: "weekday morning",
 		Enabled: false, CreatedTs: s.now().UnixMilli(),
@@ -154,6 +167,8 @@ type updateRequest struct {
 }
 
 func (s *Service) update(request updateRequest) (Project, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	project, err := s.get(request.ID)
 	if err != nil {
 		return Project{}, err
@@ -180,7 +195,23 @@ func (s *Service) update(request updateRequest) (Project, error) {
 	if request.Enabled != nil {
 		project.Enabled = *request.Enabled
 	}
+	if project.Enabled && strings.TrimSpace(project.Task) == "" {
+		return Project{}, fmt.Errorf("task must not be empty when scheduling is enabled")
+	}
 	return project, s.save(project)
+}
+
+func (s *Service) delete(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.get(id); err != nil {
+		return err
+	}
+	if _, err := s.client.HDel(projectsKey, id); err != nil {
+		return err
+	}
+	_, err := s.client.Del(runsKey(id))
+	return err
 }
 
 func (s *Service) readRuns(id string, limit int) []RunSummary {
@@ -261,15 +292,7 @@ func (s *Service) HandleMessage(conn *ws.Conn, payload []byte) bool {
 		}
 		s.publish()
 	case "project-delete":
-		if _, err := s.get(request.ID); err != nil {
-			writeError(conn, err)
-			return true
-		}
-		if _, err := s.client.HDel(projectsKey, request.ID); err != nil {
-			writeError(conn, err)
-			return true
-		}
-		if _, err := s.client.Del(runsKey(request.ID)); err != nil {
+		if err := s.delete(request.ID); err != nil {
 			writeError(conn, err)
 			return true
 		}
@@ -278,6 +301,10 @@ func (s *Service) HandleMessage(conn *ws.Conn, payload []byte) bool {
 		project, err := s.get(request.ID)
 		if err != nil {
 			writeError(conn, err)
+			return true
+		}
+		if strings.TrimSpace(project.Task) == "" {
+			writeError(conn, fmt.Errorf("task must not be empty"))
 			return true
 		}
 		body, _ := json.Marshal(map[string]any{"id": request.ID, "name": project.Name, "manual": true})
@@ -301,6 +328,8 @@ func bucketToken(now time.Time, bucket string) string {
 
 // Source produces due scheduled project envelopes and persists dedup tokens.
 func (s *Service) Source(now time.Time) []jobs.Envelope {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	projects, err := s.list()
 	if err != nil {
 		return nil
@@ -308,7 +337,7 @@ func (s *Service) Source(now time.Time) []jobs.Envelope {
 	var result []jobs.Envelope
 	for _, project := range projects {
 		selector, err := jobs.Parse(project.Selector)
-		if err != nil || !project.Enabled || !selector.Matches(now) {
+		if err != nil || !project.Enabled || strings.TrimSpace(project.Task) == "" || !selector.Matches(now) {
 			continue
 		}
 		token := bucketToken(now, selector.Bucket)
@@ -355,6 +384,9 @@ func (s *Service) Execute(ctx context.Context, env jobs.Envelope) (reply string,
 	if err != nil {
 		return "", err
 	}
+	if strings.TrimSpace(project.Task) == "" {
+		return "", fmt.Errorf("project task must not be empty")
+	}
 	scratch := filepath.Join(s.dataDir, "projects", project.ID)
 	if err := os.MkdirAll(scratch, 0o755); err != nil {
 		return "", fmt.Errorf("create project scratch directory: %w", err)
@@ -371,17 +403,24 @@ func (s *Service) Execute(ctx context.Context, env jobs.Envelope) (reply string,
 		Summary: truncate(summary, 300), DurationMs: finished.Sub(started).Milliseconds(),
 		Manual: payload.Manual,
 	}
-	encoded, _ := json.Marshal(run)
-	if _, err := s.client.LPush(runsKey(project.ID), string(encoded)); err != nil && runErr == nil {
-		runErr = err
+	s.mu.Lock()
+	current, currentErr := s.get(project.ID)
+	if currentErr == nil {
+		encoded, _ := json.Marshal(run)
+		if _, err := s.client.LPush(runsKey(project.ID), string(encoded)); err != nil && runErr == nil {
+			runErr = err
+		}
+		if err := s.client.LTrim(runsKey(project.ID), 0, 49); err != nil && runErr == nil {
+			runErr = err
+		}
+		current.LastRunTs = finished.UnixMilli()
+		if err := s.save(current); err != nil && runErr == nil {
+			runErr = err
+		}
+	} else if !errors.Is(currentErr, errProjectNotFound) && runErr == nil {
+		runErr = currentErr
 	}
-	if err := s.client.LTrim(runsKey(project.ID), 0, 49); err != nil && runErr == nil {
-		runErr = err
-	}
-	project.LastRunTs = finished.UnixMilli()
-	if err := s.save(project); err != nil && runErr == nil {
-		runErr = err
-	}
+	s.mu.Unlock()
 	s.publish()
 	return truncate(reply, 300), runErr
 }

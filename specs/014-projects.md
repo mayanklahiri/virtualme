@@ -145,3 +145,27 @@ Run `/master-update`. Expected touchpoints: operate skill (Projects page usage, 
 - [ ] Project runs do not appear in `/chat` history.
 - [ ] Scheduler: with selector `anytime` and enabled, a scheduled run enqueues within one minute (with random in-bucket delay ≤ bucket end), and does not enqueue twice in the same bucket occurrence.
 - [ ] All eight themes × light/dark: list, dialog, chips, and detail cards render with correct contrast (spot-check `terminal`, `contrast`, `solar` dark).
+
+## Amendments
+
+### 2026-07-26 — Persistence and execution grounding
+
+Project record mutations, scheduler dedup writes, and execution-completion
+writes are serialized within the service. Completion re-reads the current
+record before setting `lastRunTs`; it never writes the stale pre-run record.
+Edits made during a run therefore survive, scheduler dedup tokens cannot be
+erased by completion, and deleting a running project cannot resurrect its
+record or run list.
+
+A project may remain an empty disabled draft, but scheduling cannot be enabled
+and manual or scheduled execution cannot proceed until `task` contains
+non-whitespace text. Scheduled sources defensively skip invalid empty legacy
+records. The existing execution contract remains: the project task, after the
+scratch-directory grounding line, is sent to `chat.Service.RunTask`, which
+records the LLM action and runs a fresh agent turn without adding messages to
+shared chat history.
+
+Hermetic tests reconstruct the service over the same Valkey data to cover
+create/read/update/delete persistence, execute scheduler-produced envelopes
+through the chat-runner seam, and exercise concurrent edit, scheduler, delete,
+and completion behavior under the race detector.
