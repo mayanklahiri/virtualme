@@ -6,6 +6,7 @@ import {
   buildSettingTree,
   configAnchor,
   conflictMessage,
+  humanize,
   issueControl,
   orderedSections,
   orderedSettings,
@@ -32,6 +33,7 @@ function findByClass(node, className) {
 
 test("config model orders, anchors, converts, and protects secrets", () => {
   assert.equal(configAnchor("llama.contextTokens"), "llama-context-tokens");
+  assert.equal(humanize("pollTimeoutSeconds"), "Poll timeout seconds");
   assert.deepEqual(
     orderedSections([
       { id: "late", ui: { order: 20 } },
@@ -108,11 +110,16 @@ test("config route is static, safe, and schema-driven", async () => {
   ]);
   assert.match(html, /href="\/config"/);
   assert.match(html, /data-page="config"/);
+  assert.match(html, /id="config-sections"/);
+  assert.match(html, /id="config-edit" class="button"/);
+  assert.match(html, /id="config-save" class="button"/);
   assert.match(router, /\["\/config", \["config", "Config"\]\]/);
   assert.doesNotMatch(module, /innerHTML/);
   assert.match(module, /componentRenderers/);
   assert.match(module, /buildSettingTree/);
   assert.match(module, /config-list-row/);
+  assert.match(module, /key-round/);
+  assert.match(module, /toggle-left/);
   assert.doesNotMatch(module, /Environment reference/);
   assert.doesNotMatch(module, /Advanced/);
   assert.match(module, /input\.required = true/);
@@ -126,7 +133,7 @@ test("config route is static, safe, and schema-driven", async () => {
 
 test("config DOM flow loads, edits, reports conflict, and discards", async () => {
   const selectors = [
-    "#config-content", "#config-edit", "#config-save", "#config-discard",
+    "#config-content", "#config-sections", "#config-edit", "#config-save", "#config-discard",
     "#config-restart", "#config-status",
   ];
   const { nodes, document } = createFakeDOM(selectors);
@@ -175,9 +182,92 @@ test("config DOM flow loads, edits, reports conflict, and discards", async () =>
   }
 });
 
+test("config master-detail navigation persists selection and keeps field context", async () => {
+  const selectors = [
+    "#config-content", "#config-sections", "#config-edit", "#config-save", "#config-discard",
+    "#config-restart", "#config-status",
+  ];
+  const { nodes, document } = createFakeDOM(selectors);
+  const priorDocument = globalThis.document;
+  const priorFetch = globalThis.fetch;
+  const priorStorage = globalThis.localStorage;
+  const storage = new Map([["vm-config-section", "service"]]);
+  const localStorageMock = {
+    /** @param {string} key */
+    getItem(key) { return storage.get(key) ?? null; },
+    /** @param {string} key @param {string} value */
+    setItem(key, value) { storage.set(key, value); },
+  };
+  globalThis.localStorage = /** @type {any} */ (localStorageMock);
+  const schema = {
+    sections: [
+      {
+        id: "network", anchor: "network", title: "Network", overview: "Network listeners.",
+        ui: { order: 10, sectionRenderer: "vm-config-network-section" },
+        settings: [{
+          path: "network.enabled", anchor: "network-enabled", type: "boolean", default: false,
+          overview: "Enables the network listener.",
+          ui: { order: 10, component: "vm-checkbox" },
+        }],
+      },
+      {
+        id: "service", anchor: "service", title: "Service", overview: "Service credentials.",
+        ui: { order: 20, sectionRenderer: "vm-config-service-section" },
+        settings: [{
+          path: "service.token", anchor: "service-token", type: "string", secret: true, default: "",
+          overview: "References a service credential.",
+          ui: { order: 10, component: "vm-secret-reference" },
+        }],
+      },
+    ],
+  };
+  const snapshot = {
+    raw: { network: { enabled: false }, service: { token: "" } },
+    effective: { network: { enabled: false }, service: { token: "" } },
+    sources: {}, secrets: {}, fileHash: "file-a", startupHash: "file-a",
+    pendingRestart: false, restartServices: [],
+  };
+  globalThis.document = /** @type {any} */ (document);
+  /** @param {string} url */
+  const fakeFetch = async (url) => {
+    if (url === "/api/config/schema") return { ok: true, json: async () => schema };
+    if (url === "/api/config") return { ok: true, json: async () => snapshot };
+    throw new Error(`unexpected request ${url}`);
+  };
+  globalThis.fetch = /** @type {any} */ (fakeFetch);
+  try {
+    const ui = initConfig();
+    ui.show("config");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const navigation = nodes.get("#config-sections");
+    const content = nodes.get("#config-content");
+    assert.equal(navigation.children.length, 2);
+    assert.equal(content.children.length, 1, "only one selected section is rendered");
+    assert.equal(navigation.children[1].getAttribute("aria-pressed"), "true");
+    assert.equal(findByClass(content, "config-overview").textContent, "References a service credential.");
+    assert.equal(
+      findByClass(content, "config-type-icon").children[0].getAttribute("href"),
+      "/icons.svg#i-key-round",
+    );
+    navigation.children[0].dispatch("click");
+    assert.equal(storage.get("vm-config-section"), "network");
+    assert.equal(
+      findByClass(content, "config-type-icon").children[0].getAttribute("href"),
+      "/icons.svg#i-toggle-left",
+    );
+    nodes.get("#config-edit").dispatch("click");
+    assert.equal(findByClass(content, "config-overview").textContent, "Enables the network listener.");
+  } finally {
+    globalThis.document = priorDocument;
+    globalThis.fetch = priorFetch;
+    if (priorStorage === undefined) delete /** @type {any} */ (globalThis).localStorage;
+    else globalThis.localStorage = priorStorage;
+  }
+});
+
 test("config list editor creates nested paths and redraws removals", async () => {
   const selectors = [
-    "#config-content", "#config-edit", "#config-save", "#config-discard",
+    "#config-content", "#config-sections", "#config-edit", "#config-save", "#config-discard",
     "#config-restart", "#config-status",
   ];
   const { nodes, document } = createFakeDOM(selectors);

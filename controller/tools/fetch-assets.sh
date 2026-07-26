@@ -10,7 +10,7 @@ INTER_URL="https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip"
 INTER_SHA256="9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e"
 LUCIDE_URL="https://github.com/lucide-icons/lucide/releases/download/1.26.0/lucide-icons-1.26.0.zip"
 LUCIDE_SHA256="7b3c98ebbd473db33057f75fd67076957ba59d7a9ccd2098d3754800fe533e84"
-ICONS=(house folder folder-kanban file file-braces image layout-grid list list-checks activity message-circle mail monitor menu x sun moon palette send square trash-2 copy check external-link download triangle-alert bot terminal wrench brain clock-3 chevron-down chevron-right chevron-left arrow-up arrow-down grip-vertical volume-2 play pause plus circle-x loader-circle bell circle-check settings)
+ICONS=(house folder folder-kanban file file-braces image layout-grid list list-checks activity message-circle mail monitor menu x sun moon palette send square trash-2 copy check external-link download triangle-alert bot terminal wrench brain clock-3 chevron-down chevron-right chevron-left arrow-up arrow-down grip-vertical volume-2 play pause plus circle-x loader-circle bell circle-check settings type hash toggle-left key-round chevrons-up-down)
 # Lucide 1.26 names this glyph info.svg; retain the spec's stable sprite ID.
 ICON_ALIASES=("info|circle-info")
 FONT_ROWS=(

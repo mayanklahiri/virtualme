@@ -262,14 +262,17 @@
             <p class="page-caption">Anyone who can reach this private-network console can change operational configuration and restart services.</p>
           </div>
           <div class="page-heading-actions">
-            <button id="config-edit" type="button">Edit</button>
-            <button id="config-discard" class="secondary" type="button" hidden>Discard</button>
-            <button id="config-save" type="button" hidden>Save</button>
+            <button id="config-edit" class="button" type="button">Edit</button>
+            <button id="config-discard" class="button secondary" type="button" hidden>Discard</button>
+            <button id="config-save" class="button" type="button" hidden>Save</button>
           </div>
         </div>
         <p id="config-status" class="config-status"></p>
         <button id="config-restart" class="config-restart" type="button" hidden>Restart to update</button>
-        <div id="config-content" class="config-content"></div>
+        <div class="config-grid">
+          <nav id="config-sections" class="config-sections" aria-label="Configuration sections"></nav>
+          <div id="config-content" class="config-content"></div>
+        </div>
       </section>
 
       <section data-page="status" hidden aria-labelledby="status-page-title">

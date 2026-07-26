@@ -1059,3 +1059,18 @@ and one trailing newline trimmed.
 The Config editor, generated reference, Telegram example, and operator skill
 expose the same grammar. `${data}` remains unavailable for arbitrary
 non-secret user-authored paths.
+
+### 2026-07-26 — Configuration master-detail interface
+
+The Config page uses a Tools-style section navigator and renders only the
+selected section. A setting hash selects its owning section; otherwise the
+last valid selection is restored from local storage, falling back to the first
+section. Selection changes persist, and hash changes remain deep-linkable.
+
+Read and edit cards share the same hierarchy: humanized field name, canonical
+dotted path, always-visible schema overview, restart badge, and a right-aligned
+Lucide type icon for text, number, boolean, list, enum, or secret. Read cards
+also expose a non-secret default when it differs from the effective value.
+Desktop controls cap at 30 rem, nested groups use progressively tinted and
+accented containers, and mobile navigation collapses above full-width fields.
+Edit, Save, Discard, Add, and Remove use standard interactive button chrome.

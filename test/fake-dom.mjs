@@ -13,6 +13,7 @@ class FakeElement {
     this.focused = false;
     this.dataset = {};
     this.validationMessage = "";
+    this.attributes = new Map();
     this.classList = {
       add: (...names) => {
         for (const name of names) {
@@ -36,6 +37,10 @@ class FakeElement {
 
   dispatch(type) { return this.listeners.get(type)?.({ preventDefault() {} }); }
 
+  setAttribute(name, value) { this.attributes.set(name, String(value)); }
+
+  getAttribute(name) { return this.attributes.get(name) ?? null; }
+
   querySelector() { return null; }
 
   focus() { this.focused = true; }
@@ -53,6 +58,7 @@ export function createFakeDOM(selectors) {
       body,
       querySelector: (selector) => nodes.get(selector) ?? null,
       createElement: (tag) => new FakeElement(tag),
+      createElementNS: (_namespace, tag) => new FakeElement(tag),
     },
   };
 }

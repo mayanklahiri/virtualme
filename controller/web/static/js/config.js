@@ -4,6 +4,7 @@ import {
   cloneConfig,
   conflictMessage,
   getConfigPath,
+  humanize,
   issueControl,
   orderedSections,
   parseEditorValue,
@@ -28,6 +29,28 @@ function element(tag, className, text) {
   return node;
 }
 
+function typeInfo(setting) {
+  if (setting.secret) return { icon: "key-round", label: "secret" };
+  if (setting.choices?.length) return { icon: "chevrons-up-down", label: "enum" };
+  if (setting.type === "boolean") return { icon: "toggle-left", label: "boolean" };
+  if (setting.type === "integer" || setting.type === "number") return { icon: "hash", label: "number" };
+  if (setting.type === "array") return { icon: "list", label: "list" };
+  return { icon: "type", label: "text" };
+}
+
+function typeIcon(setting) {
+  const metadata = typeInfo(setting);
+  const namespace = "http:" + "//www.w3.org/2000/svg";
+  const svg = document.createElementNS(namespace, "svg");
+  svg.className = "icon config-type-icon";
+  svg.setAttribute("aria-label", metadata.label);
+  svg.setAttribute("title", metadata.label);
+  const use = document.createElementNS(namespace, "use");
+  use.setAttribute("href", `/icons.svg#i-${metadata.icon}`);
+  svg.append(use);
+  return svg;
+}
+
 function constraints(setting, input) {
   const rules = setting.constraints ?? {};
   if (rules.minimum !== undefined) input.min = String(rules.minimum);
@@ -40,6 +63,7 @@ function constraints(setting, input) {
 
 export function initConfig() {
   const root = document.querySelector("#config-content");
+  const sectionNavigation = document.querySelector("#config-sections");
   const editButton = document.querySelector("#config-edit");
   const saveButton = document.querySelector("#config-save");
   const discardButton = document.querySelector("#config-discard");
@@ -50,9 +74,35 @@ export function initConfig() {
   let draft;
   let editing = false;
   let loaded = false;
+  let selectedSectionId = "";
   let expectedRestartHash = "";
   let restartTimer;
   const controls = new Map();
+
+  function availableSections() {
+    return orderedSections(schema?.sections ?? []).filter((section) =>
+      section.id !== "integrations" || (section.settings ?? []).length);
+  }
+
+  function sectionForAnchor(anchor) {
+    return availableSections().find((section) =>
+      section.anchor === anchor || (section.settings ?? []).some((setting) => setting.anchor === anchor));
+  }
+
+  function selectSection(id) {
+    if (!availableSections().some((section) => section.id === id)) return;
+    selectedSectionId = id;
+    globalThis.localStorage?.setItem("vm-config-section", id);
+  }
+
+  function initializeSectionSelection() {
+    const sections = availableSections();
+    const hashSection = sectionForAnchor(globalThis.location?.hash?.slice(1) ?? "");
+    const remembered = globalThis.localStorage?.getItem("vm-config-section") ?? "";
+    selectedSectionId = hashSection?.id ??
+      (sections.some((section) => section.id === remembered) ? remembered : sections[0]?.id ?? "");
+    if (selectedSectionId) globalThis.localStorage?.setItem("vm-config-section", selectedSectionId);
+  }
 
   async function request(url, options) {
     const response = await fetch(url, options);
@@ -69,6 +119,7 @@ export function initConfig() {
         request("/api/config"),
       ]);
       draft = cloneConfig(snapshot.raw);
+      initializeSectionSelection();
       loaded = true;
       status.textContent = "";
       render();
@@ -77,14 +128,23 @@ export function initConfig() {
     }
   }
 
-  function readSetting(setting) {
+  function settingCard(setting) {
     const card = element("article", "config-setting");
     card.id = setting.anchor;
     const heading = element("div", "config-setting-head");
-    heading.append(element("h3", "", setting.path.split(".").at(-1)));
+    heading.append(element("h3", "", humanize(setting.path.split(".").at(-1))));
     if (setting.restart) heading.append(element("span", "config-restart-badge", setting.restart));
-    card.append(heading);
-    if (setting.overview) card.append(element("p", "config-overview", setting.overview));
+    heading.append(typeIcon(setting));
+    card.append(
+      heading,
+      element("p", "config-path", setting.path),
+      element("p", "config-overview", setting.overview ?? ""),
+    );
+    return card;
+  }
+
+  function readSetting(setting) {
+    const card = settingCard(setting);
     let display = "";
     if (setting.secret) {
       const unresolved = getConfigPath(snapshot.raw, setting.path);
@@ -95,6 +155,11 @@ export function initConfig() {
       display = String(effective ?? raw ?? setting.default ?? "");
     }
     card.append(element("p", "config-value", display));
+    const effective = getConfigPath(snapshot.effective, setting.path);
+    if (!setting.secret && setting.default !== undefined &&
+      JSON.stringify(effective) !== JSON.stringify(setting.default)) {
+      card.append(element("p", "config-default", `Default: ${String(setting.default)}`));
+    }
     const secret = setting.secret ? snapshot.secrets?.[setting.path] : null;
     if (secret?.configured && secret.status !== "inactive") {
       const refresh = element("button", "config-secret-refresh", "Refresh secret");
@@ -157,9 +222,8 @@ export function initConfig() {
   }
 
   function editSetting(setting) {
-    const row = element("label", "config-editor");
-    row.id = setting.anchor;
-    row.append(element("span", "config-editor-label", setting.path.split(".").at(-1)));
+    const row = settingCard(setting);
+    row.classList.add("config-editor");
     if (setting.ui?.component === "vm-string-list") {
       const editor = element("div", "config-list-editor");
       const rows = element("div", "config-list-rows");
@@ -241,7 +305,10 @@ export function initConfig() {
     input.addEventListener("change", update);
     input.addEventListener("input", update);
     controls.set(setting.path, input);
-    row.append(input);
+    const control = element("label", "config-control");
+    input.setAttribute("aria-label", humanize(setting.path.split(".").at(-1)));
+    control.append(input);
+    row.append(control);
     return row;
   }
 
@@ -249,7 +316,11 @@ export function initConfig() {
     const container = element("div", "config-group");
     if (node.depth) {
       container.dataset.depth = String(node.depth);
-      container.append(element("h3", "config-group-title", node.name));
+      const title = element("h3", "config-group-title");
+      const parent = node.path.split(".").slice(0, -1).join(".");
+      title.append(element("strong", "", humanize(node.name)));
+      if (parent) title.append(element("span", "", `${parent}.`));
+      container.append(title);
     }
     for (const child of [...node.children.values()].sort((left, right) => left.name.localeCompare(right.name))) {
       container.append(renderTreeNode(child, editing));
@@ -275,17 +346,38 @@ export function initConfig() {
 
   function render() {
     root.replaceChildren();
+    sectionNavigation.replaceChildren();
     controls.clear();
-    for (const section of orderedSections(schema.sections ?? [])) {
-      if (section.id === "integrations" && !(section.settings ?? []).length) continue;
-      root.append(renderSection(section));
+    const sections = availableSections();
+    if (!sections.some((section) => section.id === selectedSectionId)) {
+      selectSection(sections[0]?.id ?? "");
     }
+    for (const section of sections) {
+      const button = element("button");
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(section.id === selectedSectionId));
+      button.append(
+        element("strong", "", section.title),
+        element("span", "", String(section.overview ?? "").split(/(?<=[.!?])\s/, 1)[0]),
+      );
+      button.addEventListener("click", () => {
+        selectSection(section.id);
+        render();
+      });
+      sectionNavigation.append(button);
+    }
+    const selected = sections.find((section) => section.id === selectedSectionId);
+    if (selected) root.append(renderSection(selected));
     editButton.hidden = editing;
     saveButton.hidden = !editing;
     discardButton.hidden = !editing;
     restartButton.hidden = !snapshot.pendingRestart;
     if (snapshot.pendingRestart) {
       restartButton.textContent = `Restart to update (${snapshot.restartServices.join(", ")})`;
+    }
+    const anchor = globalThis.location?.hash?.slice(1);
+    if (anchor && sectionForAnchor(anchor)?.id === selectedSectionId) {
+      document.getElementById?.(anchor)?.scrollIntoView();
     }
   }
 
@@ -344,6 +436,14 @@ export function initConfig() {
       }
     }, 60_000);
   }
+
+  globalThis.addEventListener?.("hashchange", () => {
+    if (!loaded) return;
+    const section = sectionForAnchor(globalThis.location?.hash?.slice(1) ?? "");
+    if (!section) return;
+    selectSection(section.id);
+    render();
+  });
 
   return {
     show(page) {

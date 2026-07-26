@@ -6,6 +6,11 @@ export function configAnchor(path) {
     .toLowerCase();
 }
 
+export function humanize(key) {
+  const spaced = String(key).replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+  return spaced ? spaced[0].toUpperCase() + spaced.slice(1) : "";
+}
+
 export function orderedSections(sections) {
   return [...sections].sort((left, right) =>
     (left.ui?.order ?? left.order ?? 0) - (right.ui?.order ?? right.order ?? 0) ||
@@ -20,14 +25,17 @@ export function orderedSettings(settings) {
 
 /** @param {any[]} settings */
 export function buildSettingTree(settings) {
-  const root = { name: "", depth: 0, children: new Map(), settings: [] };
+  const root = { name: "", path: "", depth: 0, children: new Map(), settings: [] };
   for (const setting of orderedSettings(settings)) {
     const parts = setting.path.split(".");
     let node = root;
     for (let index = 0; index < parts.length - 1; index++) {
       const part = parts[index];
       if (!node.children.has(part)) {
-        node.children.set(part, { name: part, depth: index + 1, children: new Map(), settings: [] });
+        node.children.set(part, {
+          name: part, path: parts.slice(0, index + 1).join("."),
+          depth: index + 1, children: new Map(), settings: [],
+        });
       }
       node = node.children.get(part);
     }
